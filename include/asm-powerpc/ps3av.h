@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2006  Sony Computer Entertainment Inc.
+ * Copyright (C) 2006-2007 Sony Corporation
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published
@@ -18,8 +19,7 @@
 #define _PS3AV_H_
 
 /** command for ioctl() **/
-#define PS3AV_VERSION 0x205 /* version of ps3av command */
-
+#define PS3AV_VERSION 0x205	/* version of ps3av command */
 
 #define PS3AV_CID_AV_INIT              0x00000001
 #define PS3AV_CID_AV_FIN               0x00000002
@@ -59,19 +59,19 @@
 #define PS3AV_CID_AVB_PARAM            0x04000001
 
 /* max backend ports */
-#define PS3AV_HDMI_MAX                 2 /* HDMI_0 HDMI_1 */
-#define PS3AV_AVMULTI_MAX              1 /* AVMULTI_0 */
+#define PS3AV_HDMI_MAX                 2	/* HDMI_0 HDMI_1 */
+#define PS3AV_AVMULTI_MAX              1	/* AVMULTI_0 */
 #define PS3AV_AV_PORT_MAX              (PS3AV_HDMI_MAX + PS3AV_AVMULTI_MAX)
-#define PS3AV_OPT_PORT_MAX             1 /* SPDIF0 */
-#define PS3AV_HEAD_MAX                 2 /* HEAD_A HEAD_B */
+#define PS3AV_OPT_PORT_MAX             1	/* SPDIF0 */
+#define PS3AV_HEAD_MAX                 2	/* HEAD_A HEAD_B */
 
 /* num of pkt for PS3AV_CID_AVB_PARAM */
 #define PS3AV_AVB_NUM_VIDEO            PS3AV_HEAD_MAX
-#define PS3AV_AVB_NUM_AUDIO            0 /* not supported */
+#define PS3AV_AVB_NUM_AUDIO            0	/* not supported */
 #define PS3AV_AVB_NUM_AV_VIDEO         PS3AV_AV_PORT_MAX
 #define PS3AV_AVB_NUM_AV_AUDIO         PS3AV_HDMI_MAX
 
-#define PS3AV_MUTE_PORT_MAX            1 /* num of ports in mute pkt */
+#define PS3AV_MUTE_PORT_MAX            1	/* num of ports in mute pkt */
 
 /* event_bit */
 #define PS3AV_CMD_EVENT_BIT_UNPLUGGED			(1 << 0)
@@ -114,7 +114,6 @@
 #define PS3AV_CMD_AV_HDMI_HDCP_OFF			0x01
 #define PS3AV_CMD_AV_HDMI_EDID_PASS			0x80
 #define PS3AV_CMD_AV_HDMI_DVI				0x40
-
 
 /* for video module */
 /* video_head */
@@ -202,8 +201,8 @@
 #define PS3AV_CMD_AUDIO_MAP_OUTPUT_3			0x0003
 /* audio_layout */
 #define PS3AV_CMD_AUDIO_LAYOUT_2CH			0x0000
-#define PS3AV_CMD_AUDIO_LAYOUT_6CH			0x000b /* LREClr */
-#define PS3AV_CMD_AUDIO_LAYOUT_8CH			0x001f /* LREClrXY */
+#define PS3AV_CMD_AUDIO_LAYOUT_6CH			0x000b	/* LREClr */
+#define PS3AV_CMD_AUDIO_LAYOUT_8CH			0x001f	/* LREClrXY */
 /* audio_downmix */
 #define PS3AV_CMD_AUDIO_DOWNMIX_PERMITTED		0x0000
 #define PS3AV_CMD_AUDIO_DOWNMIX_PROHIBITED		0x0001
@@ -279,8 +278,8 @@
 #define PS3AV_CMD_VIDEO_CS_YUV444			0x0003
 
 /* for automode */
-#define PS3AV_RESBIT_720x480P			0x0003 /* 0x0001 | 0x0002 */
-#define PS3AV_RESBIT_720x576P			0x0003 /* 0x0001 | 0x0002 */
+#define PS3AV_RESBIT_720x480P			0x0003	/* 0x0001 | 0x0002 */
+#define PS3AV_RESBIT_720x576P			0x0003	/* 0x0001 | 0x0002 */
 #define PS3AV_RESBIT_1280x720P			0x0004
 #define PS3AV_RESBIT_1920x1080I			0x0008
 #define PS3AV_RESBIT_1920x1080P			0x4000
@@ -293,8 +292,8 @@
 						| PS3AV_RESBIT_1920x1080I \
 						| PS3AV_RESBIT_1920x1080P)
 
-#define PS3AV_MONITOR_TYPE_HDMI			1 /* HDMI */
-#define PS3AV_MONITOR_TYPE_DVI			2 /* DVI */
+#define PS3AV_MONITOR_TYPE_HDMI			1	/* HDMI */
+#define PS3AV_MONITOR_TYPE_DVI			2	/* DVI */
 #define PS3AV_DEFAULT_HDMI_VID_REG_60		PS3AV_CMD_VIDEO_VID_480P
 #define PS3AV_DEFAULT_AVMULTI_VID_REG_60	PS3AV_CMD_VIDEO_VID_480I
 #define PS3AV_DEFAULT_HDMI_VID_REG_50		PS3AV_CMD_VIDEO_VID_576P
@@ -306,11 +305,11 @@
 #define PS3AV_REGION_RGB			0x10
 
 #define get_status(buf)				(((__u32 *)buf)[2])
-#define PS3AV_HDR_SIZE				4 /* version + size */
+#define PS3AV_HDR_SIZE				4	/* version + size */
 
 /* for video mode */
 #define PS3AV_MODE_MASK				0x000F
-#define PS3AV_MODE_HDCP_OFF			0x1000 /* Retail PS3 product doesn't support this */
+#define PS3AV_MODE_HDCP_OFF			0x1000	/* Retail PS3 product doesn't support this */
 #define PS3AV_MODE_DITHER			0x0800
 #define PS3AV_MODE_FULL				0x0080
 #define PS3AV_MODE_DVI				0x0040
@@ -320,102 +319,104 @@
 /** command packet structure **/
 struct ps3av_send_hdr {
 	u16 version;
-	u16 size;			/* size of command packet */
-	u32 cid;			/* command id */
-} __attribute__ ((packed));
+	u16 size;		/* size of command packet */
+	u32 cid;		/* command id */
+};
 
 struct ps3av_reply_hdr {
 	u16 version;
 	u16 size;
 	u32 cid;
 	u32 status;
-} __attribute__ ((packed));
+};
 
 /* backend: initialization */
 struct ps3av_pkt_av_init {
 	struct ps3av_send_hdr send_hdr;
 	u32 event_bit;
-} __attribute__ ((packed));
+};
 
 /* backend: finalize */
 struct ps3av_pkt_av_fin {
 	struct ps3av_send_hdr send_hdr;
 	/* recv */
 	u32 reserved;
-} __attribute__ ((packed));
+};
 
 /* backend: get port */
 struct ps3av_pkt_av_get_hw_conf {
 	struct ps3av_send_hdr send_hdr;
 	/* recv */
 	u32 status;
-	u16 num_of_hdmi;		/* out: number of hdmi */
-	u16 num_of_avmulti;		/* out: number of avmulti */
-	u16 num_of_spdif;		/* out: number of hdmi */
+	u16 num_of_hdmi;	/* out: number of hdmi */
+	u16 num_of_avmulti;	/* out: number of avmulti */
+	u16 num_of_spdif;	/* out: number of hdmi */
 	u16 reserved;
-} __attribute__ ((packed));
+};
 
 /* backend: get monitor info */
 struct ps3av_pkt_av_get_monitor_info {
 	struct ps3av_send_hdr send_hdr;
-	u16 avport;			/* in: avport */
+	u16 avport;		/* in: avport */
 	u16 reserved;
 	/* recv */
-	u8  info[256];		/* out: monitor info */
-} __attribute__ ((packed));
+	u8 info[256];		/* out: monitor info */
+};
 
 /* backend: enable/disable event */
 struct ps3av_pkt_av_event {
 	struct ps3av_send_hdr send_hdr;
-	u32 event_bit;			/* in */
-} __attribute__ ((packed));
+	u32 event_bit;		/* in */
+};
 
 /* backend: video cs param */
 struct ps3av_pkt_av_video_cs {
 	struct ps3av_send_hdr send_hdr;
-	u16 avport;			/* in: avport */
-	u16 av_vid;			/* in: video resolution */
-	u16 av_cs_out;			/* in: output color space */
-	u16 av_cs_in;			/* in: input color space */
-	u8  dither;			/* in: dither bit length */
-	u8  bitlen_out;			/* in: bit length */
-	u8  super_white;		/* in: super white */
-	u8  aspect;			/* in: aspect ratio */
-} __attribute__ ((packed));
+	u16 avport;		/* in: avport */
+	u16 av_vid;		/* in: video resolution */
+	u16 av_cs_out;		/* in: output color space */
+	u16 av_cs_in;		/* in: input color space */
+	u8 dither;		/* in: dither bit length */
+	u8 bitlen_out;		/* in: bit length */
+	u8 super_white;		/* in: super white */
+	u8 aspect;		/* in: aspect ratio */
+};
 
 /* backend: video mute */
 struct ps3av_av_mute {
-	u16 avport;			/* in: avport */
-	u16 mute;			/* in: mute on/off */
-} __attribute__ ((packed));
+	u16 avport;		/* in: avport */
+	u16 mute;		/* in: mute on/off */
+};
+
 struct ps3av_pkt_av_video_mute {
 	struct ps3av_send_hdr send_hdr;
 	struct ps3av_av_mute mute[PS3AV_MUTE_PORT_MAX];
-} __attribute__ ((packed));
+};
 
 /* backend: video disable signal */
 struct ps3av_pkt_av_video_disable_sig {
 	struct ps3av_send_hdr send_hdr;
-	u16 avport;			/* in: avport */
+	u16 avport;		/* in: avport */
 	u16 reserved;
-} __attribute__ ((packed));
+};
 
 /* backend: audio param */
 struct ps3av_pkt_av_audio_param {
 	struct ps3av_send_hdr send_hdr;
-	u16 avport;			/* in: avport */
+	u16 avport;		/* in: avport */
 	u16 reserved;
-	u8  mclk;			/* in: audio mclk */
-	u8  ns[3];			/* in: audio ns val */
-	u8  enable;			/* in: audio enable */
-	u8  swaplr;			/* in: audio swap */
-	u8  fifomap;			/* in: audio fifomap */
-	u8  inputctrl;			/* in: audio input ctrl */
-	u8  inputlen;			/* in: sample bit size */
-	u8  layout;			/* in: speaker layout param*/
-	u8  info[5];			/* in: info */
-	u8  chstat[5];			/* in: ch stat */
-} __attribute__ ((packed));
+	u8 mclk;		/* in: audio mclk */
+	u8 ns[3];		/* in: audio ns val */
+	u8 enable;		/* in: audio enable */
+	u8 swaplr;		/* in: audio swap */
+	u8 fifomap;		/* in: audio fifomap */
+	u8 inputctrl;		/* in: audio input ctrl */
+	u8 inputlen;		/* in: sample bit size */
+	u8 layout;		/* in: speaker layout param */
+	u8 info[5];		/* in: info */
+	u8 chstat[5];		/* in: ch stat */
+};
+
 struct ps3av_audio_info_frame {
 	struct pb1_bit {
 		u8 ct:4;
@@ -434,150 +435,152 @@ struct ps3av_audio_info_frame {
 		u8 lsv:4;
 		u8 rsv:3;
 	} pb5;
-} __attribute__ ((packed));
+};
+
 /* backend: audio_mute */
 struct ps3av_pkt_av_audio_mute {
 	struct ps3av_send_hdr send_hdr;
 	struct ps3av_av_mute mute[PS3AV_MUTE_PORT_MAX];
-} __attribute__ ((packed));
+};
 
 /* backend: hdmi_mode */
 struct ps3av_pkt_av_hdmi_mode {
 	struct ps3av_send_hdr send_hdr;
-	u8  mode;			/* in: hdmi_mode */
-	u8  reserved0;
-	u8  reserved1;
-	u8  reserved2;
-} __attribute__ ((packed));
+	u8 mode;		/* in: hdmi_mode */
+	u8 reserved0;
+	u8 reserved1;
+	u8 reserved2;
+};
 
 /* backend: tv_mute */
 struct ps3av_pkt_av_tv_mute {
 	struct ps3av_send_hdr send_hdr;
-	u16 avport;			/* in: avport HDMI only */
-	u16 mute;			/* in: mute */
-} __attribute__ ((packed));
-
+	u16 avport;		/* in: avport HDMI only */
+	u16 mute;		/* in: mute */
+};
 
 /* video: initialize */
 struct ps3av_pkt_video_init {
 	struct ps3av_send_hdr send_hdr;
 	/* recv */
 	u32 reserved;
-} __attribute__ ((packed));
+};
 
 /* video: mode setting */
 struct ps3av_pkt_video_mode {
 	struct ps3av_send_hdr send_hdr;
-	u32 video_head;			/* in: head */
+	u32 video_head;		/* in: head */
 	u32 reserved;
-	u32 video_vid;			/* in: video resolution */
+	u32 video_vid;		/* in: video resolution */
 	u16 reserved1;
-	u16 width;			/* in: width in pixel */
+	u16 width;		/* in: width in pixel */
 	u16 reserved2;
-	u16 height;			/* in: height in pixel */
-	u32 pitch;			/* in: line size in byte*/
-	u32 video_out_format;		/* in: out format */
-	u32 video_format;		/* in: input frame buffer format */
-	u8  reserved3;
-	u8  reserved4;
-	u16 video_order;		/* in: input RGB order */
+	u16 height;		/* in: height in pixel */
+	u32 pitch;		/* in: line size in byte */
+	u32 video_out_format;	/* in: out format */
+	u32 video_format;	/* in: input frame buffer format */
+	u8 reserved3;
+	u8 reserved4;
+	u16 video_order;	/* in: input RGB order */
 	u32 reserved5;
-} __attribute__ ((packed));
+};
 
 /* video: format */
 struct ps3av_pkt_video_format {
 	struct ps3av_send_hdr send_hdr;
-	u32 video_head;			/* in: head */
-	u32 video_format;		/* in: frame buffer format */
+	u32 video_head;		/* in: head */
+	u32 video_format;	/* in: frame buffer format */
 	u16 reserved;
-	u16 video_order;		/* in: input RGB order */
-} __attribute__ ((packed));
+	u16 video_order;	/* in: input RGB order */
+};
+
 /* video: pitch */
 struct ps3av_pkt_video_pitch {
 	u16 version;
-	u16 size;			/* size of command packet */
-	u32 cid;			/* command id */
-	u32 video_head;			/* in: head */
-	u32 pitch;			/* in: line size in byte */
-} __attribute__ ((packed));
-
+	u16 size;		/* size of command packet */
+	u32 cid;		/* command id */
+	u32 video_head;		/* in: head */
+	u32 pitch;		/* in: line size in byte */
+};
 
 /* audio: initialize */
 struct ps3av_pkt_audio_init {
 	struct ps3av_send_hdr send_hdr;
 	/* recv */
 	u32 reserved;
-} __attribute__ ((packed));
+};
 
 /* audio: mode setting */
 struct ps3av_pkt_audio_mode {
 	struct ps3av_send_hdr send_hdr;
-	u8  avport;			/* in: avport */
-	u8  reserved0[3];
-	u32 mask;			/* in: mask */
-	u32 audio_num_of_ch;		/* in: number of ch */
-	u32 audio_fs;			/* in: sampling freq */
-	u32 audio_word_bits;		/* in: sample bit size */
-	u32 audio_format;		/* in: audio output format */
-	u32 audio_source;		/* in: audio source */
-	u8  audio_enable[4];		/* in: audio enable */
-	u8  audio_swap[4];		/* in: audio swap */
-	u8  audio_map[4];		/* in: audio map */
-	u32 audio_layout;		/* in: speaker layout */
-	u32 audio_downmix;		/* in: audio downmix permission */
+	u8 avport;		/* in: avport */
+	u8 reserved0[3];
+	u32 mask;		/* in: mask */
+	u32 audio_num_of_ch;	/* in: number of ch */
+	u32 audio_fs;		/* in: sampling freq */
+	u32 audio_word_bits;	/* in: sample bit size */
+	u32 audio_format;	/* in: audio output format */
+	u32 audio_source;	/* in: audio source */
+	u8 audio_enable[4];	/* in: audio enable */
+	u8 audio_swap[4];	/* in: audio swap */
+	u8 audio_map[4];	/* in: audio map */
+	u32 audio_layout;	/* in: speaker layout */
+	u32 audio_downmix;	/* in: audio downmix permission */
 	u32 audio_downmix_level;
-	u8  audio_cs_info[8];		/* in: IEC channel status */
-} __attribute__ ((packed));
+	u8 audio_cs_info[8];	/* in: IEC channel status */
+};
 
 /* audio: mute */
 struct ps3av_audio_mute {
-	u8  avport;			/* in: opt_port optical */
-	u8  reserved[3];
-	u32 mute;			/* in: mute */
-} __attribute__ ((packed));
+	u8 avport;		/* in: opt_port optical */
+	u8 reserved[3];
+	u32 mute;		/* in: mute */
+};
+
 struct ps3av_pkt_audio_mute {
 	struct ps3av_send_hdr send_hdr;
 	struct ps3av_audio_mute mute[PS3AV_OPT_PORT_MAX];
-} __attribute__ ((packed));
+};
 
 /* audio: active/inactive */
 struct ps3av_pkt_audio_active {
 	struct ps3av_send_hdr send_hdr;
-	u32 audio_port;			/* in: audio active/inactive port */
-} __attribute__ ((packed));
+	u32 audio_port;		/* in: audio active/inactive port */
+};
 
 /* audio: SPDIF user bit */
 struct ps3av_pkt_audio_spdif_bit {
 	u16 version;
-	u16 size;			/* size of command packet */
-	u32 cid;			/* command id */
-	u8  avport;			/* in: avport SPDIF only */
-	u8  reserved[3];
-	u32 audio_port;			/* in: SPDIF only */
-	u32 spdif_bit_data[12];		/* in: user bit data */
-} __attribute__ ((packed));
+	u16 size;		/* size of command packet */
+	u32 cid;		/* command id */
+	u8 avport;		/* in: avport SPDIF only */
+	u8 reserved[3];
+	u32 audio_port;		/* in: SPDIF only */
+	u32 spdif_bit_data[12];	/* in: user bit data */
+};
 
 /* audio: audio control */
 struct ps3av_pkt_audio_ctrl {
 	u16 version;
-	u16 size;			/* size of command packet */
-	u32 cid;			/* command id */
-	u32 audio_ctrl_id;		/* in: control id */
-	u32 audio_ctrl_data[4];		/* in: control data */
-} __attribute__ ((packed));
-
+	u16 size;		/* size of command packet */
+	u32 cid;		/* command id */
+	u32 audio_ctrl_id;	/* in: control id */
+	u32 audio_ctrl_data[4];	/* in: control data */
+};
 
 /* monitor information */
 struct ps3av_info_resolution {
 	u32 res_bits;
 	u32 native;
-} __attribute__ ((packed));
+};
+
 struct ps3av_info_cs {
 	u8 rgb;
 	u8 yuv444;
 	u8 yuv422;
 	u8 reserved;
-} __attribute__ ((packed));
+};
+
 struct ps3av_info_color {
 	u16 red_x;
 	u16 red_y;
@@ -588,13 +591,15 @@ struct ps3av_info_color {
 	u16 white_x;
 	u16 white_y;
 	u32 gamma;
-} __attribute__ ((packed));
+};
+
 struct ps3av_info_audio {
 	u8 type;
 	u8 max_num_of_ch;
 	u8 fs;
 	u8 sbit;
-} __attribute__ ((packed));
+};
+
 struct ps3av_info_monitor {
 	u8 avport;
 	u8 monitor_id[10];
@@ -611,7 +616,6 @@ struct ps3av_info_monitor {
 	u8 num_of_audio_block;
 } __attribute__ ((packed));
 
-
 /* avb:param */
 struct ps3av_pkt_avb_param {
 	struct ps3av_send_hdr send_hdr;
@@ -623,8 +627,7 @@ struct ps3av_pkt_avb_param {
 	struct ps3av_pkt_audio_mode audio[PS3AV_AVB_NUM_AUDIO];
 	struct ps3av_pkt_av_video_cs av_video[PS3AV_AVB_NUM_AV_VIDEO];
 	struct ps3av_pkt_av_audio_param av_audio[PS3AV_AVB_NUM_AV_AUDIO];
-} __attribute__ ((packed));
-
+};
 
 struct ps3av {
 	int available;
@@ -641,26 +644,26 @@ struct ps3av {
 };
 
 /** command status **/
-#define PS3AV_STATUS_SUCCESS			0x0000 /* success */
-#define PS3AV_STATUS_RECEIVE_VUART_ERROR	0x0001 /* receive vuart error */
-#define PS3AV_STATUS_SYSCON_COMMUNICATE_FAIL	0x0002 /* syscon communication error */
-#define PS3AV_STATUS_INVALID_COMMAND		0x0003 /* obsolete invalid CID */
-#define PS3AV_STATUS_INVALID_PORT		0x0004 /* invalid port number */
-#define PS3AV_STATUS_INVALID_VID		0x0005 /* invalid video format */
-#define PS3AV_STATUS_INVALID_COLOR_SPACE	0x0006 /* invalid video colose space */
-#define PS3AV_STATUS_INVALID_FS			0x0007 /* invalid audio sampling freq */
-#define PS3AV_STATUS_INVALID_AUDIO_CH		0x0008 /* invalid audio channel number */
-#define PS3AV_STATUS_UNSUPPORTED_VERSION	0x0009 /* version mismatch  */
-#define PS3AV_STATUS_INVALID_SAMPLE_SIZE	0x000a /* invalid audio sample bit size */
-#define PS3AV_STATUS_FAILURE			0x000b /* other failures */
-#define PS3AV_STATUS_UNSUPPORTED_COMMAND	0x000c /* unsupported cid */
-#define PS3AV_STATUS_BUFFER_OVERFLOW		0x000d /* write buffer overflow */
-#define PS3AV_STATUS_INVALID_VIDEO_PARAM	0x000e /* invalid video param */
-#define PS3AV_STATUS_NO_SEL			0x000f /* not exist selector */
-#define PS3AV_STATUS_INVALID_AV_PARAM		0x0010 /* invalid backend param */
-#define PS3AV_STATUS_INVALID_AUDIO_PARAM	0x0011 /* invalid audio param */
-#define PS3AV_STATUS_UNSUPPORTED_HDMI_MODE	0x0012 /* unsupported hdmi mode */
-#define PS3AV_STATUS_NO_SYNC_HEAD		0x0013 /* sync head failed */
+#define PS3AV_STATUS_SUCCESS			0x0000	/* success */
+#define PS3AV_STATUS_RECEIVE_VUART_ERROR	0x0001	/* receive vuart error */
+#define PS3AV_STATUS_SYSCON_COMMUNICATE_FAIL	0x0002	/* syscon communication error */
+#define PS3AV_STATUS_INVALID_COMMAND		0x0003	/* obsolete invalid CID */
+#define PS3AV_STATUS_INVALID_PORT		0x0004	/* invalid port number */
+#define PS3AV_STATUS_INVALID_VID		0x0005	/* invalid video format */
+#define PS3AV_STATUS_INVALID_COLOR_SPACE	0x0006	/* invalid video colose space */
+#define PS3AV_STATUS_INVALID_FS			0x0007	/* invalid audio sampling freq */
+#define PS3AV_STATUS_INVALID_AUDIO_CH		0x0008	/* invalid audio channel number */
+#define PS3AV_STATUS_UNSUPPORTED_VERSION	0x0009	/* version mismatch  */
+#define PS3AV_STATUS_INVALID_SAMPLE_SIZE	0x000a	/* invalid audio sample bit size */
+#define PS3AV_STATUS_FAILURE			0x000b	/* other failures */
+#define PS3AV_STATUS_UNSUPPORTED_COMMAND	0x000c	/* unsupported cid */
+#define PS3AV_STATUS_BUFFER_OVERFLOW		0x000d	/* write buffer overflow */
+#define PS3AV_STATUS_INVALID_VIDEO_PARAM	0x000e	/* invalid video param */
+#define PS3AV_STATUS_NO_SEL			0x000f	/* not exist selector */
+#define PS3AV_STATUS_INVALID_AV_PARAM		0x0010	/* invalid backend param */
+#define PS3AV_STATUS_INVALID_AUDIO_PARAM	0x0011	/* invalid audio param */
+#define PS3AV_STATUS_UNSUPPORTED_HDMI_MODE	0x0012	/* unsupported hdmi mode */
+#define PS3AV_STATUS_NO_SYNC_HEAD		0x0013	/* sync head failed */
 
 extern void ps3av_set_hdr(u32, u16, struct ps3av_send_hdr *);
 extern int ps3av_do_pkt(u32, u16, size_t, struct ps3av_send_hdr *);
@@ -680,7 +683,7 @@ extern u8 *ps3av_cmd_set_av_audio_param(u8 *, u32,
 					struct ps3av_pkt_audio_mode *, u32);
 extern u8 *ps3av_cmd_set_audio_mode(u8 *, u32, u32, u32, u32, u32, u32);
 extern int ps3av_cmd_audio_mode(struct ps3av_pkt_audio_mode *);
-extern int ps3av_cmd_audio_mute(int , u32 *, u32);
+extern int ps3av_cmd_audio_mute(int, u32 *, u32);
 extern int ps3av_cmd_audio_active(int, u32);
 extern int ps3av_cmd_avb_param(struct ps3av_pkt_avb_param *, u32);
 extern int ps3av_cmd_av_get_hw_conf(struct ps3av_pkt_av_get_hw_conf *);
@@ -705,6 +708,6 @@ extern int ps3av_video_mute(int);
 extern int ps3av_audio_mute(int);
 extern int ps3av_dev_open(void);
 extern int ps3av_dev_close(void);
-#endif //__KERNEL__
+#endif	/* __KERNEL__ */
 
-#endif //  _PS3AV_H_
+#endif	/* _PS3AV_H_ */

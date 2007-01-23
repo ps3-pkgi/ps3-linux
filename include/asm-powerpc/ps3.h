@@ -490,7 +490,7 @@ struct ps3_prealloc {
     unsigned long align;
 };
 
-extern struct ps3_prealloc ps3_stor_bounce_buffer;
 extern struct ps3_prealloc ps3fb_videomemory;
+extern struct ps3_prealloc ps3_stor_bounce_buffer;
 
 #endif

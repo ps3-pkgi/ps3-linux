@@ -140,6 +140,7 @@ struct ps3fb_priv {
 	u32 num_frames;		/* num of frame buffers */
 	atomic_t ext_flip;	/* on/off flip with vsync */
 	atomic_t f_count;	/* fb_open count */
+	int is_blanked;
 };
 static struct ps3fb_priv ps3fb;
 
@@ -634,9 +635,13 @@ static int ps3fb_blank(int blank, struct fb_info *info)
 	case FB_BLANK_VSYNC_SUSPEND:
 	case FB_BLANK_NORMAL:
 		retval = ps3av_video_mute(1);	/* mute on */
+		if (!retval)
+			ps3fb.is_blanked = 1;
 		break;
 	default:		/* unblank */
 		retval = ps3av_video_mute(0);	/* mute off */
+		if (!retval)
+			ps3fb.is_blanked = 0;
 		break;
 	}
 	return retval;
@@ -735,8 +740,6 @@ static int ps3fb_ioctl(struct fb_info *info, unsigned int cmd,
 			if (mode) {
 				var = info->var;
 				fb_videomode_to_var(&var, mode);
-				var.xres_virtual = var.xres;
-				var.yres_virtual = var.yres;
 				acquire_console_sem();
 				info->flags |= FBINFO_MISC_USEREVENT;
 				/* Force, in case only special bits changed */
@@ -829,7 +832,8 @@ static irqreturn_t ps3fb_vsync_interrupt(int irq, void *ptr)
 	if (v1 & (1 << GPU_INTR_STATUS_VSYNC_1)) {
 		/* VSYNC */
 		ps3fb.vblank_count = head->vblank_count;
-		up(&ps3fb.sem);
+		if (!ps3fb.is_blanked)
+			up(&ps3fb.sem);
 		wake_up_interruptible(&ps3fb.wait_vsync);
 	}
 
@@ -976,7 +980,7 @@ static int __init ps3fb_probe(struct platform_device *dev)
 	}
 	DPRINTK("ddr:lpar:0x%lx\n", ddr_lpar);
 
-	status = lv1_gpu_context_allocate(ps3fb.memory_handle, 0,
+	status = lv1_gpu_context_allocate(ps3fb.memory_handle,
 					  &ps3fb.context_handle,
 					  &lpar_dma_control, &lpar_driver_info,
 					  &lpar_reports, &lpar_reports_size);
@@ -1035,6 +1039,9 @@ static int __init ps3fb_probe(struct platform_device *dev)
 		retval = -EINVAL;
 		goto err_fb_dealloc;
 	}
+
+	fb_videomode_to_modelist(ps3fb_modedb, ARRAY_SIZE(ps3fb_modedb),
+				 &info->modelist);
 
 	retval = register_framebuffer(info);
 	if (retval < 0)
