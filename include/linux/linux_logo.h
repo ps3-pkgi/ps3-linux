@@ -33,5 +33,6 @@ struct linux_logo {
 };
 
 extern const struct linux_logo *fb_find_logo(int depth);
+extern void fb_append_extra_logo(const struct linux_logo *logo, int n);
 
 #endif /* _LINUX_LINUX_LOGO_H */

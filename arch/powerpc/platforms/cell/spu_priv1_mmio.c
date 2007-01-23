@@ -331,6 +331,7 @@ static int __init of_enumerate_spus(int (*fn)(void *data))
 {
 	int ret;
 	struct device_node *node;
+	unsigned int n = 0;
 
 	ret = -ENODEV;
 	for (node = of_find_node_by_type(NULL, "spe");
@@ -341,8 +342,9 @@ static int __init of_enumerate_spus(int (*fn)(void *data))
 				__FUNCTION__, node->name);
 			break;
 		}
+		n++;
 	}
-	return ret;
+	return ret ? ret : n;
 }
 
 static int __init of_create_spu(struct spu *spu, void *data)

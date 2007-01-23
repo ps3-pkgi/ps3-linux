@@ -1,6 +1,17 @@
 menu "PS3 Platform Options"
 	depends on PPC_PS3
 
+config PPC_PS3_ROMBOOT
+	depends on PPC_PS3
+	bool "PS3 1st stage boot support"
+	default n
+	help
+	  Add support to use the kernel as a 1st stage boot kernel.  This
+	  support is needed if you plan to program the kernel into the
+	  PS3 game console boot flash.  Normal users don't need this support.
+
+	  If unsure, say N.
+
 config PS3_HTAB_SIZE
 	depends on PPC_PS3
 	int "PS3 Platform pagetable size"
@@ -50,5 +61,25 @@ config PS3_VUART
 	  This support is required for several system services
 	  including the System Manager and AV Settings.  In
 	  general, all users will say Y.
+
+config PS3_SYS_MANAGER
+	depends on PS3_VUART
+	tristate "PS3 Platform System Manager support"
+	default y
+	help
+	  Include support for the PS3 Platform System Manager.
+
+	  This support is required for system control.  In
+	  general, all users will say Y or M.
+
+config PS3_PS3AV
+	tristate "PS3 AV controller support"
+	default y
+	depends on PS3_VUART
+	help
+	  Include support for the PS3 Platform AV Settings device.
+
+	  This support is required for graphics and sound. In
+	  general, all users will say Y or M.
 
 endmenu

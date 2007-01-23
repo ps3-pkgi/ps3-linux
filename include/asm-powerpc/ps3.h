@@ -25,6 +25,7 @@
 #include <linux/init.h>
 #include <linux/types.h>
 #include <linux/device.h>
+#include <scsi/scsi.h>
 
 /**
  * struct ps3_device_id - HV bus device identifier from the system repository
@@ -152,7 +153,10 @@ int ps3_alloc_vuart_irq(void* virt_addr_bmp, unsigned int *virq);
 int ps3_free_vuart_irq(unsigned int virq);
 int ps3_alloc_spe_irq(unsigned long spe_id, unsigned int class,
 	unsigned int *virq);
-int ps3_free_spe_irq(unsigned int virq);
+#define ps3_free_spe_irq(virq)	ps3_free_irq(virq)
+int ps3_alloc_irq (unsigned long outlet, unsigned int *virq);
+int ps3_free_irq (unsigned int virq);
+unsigned long __deprecated ps3_legacy_virq_to_outlet(unsigned int virq);
 
 /* lv1 result codes */
 
@@ -255,9 +259,12 @@ enum ps3_bus_type {
 };
 
 enum ps3_dev_type {
+	PS3_DEV_TYPE_STOR_DISK = TYPE_DISK,	/* 0 */
 	PS3_DEV_TYPE_SB_GELIC = 3,
 	PS3_DEV_TYPE_SB_USB = 4,
+	PS3_DEV_TYPE_STOR_ROM = TYPE_ROM,	/* 5 */
 	PS3_DEV_TYPE_SB_GPIO = 6,
+	PS3_DEV_TYPE_STOR_FLASH = TYPE_RBC,	/* 14 */
 };
 
 int ps3_repository_read_bus_str(unsigned int bus_index, const char *bus_str,
@@ -277,10 +284,10 @@ enum ps3_interrupt_type {
 	PS3_INTERRUPT_TYPE_OTHER = 5,
 };
 
-enum ps3_region_type {
-	PS3_REGION_TYPE_SB_OHCI = 3,
-	PS3_REGION_TYPE_SB_EHCI = 4,
-	PS3_REGION_TYPE_SB_GPIO = 5,
+enum ps3_reg_type {
+	PS3_REG_TYPE_SB_OHCI = 3,
+	PS3_REG_TYPE_SB_EHCI = 4,
+	PS3_REG_TYPE_SB_GPIO = 5,
 };
 
 int ps3_repository_read_dev_str(unsigned int bus_index,
@@ -294,13 +301,13 @@ int ps3_repository_read_dev_intr(unsigned int bus_index,
 	enum ps3_interrupt_type *intr_type, unsigned int *interrupt_id);
 int ps3_repository_read_dev_reg_type(unsigned int bus_index,
 	unsigned int dev_index, unsigned int reg_index,
-	enum ps3_region_type *reg_type);
+	enum ps3_reg_type *reg_type);
 int ps3_repository_read_dev_reg_addr(unsigned int bus_index,
 	unsigned int dev_index, unsigned int reg_index, u64 *bus_addr,
 	u64 *len);
 int ps3_repository_read_dev_reg(unsigned int bus_index,
 	unsigned int dev_index, unsigned int reg_index,
-	enum ps3_region_type *reg_type, u64 *bus_addr, u64 *len);
+	enum ps3_reg_type *reg_type, u64 *bus_addr, u64 *len);
 
 /* repository bus enumerators */
 
@@ -310,6 +317,8 @@ struct ps3_repository_device {
 	struct ps3_device_id did;
 };
 
+int ps3_repository_find_bus(enum ps3_bus_type bus_type, unsigned int from,
+	unsigned int *bus_index);
 int ps3_repository_find_device(enum ps3_bus_type bus_type,
 	enum ps3_dev_type dev_type,
 	const struct ps3_repository_device *start_dev,
@@ -322,26 +331,32 @@ static inline int ps3_repository_find_first_device(
 }
 int ps3_repository_find_interrupt(const struct ps3_repository_device *dev,
 	enum ps3_interrupt_type intr_type, unsigned int *interrupt_id);
-int ps3_repository_find_region(const struct ps3_repository_device *dev,
-	enum ps3_region_type reg_type, u64 *bus_addr, u64 *len);
+int ps3_repository_find_reg(const struct ps3_repository_device *dev,
+	enum ps3_reg_type reg_type, u64 *bus_addr, u64 *len);
 
 /* repository block device info */
 
-int ps3_repository_read_dev_port(unsigned int bus_index,
+int ps3_repository_read_stor_dev_port(unsigned int bus_index,
 	unsigned int dev_index, u64 *port);
-int ps3_repository_read_dev_blk_size(unsigned int bus_index,
+int ps3_repository_read_stor_dev_blk_size(unsigned int bus_index,
 	unsigned int dev_index, u64 *blk_size);
-int ps3_repository_read_dev_num_blocks(unsigned int bus_index,
+int ps3_repository_read_stor_dev_num_blocks(unsigned int bus_index,
 	unsigned int dev_index, u64 *num_blocks);
-int ps3_repository_read_dev_num_regions(unsigned int bus_index,
+int ps3_repository_read_stor_dev_num_regions(unsigned int bus_index,
 	unsigned int dev_index, unsigned int *num_regions);
-int ps3_repository_read_dev_region_id(unsigned int bus_index,
+int ps3_repository_read_stor_dev_region_id(unsigned int bus_index,
 	unsigned int dev_index, unsigned int region_index,
 	unsigned int *region_id);
-int ps3_repository_read_dev_region_size(unsigned int bus_index,
+int ps3_repository_read_stor_dev_region_size(unsigned int bus_index,
 	unsigned int dev_index,	unsigned int region_index, u64 *region_size);
-int ps3_repository_read_dev_region_start(unsigned int bus_index,
+int ps3_repository_read_stor_dev_region_start(unsigned int bus_index,
 	unsigned int dev_index, unsigned int region_index, u64 *region_start);
+int ps3_repository_read_stor_dev_info(unsigned int bus_index,
+	unsigned int dev_index, u64 *port, u64 *blk_size,
+	u64 *num_blocks, unsigned int *num_regions);
+int ps3_repository_read_stor_dev_region(unsigned int bus_index,
+	unsigned int dev_index, unsigned int region_index,
+	unsigned int *region_id, u64 *region_start, u64 *region_size);
 
 /* repository pu and memory info */
 
@@ -365,6 +380,15 @@ int ps3_repository_read_be_tb_freq(unsigned int be_index, u64 *tb_freq);
 int ps3_repository_read_boot_dat_addr(u64 *lpar_addr);
 int ps3_repository_read_boot_dat_size(unsigned int *size);
 int ps3_repository_read_boot_dat_info(u64 *lpar_addr, unsigned int *size);
+
+enum {
+	PARAM_AV_MULTI_OUT_NTSC = 0,
+	PARAM_AV_MULTI_OUT_PAL_RGB = 1,
+	PARAM_AV_MULTI_OUT_PAL_YCBCR = 2,
+	PARAM_AV_MULTI_OUT_SECAM = 3,
+};
+
+extern u8 ps3_os_area_get_av_multi_out(void);
 
 /* repository spu info */
 
@@ -458,5 +482,15 @@ static inline void *ps3_system_bus_get_driver_data(
 /* These two need global scope for get_dma_ops(). */
 
 extern struct bus_type ps3_system_bus_type;
+
+struct ps3_prealloc {
+    const char *name;
+    void *address;
+    unsigned long size;
+    unsigned long align;
+};
+
+extern struct ps3_prealloc ps3_stor_bounce_buffer;
+extern struct ps3_prealloc ps3fb_videomemory;
 
 #endif

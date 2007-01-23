@@ -31,6 +31,7 @@
 #include <linux/mm.h>
 #include <linux/io.h>
 #include <linux/mutex.h>
+#include <linux/linux_logo.h>
 #include <asm/spu.h>
 #include <asm/spu_priv1.h>
 #include <asm/xmon.h>
@@ -676,16 +677,22 @@ static int __init init_spu_base(void)
 
 	ret = spu_enumerate_spus(create_spu);
 
-	if (ret) {
+	if (ret < 0) {
 		printk(KERN_WARNING "%s: Error initializing spus\n",
 			__FUNCTION__);
 		cleanup_spu_base();
 		return ret;
 	}
+#ifdef CONFIG_LOGO
+	if (ret > 0) {
+		extern const struct linux_logo logo_spe_clut224;
+		fb_append_extra_logo(&logo_spe_clut224, ret);
+	}
+#endif
 
 	xmon_register_spus(&spu_full_list);
 
-	return ret;
+	return 0;
 }
 module_init(init_spu_base);
 

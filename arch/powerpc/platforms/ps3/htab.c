@@ -234,6 +234,11 @@ static void ps3_hpte_invalidate(unsigned long slot, unsigned long va,
 
 static void ps3_hpte_clear(void)
 {
+	extern void ps3fb_cleanup(void);
+
+#ifdef CONFIG_FB_PS3
+	ps3fb_cleanup();
+#endif
 	lv1_unmap_htab(htab_addr);
 }
 

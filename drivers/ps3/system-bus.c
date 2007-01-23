@@ -18,6 +18,8 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+#define DEBUG
+
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/module.h>
@@ -50,27 +52,29 @@ int ps3_mmio_region_create(struct ps3_mmio_region *r)
 	if (result) {
 		pr_debug("%s:%d: lv1_map_device_mmio_region failed: %s\n",
 			__func__, __LINE__, ps3_result(result));
-		r->lpar_addr = r->len = r->bus_addr = 0;
+		r->lpar_addr = 0;
 	}
 
 	dump_mmio_region(r);
 	return result;
 }
+EXPORT_SYMBOL_GPL(ps3_mmio_region_create);
 
 int ps3_free_mmio_region(struct ps3_mmio_region *r)
 {
 	int result;
 
 	result = lv1_unmap_device_mmio_region(r->did.bus_id, r->did.dev_id,
-		r->bus_addr);
+		r->lpar_addr);
 
 	if (result)
 		pr_debug("%s:%d: lv1_unmap_device_mmio_region failed: %s\n",
 			__func__, __LINE__, ps3_result(result));
 
-	r->lpar_addr = r->len = r->bus_addr = 0;
+	r->lpar_addr = 0;
 	return result;
 }
+EXPORT_SYMBOL_GPL(ps3_free_mmio_region);
 
 static int ps3_system_bus_match(struct device *_dev,
 	struct device_driver *_drv)
@@ -96,9 +100,10 @@ static int ps3_system_bus_probe(struct device *_dev)
 
 	result = lv1_open_device(dev->did.bus_id, dev->did.dev_id, 0);
 
-	if (result) {
-		pr_debug("%s:%d: lv1_open_device failed (%d)\n",
-			__func__, __LINE__, result);
+	if (result && (result != LV1_BUSY || (dev->match_id != PS3_MATCH_ID_EHCI
+		&& dev->match_id != PS3_MATCH_ID_OHCI))) {
+		pr_debug("%s:%d: lv1_open_device failed: %s\n",
+			__func__, __LINE__, ps3_result(result));
 		result = -EACCES;
 		goto clean_none;
 	}
@@ -271,18 +276,14 @@ static void ps3_unmap_single(struct device *_dev, dma_addr_t dma_addr,
 static int ps3_map_sg(struct device *_dev, struct scatterlist *sg, int nents,
 	enum dma_data_direction direction)
 {
-#if defined(CONFIG_PS3_DYNAMIC_DMA)
 	BUG_ON("do");
-#endif
 	return 0;
 }
 
 static void ps3_unmap_sg(struct device *_dev, struct scatterlist *sg,
 	int nents, enum dma_data_direction direction)
 {
-#if defined(CONFIG_PS3_DYNAMIC_DMA)
 	BUG_ON("do");
-#endif
 }
 
 static int ps3_dma_supported(struct device *_dev, u64 mask)

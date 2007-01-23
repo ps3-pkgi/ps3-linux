@@ -67,6 +67,11 @@
  *  For iSeries:
  *   1. The MMU is on (as it always is for iSeries)
  *   2. The kernel is entered at system_reset_iSeries
+ *
+ *  For ps3:
+ *   1. The MMU is off
+ *   2. The kernel is loaded at lpar address zero
+ *   3. The kernel is entered at 0x100 (System Reset exception)
  */
 
 	.text
@@ -75,7 +80,11 @@ _stext:
 _GLOBAL(__start)
 	/* NOP this out unconditionally */
 BEGIN_FTR_SECTION
+#if defined(CONFIG_PPC_PS3)
+	b	.__start_initialization_ps3
+#else
 	b	.__start_initialization_multiplatform
+#endif
 END_FTR_SECTION(0, 1)
 
 	/* Catch branch to 0 in real mode */
@@ -482,7 +491,11 @@ END_FTR_SECTION_IFSET(CPU_FTR_CAN_NAP)
 	.globl __start_interrupts
 __start_interrupts:
 
+#if defined(CONFIG_PPC_PS3_ROMBOOT)
+	b .__start_initialization_ps3
+#else
 	STD_EXCEPTION_PSERIES(0x100, system_reset)
+#endif
 
 	. = 0x200
 _machine_check_pSeries:
@@ -1637,6 +1650,26 @@ _STATIC(__start_initialization_iSeries)
 	b	.start_here_common
 #endif /* CONFIG_PPC_ISERIES */
 
+#if defined(CONFIG_PPC_PS3_ROMBOOT)
+_STATIC(__start_initialization_ps3)
+	/*
+	 * We start up with both threads running.  Start up with thread 0
+	 * and send the other off to __secondary_hold with the Linux processor
+	 * number in r3.
+	 */
+	mfspr	r3, SPRN_CTRLF
+	cntlzw.	r3, r3
+	beq	1f
+	b	.__secondary_hold
+1:
+
+	/* current thread is thread 0 */
+	li	r5, 0	/* r5 == NULL -> kexec style entry. */
+	LOAD_REG_IMMEDIATE(r3, dt_blob_start)
+	clrldi	r3, r3, 2	/* strip top 2 bits (convert vaddr to paddr) */
+	li	r4, 0	/* r4 is a physical pointer to the kernel itself */
+	b .__start_initialization_multiplatform
+#endif /* defined(CONFIG_PPC_PS3_ROMBOOT) */
 
 _STATIC(__mmu_off)
 	mfmsr	r3

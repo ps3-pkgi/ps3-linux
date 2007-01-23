@@ -24,6 +24,7 @@
 #include <linux/root_dev.h>
 #include <linux/console.h>
 #include <linux/kexec.h>
+#include <linux/bootmem.h>
 
 #include <asm/machdep.h>
 #include <asm/firmware.h>
@@ -32,6 +33,7 @@
 #include <asm/udbg.h>
 #include <asm/prom.h>
 #include <asm/lv1call.h>
+#include <asm/ps3.h>
 
 #include "platform.h"
 
@@ -41,9 +43,28 @@
 #define DBG(fmt...) do{if(0)printk(fmt);}while(0)
 #endif
 
+struct ps3_firmware_version {
+	u64 raw;
+	unsigned int major;
+	unsigned int minor;
+	unsigned int rev;
+};
+
+static void ps3_get_firmware_version(struct ps3_firmware_version *v)
+{
+	lv1_get_version_info(&v->raw);
+	v->rev = (unsigned int)(unsigned short)v->raw;
+	v->minor = (unsigned int)(unsigned short)(v->raw / 0x10000);
+	v->major = (unsigned int)(unsigned short)(v->raw / 0x100000000);
+}
+
 static void ps3_show_cpuinfo(struct seq_file *m)
 {
-	seq_printf(m, "machine\t\t: %s\n", ppc_md.name);
+	struct ps3_firmware_version v;
+
+	ps3_get_firmware_version(&v);
+	seq_printf(m, "firmware \t: version %u.%u.%u\n", v.major, v.minor,
+		v.rev);
 }
 
 static void ps3_power_save(void)
@@ -72,9 +93,53 @@ static void ps3_panic(char *str)
 	for (;;) ;
 }
 
+
+static void prealloc(struct ps3_prealloc *p)
+{
+	p->address = __alloc_bootmem(p->size, p->align, __pa(MAX_DMA_ADDRESS));
+	if (!p->address) {
+		printk(KERN_ERR "%s: Cannot allocate %s\n", __FUNCTION__,
+		       p->name);
+		return;
+	}
+
+	printk(KERN_INFO "%s: %lu bytes at %p\n", p->name, p->size,
+	       p->address);
+}
+
+#ifdef CONFIG_FB_PS3
+struct ps3_prealloc ps3fb_videomemory = {
+    .name = "ps3fb videomemory",
+    .size = 18*1024*1024,
+    .align = 1024*1024			/* the GPU requires 1 MiB alignment */
+};
+#define prealloc_ps3fb_videomemory()	prealloc(&ps3fb_videomemory)
+#else
+#define prealloc_ps3fb_videomemory()	do { } while (0)
+#endif
+
+#if defined(CONFIG_PS3_STORAGE) || defined(CONFIG_PS3_STORAGE_MODULE)
+struct ps3_prealloc ps3_stor_bounce_buffer = {
+    .name = "ps3_stor bounce buffer",
+    .size = 256*1024,
+    .align = 256*1024
+};
+EXPORT_SYMBOL_GPL(ps3_stor_bounce_buffer);
+#define prealloc_ps3_stor_bounce_buffer()	prealloc(&ps3_stor_bounce_buffer)
+#else
+#define prealloc_ps3_stor_bounce_buffer()	do { } while (0)
+#endif
+
+
 static void __init ps3_setup_arch(void)
 {
+	struct ps3_firmware_version v;
+
 	DBG(" -> %s:%d\n", __func__, __LINE__);
+
+	ps3_get_firmware_version(&v);
+	printk(KERN_INFO "PS3 firmware version %u.%u.%u\n", v.major, v.minor,
+		v.rev);
 
 	ps3_spu_set_platform();
 	ps3_map_htab();
@@ -88,6 +153,10 @@ static void __init ps3_setup_arch(void)
 #endif
 
 	ppc_md.power_save = ps3_power_save;
+
+
+	prealloc_ps3fb_videomemory();
+	prealloc_ps3_stor_bounce_buffer();
 
 	DBG(" <- %s:%d\n", __func__, __LINE__);
 }
@@ -109,6 +178,7 @@ static int __init ps3_probe(void)
 		return 0;
 
 	powerpc_firmware_features |= FW_FEATURE_PS3_POSSIBLE;
+	cur_cpu_spec->cpu_features |= CPU_FTR_SMT;
 
 	ps3_os_area_init();
 	ps3_mm_init();
@@ -150,6 +220,12 @@ static void ps3_machine_kexec(struct kimage *image)
 
 	DBG(" <- %s:%d\n", __func__, __LINE__);
 }
+#endif
+// FIXME GEERT ps3fb_cleanup() should be called from ps3_prepare_shutdown()
+#ifdef CONFIG_FB_PS3
+extern void ps3fb_cleanup(void);
+#else
+extern void ps3fb_cleanup(void) {}
 #endif
 
 define_machine(ps3) {

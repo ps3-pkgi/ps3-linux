@@ -619,8 +619,13 @@ static void fbcon_prepare_logo(struct vc_data *vc, struct fb_info *info,
 			r -= cols;
 		}
 		if (!save) {
-			vc->vc_y += logo_lines;
-			vc->vc_pos += logo_lines * vc->vc_size_row;
+			int lines;
+			if (vc->vc_y + logo_lines >= rows)
+			    lines = rows - vc->vc_y -1;
+			else
+			    lines = logo_lines;
+			vc->vc_y += lines;
+			vc->vc_pos += lines * vc->vc_size_row;
 		}
 	}
 	scr_memsetw((unsigned short *) vc->vc_origin,
@@ -2071,7 +2076,7 @@ static int fbcon_resize(struct vc_data *vc, unsigned int width,
 	y_diff = info->var.yres - var.yres;
 	if (x_diff < 0 || x_diff > virt_fw ||
 	    y_diff < 0 || y_diff > virt_fh) {
-		struct fb_videomode *mode;
+		const struct fb_videomode *mode;
 
 		DPRINTK("attempting resize %ix%i\n", var.xres, var.yres);
 		mode = fb_find_best_mode(&var, &info->modelist);
@@ -2975,7 +2980,7 @@ static void fbcon_new_modelist(struct fb_info *info)
 	int i;
 	struct vc_data *vc;
 	struct fb_var_screeninfo var;
-	struct fb_videomode *mode;
+	const struct fb_videomode *mode;
 
 	for (i = first_fb_vc; i <= last_fb_vc; i++) {
 		if (registered_fb[con2fb_map[i]] != info)

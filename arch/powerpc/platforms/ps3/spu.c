@@ -50,7 +50,7 @@ enum spe_type {
  */
 
 struct spe_shadow {
-	u8 padding_0000[0x0140];
+	u8 padding_0140[0x0140];
 	u64 int_status_class0_RW;       /* 0x0140 */
 	u64 int_status_class1_RW;       /* 0x0148 */
 	u64 int_status_class2_RW;       /* 0x0150 */
@@ -67,8 +67,7 @@ struct spe_shadow {
 	u8 padding_0c08[0x0f00-0x0c08];
 	u64 spe_execution_status;       /* 0x0f00 */
 	u8 padding_0f08[0x1000-0x0f08];
-} __attribute__ ((packed));
-
+};
 
 /**
  * enum spe_ex_state - Logical spe execution state.
@@ -438,11 +437,13 @@ static int __init ps3_enumerate_spus(int (*fn)(void *data))
 		}
 	}
 
-	if (result)
+	if (result) {
 		printk(KERN_WARNING "%s:%d: Error initializing spus\n",
 			__func__, __LINE__);
+		return result;
+	}
 
-	return result;
+	return num_resource_id;
 }
 
 const struct spu_management_ops spu_management_ps3_ops = {

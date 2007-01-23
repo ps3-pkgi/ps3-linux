@@ -1625,6 +1625,15 @@ config FB_IBM_GXT4500
 	  Say Y here to enable support for the IBM GXT4500P display
 	  adaptor, found on some IBM System P (pSeries) machines.
 
+config FB_PS3
+	bool "PS3 GPU framebuffer driver"
+	depends on FB && PS3_PS3AV=y
+	select FB_CFB_FILLRECT
+	select FB_CFB_COPYAREA
+	select FB_CFB_IMAGEBLIT
+	---help---
+	  Include support for the virtual frame buffer in the PS3 platform.
+
 config FB_VIRTUAL
 	tristate "Virtual Frame Buffer support (ONLY FOR TESTING!)"
 	depends on FB
