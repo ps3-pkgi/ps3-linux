@@ -27,6 +27,15 @@
 #include <linux/device.h>
 #include <scsi/scsi.h>
 
+struct ps3_firmware_version {
+	u64 raw;
+	unsigned int major;
+	unsigned int minor;
+	unsigned int rev;
+};
+
+int ps3_get_firmware_version(struct ps3_firmware_version *v);
+
 /**
  * struct ps3_device_id - HV bus device identifier from the system repository
  * @bus_id: HV bus id, {1..} (zero invalid)

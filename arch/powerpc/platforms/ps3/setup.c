@@ -43,28 +43,29 @@
 #define DBG(fmt...) do{if(0)printk(fmt);}while(0)
 #endif
 
-struct ps3_firmware_version {
-	u64 raw;
-	unsigned int major;
-	unsigned int minor;
-	unsigned int rev;
-};
-
-static void ps3_get_firmware_version(struct ps3_firmware_version *v)
+int ps3_get_firmware_version(struct ps3_firmware_version *v)
 {
-	lv1_get_version_info(&v->raw);
-	v->rev = (unsigned int)(unsigned short)v->raw;
-	v->minor = (unsigned int)(unsigned short)(v->raw / 0x10000);
-	v->major = (unsigned int)(unsigned short)(v->raw / 0x100000000);
+	int result = lv1_get_version_info(&v->raw);
+
+	if(result) {
+		memset(v, 0, sizeof(struct ps3_firmware_version));
+		return -1;
+	}
+
+	v->rev = v->raw & 0xffff;
+	v->minor = (v->raw >> 16) & 0xffff;
+	v->major = (v->raw >> 32) & 0xffff;
+
+	return result;
 }
+EXPORT_SYMBOL_GPL(ps3_get_firmware_version);
 
 static void ps3_show_cpuinfo(struct seq_file *m)
 {
 	struct ps3_firmware_version v;
 
 	ps3_get_firmware_version(&v);
-	seq_printf(m, "firmware \t: version %u.%u.%u\n", v.major, v.minor,
-		v.rev);
+	seq_printf(m, "firmware\t: %u.%u.%u\n", v.major, v.minor, v.rev);
 }
 
 static void ps3_power_save(void)
