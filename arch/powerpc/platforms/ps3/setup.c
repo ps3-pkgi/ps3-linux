@@ -96,6 +96,9 @@ static void ps3_panic(char *str)
 
 static void prealloc(struct ps3_prealloc *p)
 {
+	if (!p->size)
+		return;
+
 	p->address = __alloc_bootmem(p->size, p->align, __pa(MAX_DMA_ADDRESS));
 	if (!p->address) {
 		printk(KERN_ERR "%s: Cannot allocate %s\n", __FUNCTION__,
@@ -110,10 +113,23 @@ static void prealloc(struct ps3_prealloc *p)
 #ifdef CONFIG_FB_PS3
 struct ps3_prealloc ps3fb_videomemory = {
     .name = "ps3fb videomemory",
-    .size = 18*1024*1024,
+    .size = CONFIG_FB_PS3_DEFAULT_SIZE_M*1024*1024,
     .align = 1024*1024			/* the GPU requires 1 MiB alignment */
 };
 #define prealloc_ps3fb_videomemory()	prealloc(&ps3fb_videomemory)
+
+static int __init early_parse_ps3fb(char *p)
+{
+	if (!p)
+		return 1;
+
+	ps3fb_videomemory.size = _ALIGN_UP(memparse(p, &p),
+					   ps3fb_videomemory.align);
+	printk("ps3fb limit = 0x%lx\n", ps3fb_videomemory.size);
+
+	return 0;
+}
+early_param("ps3fb", early_parse_ps3fb);
 #else
 #define prealloc_ps3fb_videomemory()	do { } while (0)
 #endif
@@ -153,7 +169,6 @@ static void __init ps3_setup_arch(void)
 #endif
 
 	ppc_md.power_save = ps3_power_save;
-
 
 	prealloc_ps3fb_videomemory();
 	prealloc_ps3_stor_bounce_buffer();
