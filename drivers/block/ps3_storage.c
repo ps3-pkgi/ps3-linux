@@ -2143,7 +2143,7 @@ static int ps3_stor_slave_alloc(struct scsi_device * scsi_dev)
 	}
 
 	error = ps3_connect_event_irq(PS3_BINDING_CPU_ANY,
-			              &lv1_dev_info->repo.did /* host_info->dev.did */,
+				      &lv1_dev_info->repo.did /* host_info->dev.did */,
 				      lv1_dev_info->interrupt_id,
 				      &lv1_dev_info->irq_plug_id);
 	if (error) {

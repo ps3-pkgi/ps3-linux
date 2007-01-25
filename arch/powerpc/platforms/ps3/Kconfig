@@ -62,16 +62,6 @@ config PS3_VUART
 	  including the System Manager and AV Settings.  In
 	  general, all users will say Y.
 
-config PS3_SYS_MANAGER
-	depends on PS3_VUART
-	tristate "PS3 Platform System Manager support"
-	default y
-	help
-	  Include support for the PS3 Platform System Manager.
-
-	  This support is required for system control.  In
-	  general, all users will say Y or M.
-
 config PS3_PS3AV
 	tristate "PS3 AV controller support"
 	default y
@@ -80,6 +70,16 @@ config PS3_PS3AV
 	  Include support for the PS3 Platform AV Settings device.
 
 	  This support is required for graphics and sound. In
+	  general, all users will say Y or M.
+
+config PS3_SYS_MANAGER
+	depends on PS3_VUART
+	tristate "PS3 Platform System Manager support"
+	default y
+	help
+	  Include support for the PS3 Platform System Manager.
+
+	  This support is required for system control.  In
 	  general, all users will say Y or M.
 
 endmenu

@@ -51,17 +51,17 @@ unsigned long ps3_legacy_virq_to_outlet(unsigned int virq)
  *
  * The HV mantains per SMT thread mappings of HV outlet to HV plug on
  * behalf of the guest.  These mappings are implemented as 256 bit guest
- * supplied bitmaps indexed by plug number.  The address of the bitmaps are
- * registered with the HV through lv1_configure_irq_state_bitmap().
+ * supplied bitmaps indexed by plug number.  The addresses of the bitmaps
+ * are registered with the HV through lv1_configure_irq_state_bitmap().
  *
  * The HV supports 256 plugs per thread, assigned as {0..255}, for a total
  * of 512 plugs supported on a processor.  To simplify the logic this
- * implementation equates HV plug value to linux virq value, constrains each
+ * implementation equates HV plug value to Linux virq value, constrains each
  * interrupt to have a system wide unique plug number, and limits the range
  * of the plug values to map into the first dword of the bitmaps.  This
  * gives a usable range of plug values of  {NUM_ISA_INTERRUPTS..63}.  Note
  * that there is no constraint on how many in this set an individual thread
- * can aquire.
+ * can acquire.
  */
 
 struct ps3_bmp {
@@ -99,14 +99,14 @@ static int ps3_connect_irq(enum ps3_cpu_binding cpu, unsigned long outlet,
 
 	/* This defines the default interrupt distribution policy. */
 
-	if(cpu == PS3_BINDING_CPU_ANY)
+	if (cpu == PS3_BINDING_CPU_ANY)
 		cpu = 0;
 
 	pd = &per_cpu(ps3_private, cpu);
 
 	*virq = irq_create_mapping(NULL, outlet);
 
-	if(*virq == NO_IRQ) {
+	if (*virq == NO_IRQ) {
 		pr_debug("%s:%d: irq_create_mapping failed: outlet %lu\n",
 			__func__, __LINE__, outlet);
 		result = -ENOMEM;

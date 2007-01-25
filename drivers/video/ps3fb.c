@@ -894,7 +894,7 @@ static int ps3fb_vsync_settings(struct gpu_driver_info *dinfo, void *dev)
 
 	ps3fb.dev = dev;
 	error = ps3_alloc_irq(PS3_BINDING_CPU_ANY, dinfo->irq.irq_outlet,
-		&ps3fb.irq_no);
+			      &ps3fb.irq_no);
 	if (error) {
 		printk(KERN_ERR "%s: ps3_alloc_irq failed %d\n", __FUNCTION__,
 		       error);
@@ -987,7 +987,7 @@ static int __init ps3fb_probe(struct platform_device *dev)
 	}
 	DPRINTK("ddr:lpar:0x%lx\n", ddr_lpar);
 
-	status = lv1_gpu_context_allocate(ps3fb.memory_handle,
+	status = lv1_gpu_context_allocate(ps3fb.memory_handle, 0,
 					  &ps3fb.context_handle,
 					  &lpar_dma_control, &lpar_driver_info,
 					  &lpar_reports, &lpar_reports_size);

@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
-# Linux kernel version: 2.6.20-rc5
-# Wed Jan 24 18:18:36 2007
+# Linux kernel version: 2.6.20-rc6
+# Thu Jan 25 13:56:12 2007
 #
 CONFIG_PPC64=y
 CONFIG_64BIT=y
@@ -164,8 +164,8 @@ CONFIG_PS3_HTAB_SIZE=20
 # CONFIG_PS3_DYNAMIC_DMA is not set
 CONFIG_PS3_USE_LPAR_ADDR=y
 CONFIG_PS3_VUART=y
-CONFIG_PS3_SYS_MANAGER=y
 CONFIG_PS3_PS3AV=y
+CONFIG_PS3_SYS_MANAGER=y
 
 #
 # Kernel options
@@ -465,6 +465,7 @@ CONFIG_NETDEVICES=y
 # Ethernet (10 or 100Mbit)
 #
 # CONFIG_NET_ETHERNET is not set
+CONFIG_MII=y
 
 #
 # Ethernet (1000 Mbit)
@@ -745,8 +746,16 @@ CONFIG_USB_HID=y
 # CONFIG_USB_KAWETH is not set
 # CONFIG_USB_PEGASUS is not set
 # CONFIG_USB_RTL8150 is not set
-# CONFIG_USB_USBNET_MII is not set
-# CONFIG_USB_USBNET is not set
+CONFIG_USB_USBNET_MII=y
+CONFIG_USB_USBNET=y
+CONFIG_USB_NET_CDCETHER=y
+# CONFIG_USB_NET_GL620A is not set
+# CONFIG_USB_NET_NET1080 is not set
+# CONFIG_USB_NET_PLUSB is not set
+CONFIG_USB_NET_MCS7830=y
+# CONFIG_USB_NET_RNDIS_HOST is not set
+# CONFIG_USB_NET_CDC_SUBSET is not set
+# CONFIG_USB_NET_ZAURUS is not set
 CONFIG_USB_MON=y
 
 #

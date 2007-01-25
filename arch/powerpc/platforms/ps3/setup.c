@@ -126,8 +126,6 @@ static int __init early_parse_ps3fb(char *p)
 
 	ps3fb_videomemory.size = _ALIGN_UP(memparse(p, &p),
 					   ps3fb_videomemory.align);
-	printk("ps3fb limit = 0x%lx\n", ps3fb_videomemory.size);
-
 	return 0;
 }
 early_param("ps3fb", early_parse_ps3fb);
