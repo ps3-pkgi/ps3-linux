@@ -621,9 +621,9 @@ static void fbcon_prepare_logo(struct vc_data *vc, struct fb_info *info,
 		if (!save) {
 			int lines;
 			if (vc->vc_y + logo_lines >= rows)
-			    lines = rows - vc->vc_y -1;
+				lines = rows - vc->vc_y -1;
 			else
-			    lines = logo_lines;
+				lines = logo_lines;
 			vc->vc_y += lines;
 			vc->vc_pos += lines * vc->vc_size_row;
 		}

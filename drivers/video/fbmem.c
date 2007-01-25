@@ -428,9 +428,7 @@ void fb_append_extra_logo(const struct linux_logo *logo, int n)
 int fb_prepare_logo(struct fb_info *info, int rotate)
 {
 	int depth = fb_get_color_depth(&info->var, &info->fix);
-	int yres;
-	int i;
-	int height;
+	int yres, height, i;
 
 	memset(&fb_logo, 0, sizeof(struct logo_data));
 
@@ -490,10 +488,9 @@ int fb_prepare_logo(struct fb_info *info, int rotate)
 	else
 		fb_logo.depth = 1;		
 
-	/* FIXME: logo_ex support only truecolor fb. */
-	if (info->fix.visual != FB_VISUAL_TRUECOLOR) {
+	/* FIXME: logo_ex supports only truecolor fb. */
+	if (info->fix.visual != FB_VISUAL_TRUECOLOR)
 		fb_logo_ex_num = 0;
-	}
 
 	height = fb_logo.logo->height;
 	for (i = 0; i < fb_logo_ex_num; i++) {

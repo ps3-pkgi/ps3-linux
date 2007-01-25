@@ -417,8 +417,8 @@ int ps3av_set_audio_mode(u32 ch, u32 fs, u32 word_bits, u32 format, u32 source)
 	param_p = (u8 *) &avb_param.video;
 	/* audio_pkt */
 	for (i = 0; i < num_of_audio; i++) {
-		ps3av_cmd_set_audio_mode((u8 *) &audio_mode, ps3av.av_port[i],
-					 ch, fs, word_bits, format, source);
+		ps3av_cmd_set_audio_mode(&audio_mode, ps3av.av_port[i], ch, fs,
+					 word_bits, format, source);
 		if (i < ps3av.av_hw_conf.num_of_hdmi) {
 			/* hdmi only */
 			param_p = ps3av_cmd_set_av_audio_param(param_p,
@@ -498,12 +498,11 @@ static int ps3av_set_videomode(u32 id)
 
 	param_p = (u8 *) & avb_param.video;
 	/* video_pkt */
-	for (i = 0; i < avb_param.num_of_video_pkt; i++) {
+	for (i = 0; i < avb_param.num_of_video_pkt; i++)
 		param_p = ps3av_cmd_set_video_mode(param_p,
 						   ps3av.head[i],
 						   video_mode->vid,
 						   video_mode->fmt, id);
-	}
 	/* av_video_pkt */
 	for (i = 0; i < avb_param.num_of_av_video_pkt; i++) {
 		if (id & PS3AV_MODE_DVI || id & PS3AV_MODE_RGB)
@@ -626,7 +625,7 @@ static int ps3av_auto_videomode(struct ps3av_pkt_av_get_hw_conf *av_hw_conf,
 #ifdef PS3AV_DEBUG
 		ps3av_cmd_av_monitor_info_dump(&monitor_info);
 #endif
-		info = (struct ps3av_info_monitor *)&monitor_info.info;
+		info = &monitor_info.info;
 		/* check DVI */
 		if (info->monitor_type == PS3AV_MONITOR_TYPE_DVI) {
 			dvi = PS3AV_MODE_DVI;
@@ -653,7 +652,7 @@ static int ps3av_auto_videomode(struct ps3av_pkt_av_get_hw_conf *av_hw_conf,
 			rgb = PS3AV_MODE_RGB;
 	} else if (boot) {
 		/* HDMI: using DEFAULT HDMI_VID while booting up */
-		info = (struct ps3av_info_monitor *)monitor_info.info;
+		info = &monitor_info.info;
 		if (ps3av.region & PS3AV_REGION_60) {
 			if (info->res_60.res_bits & PS3AV_RESBIT_720x480P)
 				vid = PS3AV_DEFAULT_HDMI_VID_REG_60;
@@ -915,14 +914,14 @@ static int ps3av_probe(struct ps3_vuart_port_device *dev)
 
 	ps3av.available = 1;
 	switch (ps3_os_area_get_av_multi_out()) {
-	case PARAM_AV_MULTI_OUT_NTSC:
+	case PS3_PARAM_AV_MULTI_OUT_NTSC:
 		ps3av.region = PS3AV_REGION_60;
 		break;
-	case PARAM_AV_MULTI_OUT_PAL_YCBCR:
-	case PARAM_AV_MULTI_OUT_SECAM:
+	case PS3_PARAM_AV_MULTI_OUT_PAL_YCBCR:
+	case PS3_PARAM_AV_MULTI_OUT_SECAM:
 		ps3av.region = PS3AV_REGION_50;
 		break;
-	case PARAM_AV_MULTI_OUT_PAL_RGB:
+	case PS3_PARAM_AV_MULTI_OUT_PAL_RGB:
 		ps3av.region = PS3AV_REGION_50 | PS3AV_REGION_RGB;
 		break;
 	default:

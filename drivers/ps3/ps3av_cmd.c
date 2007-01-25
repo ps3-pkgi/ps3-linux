@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2006 Sony Computer Entertainment Inc.
- * Copyright (C) 2005-2007 Sony Corporation
+ * Copyright (C) 2006-2007 Sony Corporation
  *
  * AV backend support for PS3
  *
@@ -640,7 +640,7 @@ static u8 ps3av_cnv_layout(u32 num_of_ch)
 }
 
 static void ps3av_cnv_info(struct ps3av_audio_info_frame *info,
-			   struct ps3av_pkt_audio_mode *mode)
+			   const struct ps3av_pkt_audio_mode *mode)
 {
 	info->pb1.cc = mode->audio_num_of_ch + 1;	/* CH2:0x01 --- CH8:0x07 */
 	info->pb1.ct = 0;
@@ -659,7 +659,7 @@ static void ps3av_cnv_chstat(u8 *chstat, u8 *cs_info)
 }
 
 u8 *ps3av_cmd_set_av_audio_param(u8 *p, u32 port,
-				 struct ps3av_pkt_audio_mode *audio_mode,
+				 const struct ps3av_pkt_audio_mode *audio_mode,
 				 u32 video_vid)
 {
 	struct ps3av_pkt_av_audio_param *param;
@@ -680,8 +680,7 @@ u8 *ps3av_cmd_set_av_audio_param(u8 *p, u32 port,
 	param->inputctrl = 0x49;
 	param->inputlen = ps3av_cnv_inputlen(audio_mode->audio_word_bits);
 	param->layout = ps3av_cnv_layout(audio_mode->audio_num_of_ch);
-	ps3av_cnv_info((struct ps3av_audio_info_frame *)param->info,
-		       audio_mode);
+	ps3av_cnv_info(&param->info, audio_mode);
 	ps3av_cnv_chstat(param->chstat, audio_mode->audio_cs_info);
 
 	return p + sizeof(*param);
@@ -701,10 +700,10 @@ static const u8 ps3av_mode_cs_info[] = {
 #define CS_MASK	0x0f
 #define CS_BIT	0x40
 
-u8 *ps3av_cmd_set_audio_mode(u8 *p, u32 avport, u32 ch, u32 fs, u32 word_bits,
-			     u32 format, u32 source)
+void ps3av_cmd_set_audio_mode(struct ps3av_pkt_audio_mode *audio, u32 avport,
+			      u32 ch, u32 fs, u32 word_bits, u32 format,
+			      u32 source)
 {
-	struct ps3av_pkt_audio_mode *audio;
 	int spdif_through, spdif_bitstream;
 	int i;
 
@@ -717,7 +716,6 @@ u8 *ps3av_cmd_set_audio_mode(u8 *p, u32 avport, u32 ch, u32 fs, u32 word_bits,
 	}
 	spdif_through = spdif_bitstream = 0;	/* XXX not supported */
 
-	audio = (struct ps3av_pkt_audio_mode *)p;
 	/* audio mode */
 	memset(audio, 0, sizeof(*audio));
 	ps3av_set_hdr(PS3AV_CID_AUDIO_MODE, sizeof(*audio), &audio->send_hdr);
@@ -817,8 +815,6 @@ u8 *ps3av_cmd_set_audio_mode(u8 *p, u32 avport, u32 ch, u32 fs, u32 word_bits,
 			audio->audio_cs_info[0] |= CS_BIT;
 		}
 	}
-
-	return p + sizeof(*audio);
 }
 
 int ps3av_cmd_audio_mode(struct ps3av_pkt_audio_mode *audio_mode)
@@ -963,12 +959,9 @@ int ps3av_cmd_av_hw_conf_dump(const struct ps3av_pkt_av_get_hw_conf *hw_conf)
 
 int ps3av_cmd_av_monitor_info_dump(const struct ps3av_pkt_av_get_monitor_info *monitor_info)
 {
-	const struct ps3av_info_monitor *info;
-	const struct ps3av_info_audio *audio;
+	const struct ps3av_info_monitor *info = &monitor_info->info;
+	const struct ps3av_info_audio *audio = info->audio;
 	int i;
-
-	info = (const struct ps3av_info_monitor *)(monitor_info->info);
-	audio = (const struct ps3av_info_audio *)(info + 1);
 
 	printk("Monitor Info: size%d\n", monitor_info->send_hdr.size);
 
@@ -1033,34 +1026,6 @@ int ps3av_cmd_av_monitor_info_dump(const struct ps3av_pkt_av_get_monitor_info *m
 		| PS3AV_CMD_AV_LAYOUT_96 \
 		| PS3AV_CMD_AV_LAYOUT_176 \
 		| PS3AV_CMD_AV_LAYOUT_192)
-
-static const int ps3av_audio_output[] = {
-	0,
-	PS3AV_AV_LAYOUT_0,	/* PS3AV_CMD_VIDEO_VID_480I */
-	PS3AV_AV_LAYOUT_0,
-	PS3AV_AV_LAYOUT_0,
-	PS3AV_AV_LAYOUT_0,
-	PS3AV_AV_LAYOUT_0,
-	PS3AV_AV_LAYOUT_0,
-	PS3AV_AV_LAYOUT_1,	/* PS3AV_CMD_VIDEO_VID_1080P_60HZ */
-	PS3AV_AV_LAYOUT_1,
-	PS3AV_AV_LAYOUT_1,
-	PS3AV_AV_LAYOUT_1,
-	PS3AV_AV_LAYOUT_1,
-	PS3AV_AV_LAYOUT_1,
-	0,			/* PS3AV_CMD_VIDEO_VID_WXGA */
-	0,
-	0
-};
-
-int ps3av_cmd_av_get_audio_output(int in)
-{
-	/* input video_vid */
-	if (in >= ARRAY_SIZE(ps3av_audio_output))
-		return 0;
-
-	return ps3av_audio_output[in];
-}
 
 /************************* vuart ***************************/
 

@@ -1339,8 +1339,8 @@ gelic_net_open_device(struct gelic_net_card *card)
 	unsigned long result;
 	int ret;
 
-	result = ps3_connect_event_irq(&card->dev->did,
-		card->dev->interrupt_id, &card->netdev->irq);
+	result = ps3_connect_event_irq(PS3_BINDING_CPU_ANY,
+		&card->dev->did, card->dev->interrupt_id, &card->netdev->irq);
 
 	if (result) {
 		printk("%s:%d: gelic_net_open_device failed (%ld)\n",

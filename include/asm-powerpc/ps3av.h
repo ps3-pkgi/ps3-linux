@@ -355,12 +355,61 @@ struct ps3av_pkt_av_get_hw_conf {
 };
 
 /* backend: get monitor info */
+struct ps3av_info_resolution {
+	u32 res_bits;
+	u32 native;
+};
+
+struct ps3av_info_cs {
+	u8 rgb;
+	u8 yuv444;
+	u8 yuv422;
+	u8 reserved;
+};
+
+struct ps3av_info_color {
+	u16 red_x;
+	u16 red_y;
+	u16 green_x;
+	u16 green_y;
+	u16 blue_x;
+	u16 blue_y;
+	u16 white_x;
+	u16 white_y;
+	u32 gamma;
+};
+
+struct ps3av_info_audio {
+	u8 type;
+	u8 max_num_of_ch;
+	u8 fs;
+	u8 sbit;
+};
+
+struct ps3av_info_monitor {
+	u8 avport;
+	u8 monitor_id[10];
+	u8 monitor_type;
+	u8 monitor_name[16];
+	struct ps3av_info_resolution res_60;
+	struct ps3av_info_resolution res_50;
+	struct ps3av_info_resolution res_other;
+	struct ps3av_info_resolution res_vesa;
+	struct ps3av_info_cs cs;
+	struct ps3av_info_color color;
+	u8 supported_ai;
+	u8 speaker_info;
+	u8 num_of_audio_block;
+	struct ps3av_info_audio audio[0];	/* 0 or more audio blocks */
+	u8 reserved[169];
+} __attribute__ ((packed));
+
 struct ps3av_pkt_av_get_monitor_info {
 	struct ps3av_send_hdr send_hdr;
 	u16 avport;		/* in: avport */
 	u16 reserved;
 	/* recv */
-	u8 info[256];		/* out: monitor info */
+	struct ps3av_info_monitor info;	/* out: monitor info */
 };
 
 /* backend: enable/disable event */
@@ -401,6 +450,26 @@ struct ps3av_pkt_av_video_disable_sig {
 };
 
 /* backend: audio param */
+struct ps3av_audio_info_frame {
+	struct pb1_bit {
+		u8 ct:4;
+		u8 rsv:1;
+		u8 cc:3;
+	} pb1;
+	struct pb2_bit {
+		u8 rsv:3;
+		u8 sf:3;
+		u8 ss:2;
+	} pb2;
+	u8 pb3;
+	u8 pb4;
+	struct pb5_bit {
+		u8 dm:1;
+		u8 lsv:4;
+		u8 rsv:3;
+	} pb5;
+};
+
 struct ps3av_pkt_av_audio_param {
 	struct ps3av_send_hdr send_hdr;
 	u16 avport;		/* in: avport */
@@ -413,28 +482,8 @@ struct ps3av_pkt_av_audio_param {
 	u8 inputctrl;		/* in: audio input ctrl */
 	u8 inputlen;		/* in: sample bit size */
 	u8 layout;		/* in: speaker layout param */
-	u8 info[5];		/* in: info */
+	struct ps3av_audio_info_frame info;	/* in: info */
 	u8 chstat[5];		/* in: ch stat */
-};
-
-struct ps3av_audio_info_frame {
-	struct pb1_bit {
-		u8 ct:4;
-		u8 rsv:1;
-		u8 cc:3;
-	} pb1;
-	struct pb2_bit {
-		u8 rsv:3;
-		u8 sf:8;
-		u8 ss:2;
-	} pb2;
-	u8 pb3;
-	u8 pb4;
-	struct pb5_bit {
-		u8 dm:1;
-		u8 lsv:4;
-		u8 rsv:3;
-	} pb5;
 };
 
 /* backend: audio_mute */
@@ -568,54 +617,6 @@ struct ps3av_pkt_audio_ctrl {
 	u32 audio_ctrl_data[4];	/* in: control data */
 };
 
-/* monitor information */
-struct ps3av_info_resolution {
-	u32 res_bits;
-	u32 native;
-};
-
-struct ps3av_info_cs {
-	u8 rgb;
-	u8 yuv444;
-	u8 yuv422;
-	u8 reserved;
-};
-
-struct ps3av_info_color {
-	u16 red_x;
-	u16 red_y;
-	u16 green_x;
-	u16 green_y;
-	u16 blue_x;
-	u16 blue_y;
-	u16 white_x;
-	u16 white_y;
-	u32 gamma;
-};
-
-struct ps3av_info_audio {
-	u8 type;
-	u8 max_num_of_ch;
-	u8 fs;
-	u8 sbit;
-};
-
-struct ps3av_info_monitor {
-	u8 avport;
-	u8 monitor_id[10];
-	u8 monitor_type;
-	u8 monitor_name[16];
-	struct ps3av_info_resolution res_60;
-	struct ps3av_info_resolution res_50;
-	struct ps3av_info_resolution res_other;
-	struct ps3av_info_resolution res_vesa;
-	struct ps3av_info_cs cs;
-	struct ps3av_info_color color;
-	u8 supported_ai;
-	u8 speaker_info;
-	u8 num_of_audio_block;
-} __attribute__ ((packed));
-
 /* avb:param */
 struct ps3av_pkt_avb_param {
 	struct ps3av_send_hdr send_hdr;
@@ -680,8 +681,10 @@ extern u8 *ps3av_cmd_set_video_mode(u8 *, u32, int, int, u32);
 extern int ps3av_cmd_video_format_black(u32, u32, u32);
 extern int ps3av_cmd_av_audio_mute(int, u32 *, u32);
 extern u8 *ps3av_cmd_set_av_audio_param(u8 *, u32,
-					struct ps3av_pkt_audio_mode *, u32);
-extern u8 *ps3av_cmd_set_audio_mode(u8 *, u32, u32, u32, u32, u32, u32);
+					const struct ps3av_pkt_audio_mode *,
+					u32);
+extern void ps3av_cmd_set_audio_mode(struct ps3av_pkt_audio_mode *, u32, u32,
+				     u32, u32, u32, u32);
 extern int ps3av_cmd_audio_mode(struct ps3av_pkt_audio_mode *);
 extern int ps3av_cmd_audio_mute(int, u32 *, u32);
 extern int ps3av_cmd_audio_active(int, u32);

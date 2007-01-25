@@ -237,12 +237,6 @@ static void ps3_machine_kexec(struct kimage *image)
 	DBG(" <- %s:%d\n", __func__, __LINE__);
 }
 #endif
-// FIXME GEERT ps3fb_cleanup() should be called from ps3_prepare_shutdown()
-#ifdef CONFIG_FB_PS3
-extern void ps3fb_cleanup(void);
-#else
-extern void ps3fb_cleanup(void) {}
-#endif
 
 define_machine(ps3) {
 	.name				= "PS3",

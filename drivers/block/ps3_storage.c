@@ -1520,7 +1520,8 @@ static int is_region_accessible(struct ps3_stor_lv1_dev_info * lv1_dev_info,
 	if (error)
 		return 0;
 
-	error = ps3_connect_event_irq(&lv1_dev_info->repo.did,
+	error = ps3_connect_event_irq(PS3_BINDING_CPU_ANY,
+				      &lv1_dev_info->repo.did,
 				      lv1_dev_info->interrupt_id,
 				      &irq_plug_id);
 	if (error) {
@@ -2141,7 +2142,8 @@ static int ps3_stor_slave_alloc(struct scsi_device * scsi_dev)
 		goto out;
 	}
 
-	error = ps3_connect_event_irq(&lv1_dev_info->repo.did /* host_info->dev.did */,
+	error = ps3_connect_event_irq(PS3_BINDING_CPU_ANY,
+			              &lv1_dev_info->repo.did /* host_info->dev.did */,
 				      lv1_dev_info->interrupt_id,
 				      &lv1_dev_info->irq_plug_id);
 	if (error) {

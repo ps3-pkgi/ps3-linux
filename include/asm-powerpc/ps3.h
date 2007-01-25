@@ -21,7 +21,6 @@
 #if !defined(_ASM_POWERPC_PS3_H)
 #define _ASM_POWERPC_PS3_H
 
-#include <linux/compiler.h> /* for __deprecated */
 #include <linux/init.h>
 #include <linux/types.h>
 #include <linux/device.h>
@@ -35,6 +34,17 @@ struct ps3_firmware_version {
 };
 
 int ps3_get_firmware_version(struct ps3_firmware_version *v);
+
+/* 'Other OS' area */
+
+enum ps3_param_av_multi_out {
+	PS3_PARAM_AV_MULTI_OUT_NTSC = 0,
+	PS3_PARAM_AV_MULTI_OUT_PAL_RGB = 1,
+	PS3_PARAM_AV_MULTI_OUT_PAL_YCBCR = 2,
+	PS3_PARAM_AV_MULTI_OUT_SECAM = 3,
+};
+
+enum ps3_param_av_multi_out ps3_os_area_get_av_multi_out(void);
 
 /**
  * struct ps3_device_id - HV bus device identifier from the system repository
@@ -149,22 +159,32 @@ unsigned long ps3_mm_phys_to_lpar(unsigned long phys_addr);
 
 /* inrerrupt routines */
 
-int ps3_alloc_io_irq(unsigned int interrupt_id, unsigned int *virq);
+enum ps3_cpu_binding {
+	PS3_BINDING_CPU_0 = 0,
+	PS3_BINDING_CPU_1 = 1,
+	PS3_BINDING_CPU_ANY = 3,
+};
+
+int ps3_alloc_io_irq(enum ps3_cpu_binding cpu, unsigned int interrupt_id,
+	unsigned int *virq);
 int ps3_free_io_irq(unsigned int virq);
-int ps3_alloc_event_irq(unsigned int *virq);
+int ps3_alloc_event_irq(enum ps3_cpu_binding cpu, unsigned int *virq);
 int ps3_free_event_irq(unsigned int virq);
 int ps3_send_event_locally(unsigned int virq);
-int ps3_connect_event_irq(const struct ps3_device_id *did,
-	unsigned int interrupt_id, unsigned int *virq);
+int ps3_connect_event_irq(enum ps3_cpu_binding cpu,
+	const struct ps3_device_id *did, unsigned int interrupt_id,
+	unsigned int *virq);
 int ps3_disconnect_event_irq(const struct ps3_device_id *did,
 	unsigned int interrupt_id, unsigned int virq);
-int ps3_alloc_vuart_irq(void* virt_addr_bmp, unsigned int *virq);
-int ps3_free_vuart_irq(unsigned int virq);
-int ps3_alloc_spe_irq(unsigned long spe_id, unsigned int class,
+int ps3_alloc_vuart_irq(enum ps3_cpu_binding cpu, void* virt_addr_bmp,
 	unsigned int *virq);
-#define ps3_free_spe_irq(virq)	ps3_free_irq(virq)
-int ps3_alloc_irq (unsigned long outlet, unsigned int *virq);
-int ps3_free_irq (unsigned int virq);
+int ps3_free_vuart_irq(unsigned int virq);
+int ps3_alloc_spe_irq(enum ps3_cpu_binding cpu, unsigned long spe_id,
+	unsigned int class, unsigned int *virq);
+int ps3_free_spe_irq(unsigned int virq);
+int ps3_alloc_irq(enum ps3_cpu_binding cpu, unsigned long outlet,
+	unsigned int *virq);
+int ps3_free_irq(unsigned int virq);
 unsigned long __deprecated ps3_legacy_virq_to_outlet(unsigned int virq);
 
 /* lv1 result codes */
@@ -389,15 +409,6 @@ int ps3_repository_read_be_tb_freq(unsigned int be_index, u64 *tb_freq);
 int ps3_repository_read_boot_dat_addr(u64 *lpar_addr);
 int ps3_repository_read_boot_dat_size(unsigned int *size);
 int ps3_repository_read_boot_dat_info(u64 *lpar_addr, unsigned int *size);
-
-enum {
-	PARAM_AV_MULTI_OUT_NTSC = 0,
-	PARAM_AV_MULTI_OUT_PAL_RGB = 1,
-	PARAM_AV_MULTI_OUT_PAL_YCBCR = 2,
-	PARAM_AV_MULTI_OUT_SECAM = 3,
-};
-
-extern u8 ps3_os_area_get_av_multi_out(void);
 
 /* repository spu info */
 

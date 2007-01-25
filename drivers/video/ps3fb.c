@@ -520,6 +520,12 @@ static int ps3fb_check_var(struct fb_var_screeninfo *var, struct fb_info *info)
 	var->blue.msb_right = 0;
 	var->transp.msb_right = 0;
 
+	/* Rotation is not supported */
+	if (var->rotate) {
+		DPRINTK("Rotation is not supported\n");
+		return -EINVAL;
+	}
+
 	/* Memory limit */
 	i = ps3fb_get_res_table(var->xres, var->yres);
 	if (ps3fb_res[i].xres*ps3fb_res[i].yres*BPP > ps3fb.videomemorysize) {
@@ -887,7 +893,8 @@ static int ps3fb_vsync_settings(struct gpu_driver_info *dinfo, void *dev)
 	}
 
 	ps3fb.dev = dev;
-	error = ps3_alloc_irq(dinfo->irq.irq_outlet, &ps3fb.irq_no);
+	error = ps3_alloc_irq(PS3_BINDING_CPU_ANY, dinfo->irq.irq_outlet,
+		&ps3fb.irq_no);
 	if (error) {
 		printk(KERN_ERR "%s: ps3_alloc_irq failed %d\n", __FUNCTION__,
 		       error);

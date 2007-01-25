@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.20-rc5
-# Mon Jan 22 15:33:09 2007
+# Wed Jan 24 18:18:36 2007
 #
 CONFIG_PPC64=y
 CONFIG_64BIT=y
@@ -678,7 +678,6 @@ CONFIG_USB_DEBUG=y
 # CONFIG_USB_DEVICEFS is not set
 # CONFIG_USB_BANDWIDTH is not set
 # CONFIG_USB_DYNAMIC_MINORS is not set
-# CONFIG_USB_MULTITHREAD_PROBE is not set
 # CONFIG_USB_OTG is not set
 
 #

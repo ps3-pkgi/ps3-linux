@@ -252,10 +252,11 @@ u64 ps3_os_area_rtc_diff(void)
 }
 
 /**
- * ps3_os_area_get_av_multi_out - Return the default video mode
+ * ps3_os_area_get_av_multi_out - Returns the default video mode.
  */
 
-u8 ps3_os_area_get_av_multi_out(void)
+enum ps3_param_av_multi_out ps3_os_area_get_av_multi_out(void)
 {
     return saved_params.av_multi_out;
 }
+EXPORT_SYMBOL_GPL(ps3_os_area_get_av_multi_out);
