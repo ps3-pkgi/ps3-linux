@@ -26,14 +26,17 @@
 #include <linux/device.h>
 #include <scsi/scsi.h>
 
-struct ps3_firmware_version {
+union ps3_firmware_version {
 	u64 raw;
-	unsigned int major;
-	unsigned int minor;
-	unsigned int rev;
+	struct {
+		u16 pad;
+		u16 major;
+		u16 minor;
+		u16 rev;
+	};
 };
 
-int ps3_get_firmware_version(struct ps3_firmware_version *v);
+int ps3_get_firmware_version(union ps3_firmware_version *v);
 
 /* 'Other OS' area */
 
@@ -160,9 +163,9 @@ unsigned long ps3_mm_phys_to_lpar(unsigned long phys_addr);
 /* inrerrupt routines */
 
 enum ps3_cpu_binding {
+	PS3_BINDING_CPU_ANY = -1,
 	PS3_BINDING_CPU_0 = 0,
 	PS3_BINDING_CPU_1 = 1,
-	PS3_BINDING_CPU_ANY = 3,
 };
 
 int ps3_alloc_io_irq(enum ps3_cpu_binding cpu, unsigned int interrupt_id,

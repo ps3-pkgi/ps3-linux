@@ -43,30 +43,18 @@
 #define DBG(fmt...) do{if(0)printk(fmt);}while(0)
 #endif
 
-int ps3_get_firmware_version(struct ps3_firmware_version *v)
+int ps3_get_firmware_version(union ps3_firmware_version *v)
 {
 	int result = lv1_get_version_info(&v->raw);
 
-	if(result) {
-		memset(v, 0, sizeof(struct ps3_firmware_version));
+	if (result) {
+		v->raw = 0;
 		return -1;
 	}
-
-	v->rev = v->raw & 0xffff;
-	v->minor = (v->raw >> 16) & 0xffff;
-	v->major = (v->raw >> 32) & 0xffff;
 
 	return result;
 }
 EXPORT_SYMBOL_GPL(ps3_get_firmware_version);
-
-static void ps3_show_cpuinfo(struct seq_file *m)
-{
-	struct ps3_firmware_version v;
-
-	ps3_get_firmware_version(&v);
-	seq_printf(m, "firmware\t: %u.%u.%u\n", v.major, v.minor, v.rev);
-}
 
 static void ps3_power_save(void)
 {
@@ -148,7 +136,7 @@ EXPORT_SYMBOL_GPL(ps3_stor_bounce_buffer);
 
 static void __init ps3_setup_arch(void)
 {
-	struct ps3_firmware_version v;
+	union ps3_firmware_version v;
 
 	DBG(" -> %s:%d\n", __func__, __LINE__);
 
@@ -167,10 +155,10 @@ static void __init ps3_setup_arch(void)
 	conswitchp = &dummy_con;
 #endif
 
-	ppc_md.power_save = ps3_power_save;
-
 	prealloc_ps3fb_videomemory();
 	prealloc_ps3_stor_bounce_buffer();
+
+	ppc_md.power_save = ps3_power_save;
 
 	DBG(" <- %s:%d\n", __func__, __LINE__);
 }
@@ -192,7 +180,6 @@ static int __init ps3_probe(void)
 		return 0;
 
 	powerpc_firmware_features |= FW_FEATURE_PS3_POSSIBLE;
-	cur_cpu_spec->cpu_features |= CPU_FTR_SMT;
 
 	ps3_os_area_init();
 	ps3_mm_init();
@@ -240,7 +227,6 @@ define_machine(ps3) {
 	.name				= "PS3",
 	.probe				= ps3_probe,
 	.setup_arch			= ps3_setup_arch,
-	.show_cpuinfo			= ps3_show_cpuinfo,
 	.init_IRQ			= ps3_init_IRQ,
 	.panic				= ps3_panic,
 	.get_boot_time			= ps3_get_boot_time,
