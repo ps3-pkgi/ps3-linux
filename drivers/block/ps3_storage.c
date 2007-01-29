@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2006 Sony Computer Entertainment Inc.
+ * Copyright (C) 2006-2007 Sony Corporation
  * storage support for PS3
  *
  * based on scsi_debug.c
