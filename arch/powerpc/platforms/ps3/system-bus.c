@@ -27,9 +27,10 @@
 #include <linux/err.h>
 
 #include <asm/udbg.h>
-#include <asm/ps3.h>
 #include <asm/lv1call.h>
 #include <asm/firmware.h>
+
+#include "platform.h"
 
 #define dump_mmio_region(_a) _dump_mmio_region(_a, __func__, __LINE__)
 static void _dump_mmio_region(const struct ps3_mmio_region* r,

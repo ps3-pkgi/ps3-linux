@@ -22,6 +22,7 @@
 #define _PS3_STOR_H
 
 #include <linux/types.h>
+#include <../arch/powerpc/platforms/ps3/platform.h>
 
 #define LV1_STORAGE_SEND_ATAPI_COMMAND	(1)
 #define LV1_STORAGE_ATA_HDDOUT		(0x23)

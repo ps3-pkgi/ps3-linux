@@ -24,8 +24,6 @@
 #include <linux/module.h>
 #include <asm/ps3.h>
 
-#include "vuart.h"
-
 MODULE_AUTHOR("Sony Corporation");
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("PS3 Platform system manager");

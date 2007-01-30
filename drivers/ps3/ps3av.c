@@ -30,8 +30,6 @@
 #include <asm/ps3av.h>
 #include <asm/ps3.h>
 
-#include "vuart.h"
-
 #ifdef PS3AV_DEBUG
 #define DPRINTK(fmt, args...) \
 	do { printk("ps3av " fmt, ## args); } while (0)

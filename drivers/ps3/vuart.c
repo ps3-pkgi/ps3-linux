@@ -26,8 +26,6 @@
 #include <asm/lv1call.h>
 #include <asm/bitops.h>
 
-#include "vuart.h"
-
 MODULE_AUTHOR("Sony Corporation");
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("ps3 vuart");

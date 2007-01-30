@@ -23,9 +23,7 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 
-#include <asm/ps3.h>
-
-#include "vuart.h"
+#include "platform.h"
 
 static int __devinit
 ps3_register_gelic (void)
