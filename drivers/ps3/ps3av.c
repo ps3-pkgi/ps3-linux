@@ -28,6 +28,8 @@
 #include <asm/ps3av.h>
 #include <asm/ps3.h>
 
+#include "vuart.h"
+
 #define BUFSIZE          4096	/* vuart buf size */
 #define PS3AV_BUF_SIZE   512	/* max packet size */
 

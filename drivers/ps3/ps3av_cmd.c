@@ -25,6 +25,7 @@
 #include <asm/ps3fb.h>
 #include <asm/ps3.h>
 
+#include "vuart.h"
 
 static const struct video_fmt {
 	u32 format;

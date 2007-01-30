@@ -374,7 +374,7 @@ struct ps3_vuart_port_device {
 
 	/* private driver variables */
 	unsigned int port_number;
-	unsigned long interrupt_mask;
+	u64 interrupt_mask;
 	struct {
 		spinlock_t lock;
 		struct list_head head;
@@ -387,45 +387,7 @@ struct ps3_vuart_port_device {
 	struct ps3_vuart_stats stats;
 };
 
-/**
- * struct ps3_vuart_port_driver - a driver for a device on a vuart port
- */
-
-struct ps3_vuart_port_driver {
-	enum ps3_match_id match_id;
-	struct device_driver core;
-	int (*probe)(struct ps3_vuart_port_device *);
-	int (*remove)(struct ps3_vuart_port_device *);
-	void (*shutdown)(struct ps3_vuart_port_device *);
-	int (*tx_event)(struct ps3_vuart_port_device *dev);
-	int (*rx_event)(struct ps3_vuart_port_device *dev);
-	int (*disconnect_event)(struct ps3_vuart_port_device *dev);
-	/* int (*suspend)(struct ps3_vuart_port_device *, pm_message_t); */
-	/* int (*resume)(struct ps3_vuart_port_device *); */
-};
-
 int ps3_vuart_port_device_register(struct ps3_vuart_port_device *dev);
-int ps3_vuart_port_driver_register(struct ps3_vuart_port_driver *drv);
-void ps3_vuart_port_driver_unregister(struct ps3_vuart_port_driver *drv);
-int ps3_vuart_write(struct ps3_vuart_port_device *dev,
-	const void* buf, unsigned int bytes);
-int ps3_vuart_read(struct ps3_vuart_port_device *dev, void* buf,
-	unsigned int bytes);
-static inline struct ps3_vuart_port_driver *to_ps3_vuart_port_driver(
-	struct device_driver *_drv)
-{
-	return container_of(_drv, struct ps3_vuart_port_driver, core);
-}
-static inline struct ps3_vuart_port_device *to_ps3_vuart_port_device(
-	struct device *_dev)
-{
-	return container_of(_dev, struct ps3_vuart_port_device, core);
-}
-
-int ps3_vuart_write(struct ps3_vuart_port_device *dev, const void* buf,
-	unsigned int bytes);
-int ps3_vuart_read(struct ps3_vuart_port_device *dev, void* buf,
-	unsigned int bytes);
 
 struct ps3_prealloc {
     const char *name;
