@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2006 Sony Computer Entertainment Inc.
- * Copyright (C) 2006-2007 Sony Corporation
+ * Copyright 2006, 2007 Sony Corporation
  *
  * AV backend support for PS3
  *
@@ -22,20 +22,9 @@
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <asm/ps3av.h>
+#include <asm/ps3fb.h>
 #include <asm/ps3.h>
 
-#ifdef PS3AV_DEBUG
-#define DPRINTK(fmt, args...) \
-	do { printk("ps3av " fmt, ## args); } while (0)
-#else
-#define DPRINTK(fmt, args...) do { } while (0)
-#endif
-
-#ifdef CONFIG_FB_PS3
-extern int ps3fb_flip_ctl(int);
-#else
-#define ps3fb_flip_ctl(x)
-#endif
 
 static const struct video_fmt {
 	u32 format;
@@ -45,117 +34,112 @@ static const struct video_fmt {
 	{ PS3AV_CMD_VIDEO_FORMAT_ARGB_8BIT, PS3AV_CMD_VIDEO_ORDER_BGR },
 };
 
+static const struct {
+	int cs;
+	u32 av;
+	u32 bl;
+} ps3av_cs_video2av_table[] = {
+	{
+		.cs = PS3AV_CMD_VIDEO_CS_RGB_8,
+		.av = PS3AV_CMD_AV_CS_RGB_8,
+		.bl = PS3AV_CMD_AV_CS_8
+	}, {
+		.cs = PS3AV_CMD_VIDEO_CS_RGB_10,
+		.av = PS3AV_CMD_AV_CS_RGB_8,
+		.bl = PS3AV_CMD_AV_CS_8
+	}, {
+		.cs = PS3AV_CMD_VIDEO_CS_RGB_12,
+		.av = PS3AV_CMD_AV_CS_RGB_8,
+		.bl = PS3AV_CMD_AV_CS_8
+	}, {
+		.cs = PS3AV_CMD_VIDEO_CS_YUV444_8,
+		.av = PS3AV_CMD_AV_CS_YUV444_8,
+		.bl = PS3AV_CMD_AV_CS_8
+	}, {
+		.cs = PS3AV_CMD_VIDEO_CS_YUV444_10,
+		.av = PS3AV_CMD_AV_CS_YUV444_8,
+		.bl = PS3AV_CMD_AV_CS_10
+	}, {
+		.cs = PS3AV_CMD_VIDEO_CS_YUV444_12,
+		.av = PS3AV_CMD_AV_CS_YUV444_8,
+		.bl = PS3AV_CMD_AV_CS_10
+	}, {
+		.cs = PS3AV_CMD_VIDEO_CS_YUV422_8,
+		.av = PS3AV_CMD_AV_CS_YUV422_8,
+		.bl = PS3AV_CMD_AV_CS_10
+	}, {
+		.cs = PS3AV_CMD_VIDEO_CS_YUV422_10,
+		.av = PS3AV_CMD_AV_CS_YUV422_8,
+		.bl = PS3AV_CMD_AV_CS_10
+	}, {
+		.cs = PS3AV_CMD_VIDEO_CS_YUV422_12,
+		.av = PS3AV_CMD_AV_CS_YUV422_8,
+		.bl = PS3AV_CMD_AV_CS_12
+	}, {
+		.cs = PS3AV_CMD_VIDEO_CS_XVYCC_8,
+		.av = PS3AV_CMD_AV_CS_XVYCC_8,
+		.bl = PS3AV_CMD_AV_CS_12
+	}, {
+		.cs = PS3AV_CMD_VIDEO_CS_XVYCC_10,
+		.av = PS3AV_CMD_AV_CS_XVYCC_8,
+		.bl = PS3AV_CMD_AV_CS_12
+	}, {
+		.cs = PS3AV_CMD_VIDEO_CS_XVYCC_12,
+		.av = PS3AV_CMD_AV_CS_XVYCC_8,
+		.bl = PS3AV_CMD_AV_CS_12
+	}
+};
+
 static u32 ps3av_cs_video2av(int cs)
 {
-	u32 res = 0;
+	unsigned int i;
 
-	switch (cs) {
-	case PS3AV_CMD_VIDEO_CS_RGB_8:
-	case PS3AV_CMD_VIDEO_CS_RGB_10:
-	case PS3AV_CMD_VIDEO_CS_RGB_12:
-		res = PS3AV_CMD_AV_CS_RGB_8;
-		break;
-	case PS3AV_CMD_VIDEO_CS_YUV444_8:
-	case PS3AV_CMD_VIDEO_CS_YUV444_10:
-	case PS3AV_CMD_VIDEO_CS_YUV444_12:
-		res = PS3AV_CMD_AV_CS_YUV444_8;
-		break;
-	case PS3AV_CMD_VIDEO_CS_YUV422_8:
-	case PS3AV_CMD_VIDEO_CS_YUV422_10:
-	case PS3AV_CMD_VIDEO_CS_YUV422_12:
-		res = PS3AV_CMD_AV_CS_YUV422_8;
-		break;
-	case PS3AV_CMD_VIDEO_CS_XVYCC_8:
-	case PS3AV_CMD_VIDEO_CS_XVYCC_10:
-	case PS3AV_CMD_VIDEO_CS_XVYCC_12:
-		res = PS3AV_CMD_AV_CS_XVYCC_8;
-		break;
-	default:
-		res = PS3AV_CMD_AV_CS_RGB_8;
-		break;
-	}
-	return res;
+	for (i = 0; i < ARRAY_SIZE(ps3av_cs_video2av_table); i++)
+		if (ps3av_cs_video2av_table[i].cs == cs)
+			return ps3av_cs_video2av_table[i].av;
+
+	return PS3AV_CMD_AV_CS_RGB_8;
 }
 
 static u32 ps3av_cs_video2av_bitlen(int cs)
 {
-	u32 res = 0;
+	unsigned int i;
 
-	switch (cs) {
-	case PS3AV_CMD_VIDEO_CS_RGB_8:
-	case PS3AV_CMD_VIDEO_CS_YUV444_8:
-	case PS3AV_CMD_VIDEO_CS_YUV422_8:
-	case PS3AV_CMD_VIDEO_CS_XVYCC_8:
-		res = PS3AV_CMD_AV_CS_8;
-		break;
-	case PS3AV_CMD_VIDEO_CS_RGB_10:
-	case PS3AV_CMD_VIDEO_CS_YUV444_10:
-	case PS3AV_CMD_VIDEO_CS_YUV422_10:
-	case PS3AV_CMD_VIDEO_CS_XVYCC_10:
-		res = PS3AV_CMD_AV_CS_10;
-		break;
-	case PS3AV_CMD_VIDEO_CS_RGB_12:
-	case PS3AV_CMD_VIDEO_CS_YUV444_12:
-	case PS3AV_CMD_VIDEO_CS_YUV422_12:
-	case PS3AV_CMD_VIDEO_CS_XVYCC_12:
-		res = PS3AV_CMD_AV_CS_12;
-		break;
-	default:
-		res = PS3AV_CMD_AV_CS_8;
-		break;
-	}
-	return res;
+	for (i = 0; i < ARRAY_SIZE(ps3av_cs_video2av_table); i++)
+		if (ps3av_cs_video2av_table[i].cs == cs)
+			return ps3av_cs_video2av_table[i].bl;
+
+	return PS3AV_CMD_AV_CS_8;
 }
+
+static const struct {
+	int vid;
+	u32 av;
+} ps3av_vid_video2av_table[] = {
+	{ PS3AV_CMD_VIDEO_VID_480I, PS3AV_CMD_AV_VID_480I },
+	{ PS3AV_CMD_VIDEO_VID_480P, PS3AV_CMD_AV_VID_480P },
+	{ PS3AV_CMD_VIDEO_VID_576I, PS3AV_CMD_AV_VID_576I },
+	{ PS3AV_CMD_VIDEO_VID_576P, PS3AV_CMD_AV_VID_576P },
+	{ PS3AV_CMD_VIDEO_VID_1080I_60HZ, PS3AV_CMD_AV_VID_1080I_60HZ },
+	{ PS3AV_CMD_VIDEO_VID_720P_60HZ, PS3AV_CMD_AV_VID_720P_60HZ },
+	{ PS3AV_CMD_VIDEO_VID_1080P_60HZ, PS3AV_CMD_AV_VID_1080P_60HZ },
+	{ PS3AV_CMD_VIDEO_VID_1080I_50HZ, PS3AV_CMD_AV_VID_1080I_50HZ },
+	{ PS3AV_CMD_VIDEO_VID_720P_50HZ, PS3AV_CMD_AV_VID_720P_50HZ },
+	{ PS3AV_CMD_VIDEO_VID_1080P_50HZ, PS3AV_CMD_AV_VID_1080P_50HZ },
+	{ PS3AV_CMD_VIDEO_VID_WXGA, PS3AV_CMD_AV_VID_WXGA },
+	{ PS3AV_CMD_VIDEO_VID_SXGA, PS3AV_CMD_AV_VID_SXGA },
+	{ PS3AV_CMD_VIDEO_VID_WUXGA, PS3AV_CMD_AV_VID_WUXGA }
+};
 
 static u32 ps3av_vid_video2av(int vid)
 {
-	u32 res = 0;
+	unsigned int i;
 
-	switch (vid) {
-	case PS3AV_CMD_VIDEO_VID_480I:
-		res = PS3AV_CMD_AV_VID_480I;
-		break;
-	case PS3AV_CMD_VIDEO_VID_480P:
-		res = PS3AV_CMD_AV_VID_480P;
-		break;
-	case PS3AV_CMD_VIDEO_VID_576I:
-		res = PS3AV_CMD_AV_VID_576I;
-		break;
-	case PS3AV_CMD_VIDEO_VID_576P:
-		res = PS3AV_CMD_AV_VID_576P;
-		break;
-	case PS3AV_CMD_VIDEO_VID_1080I_60HZ:
-		res = PS3AV_CMD_AV_VID_1080I_60HZ;
-		break;
-	case PS3AV_CMD_VIDEO_VID_720P_60HZ:
-		res = PS3AV_CMD_AV_VID_720P_60HZ;
-		break;
-	case PS3AV_CMD_VIDEO_VID_1080P_60HZ:
-		res = PS3AV_CMD_AV_VID_1080P_60HZ;
-		break;
-	case PS3AV_CMD_VIDEO_VID_1080I_50HZ:
-		res = PS3AV_CMD_AV_VID_1080I_50HZ;
-		break;
-	case PS3AV_CMD_VIDEO_VID_720P_50HZ:
-		res = PS3AV_CMD_AV_VID_720P_50HZ;
-		break;
-	case PS3AV_CMD_VIDEO_VID_1080P_50HZ:
-		res = PS3AV_CMD_AV_VID_1080P_50HZ;
-		break;
-	case PS3AV_CMD_VIDEO_VID_WXGA:
-		res = PS3AV_CMD_AV_VID_WXGA;
-		break;
-	case PS3AV_CMD_VIDEO_VID_SXGA:
-		res = PS3AV_CMD_AV_VID_SXGA;
-		break;
-	case PS3AV_CMD_VIDEO_VID_WUXGA:
-		res = PS3AV_CMD_AV_VID_WUXGA;
-		break;
-	default:
-		res = PS3AV_CMD_AV_VID_480P;
-		break;
-	}
-	return res;
+	for (i = 0; i < ARRAY_SIZE(ps3av_vid_video2av_table); i++)
+		if (ps3av_vid_video2av_table[i].vid == vid)
+			return ps3av_vid_video2av_table[i].av;
+
+	return PS3AV_CMD_AV_VID_480P;
 }
 
 int ps3av_cmd_init(void)
@@ -234,7 +218,7 @@ int ps3av_cmd_av_video_mute(int num_of_port, u32 *port, u32 mute)
 	struct ps3av_pkt_av_video_mute av_video_mute;
 
 	if (num_of_port > PS3AV_MUTE_PORT_MAX)
-		return -1;
+		return -EINVAL;
 
 	memset(&av_video_mute, 0, sizeof(av_video_mute));
 	for (i = 0; i < num_of_port; i++) {
@@ -342,7 +326,7 @@ int ps3av_cmd_av_hdmi_mode(u8 mode)
 	return res;
 }
 
-u8 *ps3av_cmd_set_av_video_cs(u8 *p, u32 avport, int video_vid, int cs_out,
+u32 ps3av_cmd_set_av_video_cs(void *p, u32 avport, int video_vid, int cs_out,
 			      int aspect, u32 id)
 {
 	struct ps3av_pkt_av_video_cs *av_video_cs;
@@ -374,10 +358,10 @@ u8 *ps3av_cmd_set_av_video_cs(u8 *p, u32 avport, int video_vid, int cs_out,
 		av_video_cs->dither = PS3AV_CMD_AV_DITHER_OFF;
 	}
 
-	return p + sizeof(*av_video_cs);
+	return sizeof(*av_video_cs);
 }
 
-u8 *ps3av_cmd_set_video_mode(u8 *p, u32 head, int video_vid, int video_fmt,
+u32 ps3av_cmd_set_video_mode(void *p, u32 head, int video_vid, int video_fmt,
 			     u32 id)
 {
 	struct ps3av_pkt_video_mode *video_mode;
@@ -390,7 +374,7 @@ u8 *ps3av_cmd_set_video_mode(u8 *p, u32 head, int video_vid, int video_fmt,
 		video_fmt = PS3AV_CMD_VIDEO_FMT_X8R8G8B8;
 
 	if (ps3av_video_mode2res(id, &x, &y))
-		return p;
+		return 0;
 
 	/* video mode */
 	memset(video_mode, 0, sizeof(*video_mode));
@@ -409,11 +393,11 @@ u8 *ps3av_cmd_set_video_mode(u8 *p, u32 head, int video_vid, int video_fmt,
 	video_mode->video_format = ps3av_video_fmt_table[video_fmt].format;
 	video_mode->video_order = ps3av_video_fmt_table[video_fmt].order;
 
-	DPRINTK("video_mode:vid:%x width:%d height:%d pitch:%d out_format:%d format:%x order:%x\n",
-		video_vid, video_mode->width, video_mode->height,
+	pr_debug("%s: video_mode:vid:%x width:%d height:%d pitch:%d out_format:%d format:%x order:%x\n",
+		__FUNCTION__, video_vid, video_mode->width, video_mode->height,
 		video_mode->pitch, video_mode->video_out_format,
 		video_mode->video_format, video_mode->video_order);
-	return p + sizeof(*video_mode);
+	return sizeof(*video_mode);
 }
 
 int ps3av_cmd_video_format_black(u32 head, u32 video_fmt, u32 mute)
@@ -449,7 +433,7 @@ int ps3av_cmd_av_audio_mute(int num_of_port, u32 *port, u32 mute)
 	struct ps3av_pkt_av_audio_mute av_audio_mute;
 
 	if (num_of_port > PS3AV_MUTE_PORT_MAX)
-		return -1;
+		return -EINVAL;
 
 	/* audio mute */
 	memset(&av_audio_mute, 0, sizeof(av_audio_mute));
@@ -472,45 +456,40 @@ int ps3av_cmd_av_audio_mute(int num_of_port, u32 *port, u32 mute)
 	return res;
 }
 
+static const struct {
+	u32 fs;
+	u8 mclk;
+} ps3av_cnv_mclk_table[] = {
+	{ PS3AV_CMD_AUDIO_FS_44K, PS3AV_CMD_AV_MCLK_512 },
+	{ PS3AV_CMD_AUDIO_FS_48K, PS3AV_CMD_AV_MCLK_512 },
+	{ PS3AV_CMD_AUDIO_FS_88K, PS3AV_CMD_AV_MCLK_256 },
+	{ PS3AV_CMD_AUDIO_FS_96K, PS3AV_CMD_AV_MCLK_256 },
+	{ PS3AV_CMD_AUDIO_FS_176K, PS3AV_CMD_AV_MCLK_128 },
+	{ PS3AV_CMD_AUDIO_FS_192K, PS3AV_CMD_AV_MCLK_128 }
+};
+
 static u8 ps3av_cnv_mclk(u32 fs)
 {
-	u8 mclk;
+	unsigned int i;
 
-	switch (fs) {
-	case PS3AV_CMD_AUDIO_FS_44K:
-		mclk = PS3AV_CMD_AV_MCLK_512;
-		break;
-	case PS3AV_CMD_AUDIO_FS_48K:
-		mclk = PS3AV_CMD_AV_MCLK_512;
-		break;
-	case PS3AV_CMD_AUDIO_FS_88K:
-		mclk = PS3AV_CMD_AV_MCLK_256;
-		break;
-	case PS3AV_CMD_AUDIO_FS_96K:
-		mclk = PS3AV_CMD_AV_MCLK_256;
-		break;
-	case PS3AV_CMD_AUDIO_FS_176K:
-		mclk = PS3AV_CMD_AV_MCLK_128;
-		break;
-	case PS3AV_CMD_AUDIO_FS_192K:
-		mclk = PS3AV_CMD_AV_MCLK_128;
-		break;
-	default:
-		printk(KERN_ERR "%s failed, fs:%x\n", __FUNCTION__, fs);
-		mclk = 0;
-		break;
-	}
-	return mclk;
+	for (i = 0; i < ARRAY_SIZE(ps3av_cnv_mclk_table); i++)
+		if (ps3av_cnv_mclk_table[i].fs == fs)
+			return ps3av_cnv_mclk_table[i].mclk;
+
+	printk(KERN_ERR "%s failed, fs:%x\n", __FUNCTION__, fs);
+	return 0;
 }
 
+#define BASE	PS3AV_CMD_AUDIO_FS_44K
+
 static const u32 ps3av_ns_table[][5] = {
-	/*   D1,    D2,    D3,    D4,    D5 */
-	{  6272,  6272, 17836, 17836,  8918 },	/*  44K */
-	{  6144,  6144, 11648, 11648,  5824 },	/*  48K */
-	{ 12544, 12544, 35672, 35672, 17836 },	/*  88K */
-	{ 12288, 12288, 23296, 23296, 11648 },	/*  96K */
-	{ 25088, 25088, 71344, 71344, 35672 },	/* 176K */
-	{ 24576, 24576, 46592, 46592, 23296 },	/* 192K */
+					/*   D1,    D2,    D3,    D4,    D5 */
+	[PS3AV_CMD_AUDIO_FS_44K-BASE]	{  6272,  6272, 17836, 17836,  8918 },
+	[PS3AV_CMD_AUDIO_FS_48K-BASE]	{  6144,  6144, 11648, 11648,  5824 },
+	[PS3AV_CMD_AUDIO_FS_88K-BASE]	{ 12544, 12544, 35672, 35672, 17836 },
+	[PS3AV_CMD_AUDIO_FS_96K-BASE]	{ 12288, 12288, 23296, 23296, 11648 },
+	[PS3AV_CMD_AUDIO_FS_176K-BASE]	{ 25088, 25088, 71344, 71344, 35672 },
+	[PS3AV_CMD_AUDIO_FS_192K-BASE]	{ 24576, 24576, 46592, 46592, 23296 }
 };
 
 static void ps3av_cnv_ns(u8 *ns, u32 fs, u32 video_vid)
@@ -551,33 +530,17 @@ static void ps3av_cnv_ns(u8 *ns, u32 fs, u32 video_vid)
 		break;
 	}
 
-	switch (fs) {
-	case PS3AV_CMD_AUDIO_FS_44K:
-		ns_val = ps3av_ns_table[0][d];
-		break;
-	case PS3AV_CMD_AUDIO_FS_48K:
-		ns_val = ps3av_ns_table[1][d];
-		break;
-	case PS3AV_CMD_AUDIO_FS_88K:
-		ns_val = ps3av_ns_table[2][d];
-		break;
-	case PS3AV_CMD_AUDIO_FS_96K:
-		ns_val = ps3av_ns_table[3][d];
-		break;
-	case PS3AV_CMD_AUDIO_FS_176K:
-		ns_val = ps3av_ns_table[4][d];
-		break;
-	case PS3AV_CMD_AUDIO_FS_192K:
-		ns_val = ps3av_ns_table[5][d];
-		break;
-	default:
+	if (fs < PS3AV_CMD_AUDIO_FS_44K || fs > PS3AV_CMD_AUDIO_FS_192K)
 		printk(KERN_ERR "%s failed, fs:%x\n", __FUNCTION__, fs);
-		break;
-	}
+	else
+		ns_val = ps3av_ns_table[PS3AV_CMD_AUDIO_FS_44K-BASE][d];
+
 	*p++ = ns_val & 0x000000FF;
 	*p++ = (ns_val & 0x0000FF00) >> 8;
 	*p = (ns_val & 0x00FF0000) >> 16;
 }
+
+#undef BASE
 
 static u8 ps3av_cnv_enable(u32 source, u8 *enable)
 {
@@ -656,7 +619,7 @@ static void ps3av_cnv_chstat(u8 *chstat, u8 *cs_info)
 	memcpy(chstat, cs_info, 5);
 }
 
-u8 *ps3av_cmd_set_av_audio_param(u8 *p, u32 port,
+u32 ps3av_cmd_set_av_audio_param(void *p, u32 port,
 				 const struct ps3av_pkt_audio_mode *audio_mode,
 				 u32 video_vid)
 {
@@ -681,7 +644,7 @@ u8 *ps3av_cmd_set_av_audio_param(u8 *p, u32 port,
 	ps3av_cnv_info(&param->info, audio_mode);
 	ps3av_cnv_chstat(param->chstat, audio_mode->audio_cs_info);
 
-	return p + sizeof(*param);
+	return sizeof(*param);
 }
 
 /* default cs val */
@@ -837,7 +800,7 @@ int ps3av_cmd_audio_mute(int num_of_port, u32 *port, u32 mute)
 	struct ps3av_pkt_audio_mute audio_mute;
 
 	if (num_of_port > PS3AV_OPT_PORT_MAX)
-		return -1;
+		return -EINVAL;
 
 	/* audio mute */
 	memset(&audio_mute, 0, sizeof(audio_mute));
@@ -898,7 +861,8 @@ int ps3av_cmd_avb_param(struct ps3av_pkt_avb_param *avb, u32 send_len)
 
 	res = get_status(avb);
 	if (res)
-		DPRINTK("PS3AV_CID_AVB_PARAM: failed %x\n", res);
+		pr_debug("%s: PS3AV_CID_AVB_PARAM: failed %x\n", __FUNCTION__,
+			 res);
 
       out:
 	ps3fb_flip_ctl(1);	/* flip on */
@@ -947,15 +911,14 @@ int ps3av_cmd_video_get_monitor_info(struct ps3av_pkt_av_get_monitor_info *info,
 }
 
 #ifdef PS3AV_DEBUG
-int ps3av_cmd_av_hw_conf_dump(const struct ps3av_pkt_av_get_hw_conf *hw_conf)
+void ps3av_cmd_av_hw_conf_dump(const struct ps3av_pkt_av_get_hw_conf *hw_conf)
 {
 	printk("av_h_conf:num of hdmi:%d\n", hw_conf->num_of_hdmi);
 	printk("av_h_conf:num of avmulti:%d\n", hw_conf->num_of_avmulti);
 	printk("av_h_conf:num of spdif:%d\n", hw_conf->num_of_spdif);
-	return 0;
 }
 
-int ps3av_cmd_av_monitor_info_dump(const struct ps3av_pkt_av_get_monitor_info *monitor_info)
+void ps3av_cmd_av_monitor_info_dump(const struct ps3av_pkt_av_get_monitor_info *monitor_info)
 {
 	const struct ps3av_info_monitor *info = &monitor_info->info;
 	const struct ps3av_info_audio *audio = info->audio;
@@ -1010,8 +973,6 @@ int ps3av_cmd_av_monitor_info_dump(const struct ps3av_pkt_av_get_monitor_info *m
 		       audio->sbit);
 		audio++;
 	}
-
-	return 0;
 }
 #endif /* PS3AV_DEBUG */
 

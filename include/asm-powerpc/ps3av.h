@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2006 Sony Computer Entertainment Inc.
- * Copyright (C) 2006-2007 Sony Corporation
+ * Copyright 2006, 2007 Sony Corporation
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published
@@ -15,8 +15,10 @@
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
-#ifndef _PS3AV_H_
-#define _PS3AV_H_
+#ifndef _ASM_POWERPC_PS3AV_H_
+#define _ASM_POWERPC_PS3AV_H_
+
+#include <linux/mutex.h>
 
 /** command for ioctl() **/
 #define PS3AV_VERSION 0x205	/* version of ps3av command */
@@ -315,7 +317,7 @@
 #define PS3AV_MODE_DVI				0x0040
 #define PS3AV_MODE_RGB				0x0020
 
-#ifdef __KERNEL__
+
 /** command packet structure **/
 struct ps3av_send_hdr {
 	u16 version;
@@ -618,21 +620,34 @@ struct ps3av_pkt_audio_ctrl {
 };
 
 /* avb:param */
+#define PS3AV_PKT_AVB_PARAM_MAX_BUF_SIZE	\
+	(PS3AV_AVB_NUM_VIDEO*sizeof(struct ps3av_pkt_video_mode) + \
+	 PS3AV_AVB_NUM_AUDIO*sizeof(struct ps3av_pkt_audio_mode) + \
+	 PS3AV_AVB_NUM_AV_VIDEO*sizeof(struct ps3av_pkt_av_video_cs) + \
+	 PS3AV_AVB_NUM_AV_AUDIO*sizeof(struct ps3av_pkt_av_audio_param))
+
 struct ps3av_pkt_avb_param {
 	struct ps3av_send_hdr send_hdr;
 	u16 num_of_video_pkt;
 	u16 num_of_audio_pkt;
 	u16 num_of_av_video_pkt;
 	u16 num_of_av_audio_pkt;
-	struct ps3av_pkt_video_mode video[PS3AV_AVB_NUM_VIDEO];
-	struct ps3av_pkt_audio_mode audio[PS3AV_AVB_NUM_AUDIO];
-	struct ps3av_pkt_av_video_cs av_video[PS3AV_AVB_NUM_AV_VIDEO];
-	struct ps3av_pkt_av_audio_param av_audio[PS3AV_AVB_NUM_AV_AUDIO];
+	/*
+	 * The actual buffer layout depends on the fields above:
+	 *
+	 * struct ps3av_pkt_video_mode video[num_of_video_pkt];
+	 * struct ps3av_pkt_audio_mode audio[num_of_audio_pkt];
+	 * struct ps3av_pkt_av_video_cs av_video[num_of_av_video_pkt];
+	 * struct ps3av_pkt_av_audio_param av_audio[num_of_av_audio_pkt];
+	 */
+	u8 buf[PS3AV_PKT_AVB_PARAM_MAX_BUF_SIZE];
 };
 
 struct ps3av {
 	int available;
 	struct semaphore sem;
+	struct mutex mutex;
+	int open_count;
 	struct ps3_vuart_port_device *dev;
 
 	int region;
@@ -641,7 +656,7 @@ struct ps3av {
 	u32 opt_port[PS3AV_OPT_PORT_MAX];
 	u32 head[PS3AV_HEAD_MAX];
 	u32 audio_port;
-	atomic_t ps3av_mode;
+	int ps3av_mode;
 };
 
 /** command status **/
@@ -676,11 +691,11 @@ extern int ps3av_cmd_av_video_disable_sig(u32);
 extern int ps3av_cmd_av_tv_mute(u32, u32);
 extern int ps3av_cmd_enable_event(void);
 extern int ps3av_cmd_av_hdmi_mode(u8);
-extern u8 *ps3av_cmd_set_av_video_cs(u8 *, u32, int, int, int, u32);
-extern u8 *ps3av_cmd_set_video_mode(u8 *, u32, int, int, u32);
+extern u32 ps3av_cmd_set_av_video_cs(void *, u32, int, int, int, u32);
+extern u32 ps3av_cmd_set_video_mode(void *, u32, int, int, u32);
 extern int ps3av_cmd_video_format_black(u32, u32, u32);
 extern int ps3av_cmd_av_audio_mute(int, u32 *, u32);
-extern u8 *ps3av_cmd_set_av_audio_param(u8 *, u32,
+extern u32 ps3av_cmd_set_av_audio_param(void *, u32,
 					const struct ps3av_pkt_audio_mode *,
 					u32);
 extern void ps3av_cmd_set_audio_mode(struct ps3av_pkt_audio_mode *, u32, u32,
@@ -690,10 +705,15 @@ extern int ps3av_cmd_audio_mute(int, u32 *, u32);
 extern int ps3av_cmd_audio_active(int, u32);
 extern int ps3av_cmd_avb_param(struct ps3av_pkt_avb_param *, u32);
 extern int ps3av_cmd_av_get_hw_conf(struct ps3av_pkt_av_get_hw_conf *);
-extern int ps3av_cmd_av_hw_conf_dump(const struct ps3av_pkt_av_get_hw_conf *);
+#ifdef PS3AV_DEBUG
+extern void ps3av_cmd_av_hw_conf_dump(const struct ps3av_pkt_av_get_hw_conf *);
+extern void ps3av_cmd_av_monitor_info_dump(const struct ps3av_pkt_av_get_monitor_info *);
+#else
+static inline void ps3av_cmd_av_hw_conf_dump(const struct ps3av_pkt_av_get_hw_conf *hw_conf) {}
+static inline void ps3av_cmd_av_monitor_info_dump(const struct ps3av_pkt_av_get_monitor_info *monitor_info) {}
+#endif
 extern int ps3av_cmd_video_get_monitor_info(struct ps3av_pkt_av_get_monitor_info *,
 					    u32);
-extern int ps3av_cmd_av_monitor_info_dump(const struct ps3av_pkt_av_get_monitor_info *);
 
 extern int ps3av_vuart_write(struct ps3_vuart_port_device *dev,
 			     const void *buf, unsigned long size);
@@ -711,6 +731,5 @@ extern int ps3av_video_mute(int);
 extern int ps3av_audio_mute(int);
 extern int ps3av_dev_open(void);
 extern int ps3av_dev_close(void);
-#endif	/* __KERNEL__ */
 
-#endif	/* _PS3AV_H_ */
+#endif	/* _ASM_POWERPC_PS3AV_H_ */

@@ -164,7 +164,7 @@ static int ps3_system_bus_remove(struct device *_dev)
 }
 
 struct bus_type ps3_system_bus_type = {
-        .name = "ps3_system_bus",
+	.name = "ps3_system_bus",
 	.match = ps3_system_bus_match,
 	.probe = ps3_system_bus_probe,
 	.remove = ps3_system_bus_remove,

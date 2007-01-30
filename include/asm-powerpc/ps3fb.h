@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2006 Sony Computer Entertainment Inc.
- * Copyright (C) 2006-2007 Sony Corporation
+ * Copyright 2006, 2007 Sony Corporation
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published
@@ -16,8 +16,10 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef _PS3FB_H_
-#define _PS3FB_H_
+#ifndef _ASM_POWERPC_PS3FB_H_
+#define _ASM_POWERPC_PS3FB_H_
+
+#include <linux/ioctl.h>
 
 /* ioctl */
 #define PS3FB_IOCTL_SETMODE       _IOW('r',  1, int) /* set video mode */
@@ -39,4 +41,16 @@ struct ps3fb_ioctl_res {
 	__u32 num_frames; /* num of frame buffers */
 };
 
-#endif /* _PS3FB_H_ */
+#ifdef __KERNEL__
+
+#ifdef CONFIG_FB_PS3
+extern void ps3fb_flip_ctl(int);
+extern void ps3fb_cleanup(void);
+#else
+static inline void ps3fb_flip_ctl(int) {}
+static inline void ps3fb_cleanup(void) {}
+#endif
+
+#endif /* __KERNEL__ */
+
+#endif /* _ASM_POWERPC_PS3FB_H_ */
