@@ -683,12 +683,8 @@ static int __init init_spu_base(void)
 		cleanup_spu_base();
 		return ret;
 	}
-#ifdef CONFIG_LOGO
-	if (ret > 0) {
-		extern const struct linux_logo logo_spe_clut224;
+	if (ret > 0)
 		fb_append_extra_logo(&logo_spe_clut224, ret);
-	}
-#endif
 
 	xmon_register_spus(&spu_full_list);
 

@@ -17,10 +17,12 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
+#define DEBUG
 
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/interrupt.h>
+#include <linux/workqueue.h>
 #include <asm/ps3.h>
 
 #include <asm/lv1call.h>
@@ -30,7 +32,7 @@
 
 MODULE_AUTHOR("Sony Corporation");
 MODULE_LICENSE("GPL v2");
-MODULE_DESCRIPTION("ps3 vuart");
+MODULE_DESCRIPTION("PS3 vuart");
 
 /**
  * vuart - An inter-partition data link service.
@@ -265,19 +267,21 @@ static int ps3_vuart_set_interrupt_mask(struct ps3_vuart_port_device *dev,
 	return result;
 }
 
-static int ps3_vuart_get_interrupt_mask(struct ps3_vuart_port_device *dev,
+static int ps3_vuart_get_interrupt_status(struct ps3_vuart_port_device *dev,
 	unsigned long *status)
 {
+	u64 tmp;
 	int result = lv1_get_virtual_uart_param(dev->port_number,
-		PARAM_INTERRUPT_STATUS, status);
+		PARAM_INTERRUPT_STATUS, &tmp);
 
 	if (result)
 		dev_dbg(&dev->core, "%s:%d: interrupt_status failed: %s\n",
 			__func__, __LINE__, ps3_result(result));
 
+	*status = tmp & dev->interrupt_mask;
+
 	dev_dbg(&dev->core, "%s:%d: m %lxh, s %lxh, m&s %lxh\n",
-		__func__, __LINE__, dev->interrupt_mask, *status,
-		dev->interrupt_mask & *status);
+		__func__, __LINE__, dev->interrupt_mask, tmp, *status);
 
 	return result;
 }
@@ -335,7 +339,7 @@ static int ps3_vuart_raw_write(struct ps3_vuart_port_device *dev,
 {
 	int result;
 
-	dev_dbg(&dev->core, "%s:%d: %xh\n", __func__, __LINE__, bytes);
+	//dev_dbg(&dev->core, "%s:%d: %xh\n", __func__, __LINE__, bytes);
 
 	result = lv1_write_virtual_uart(dev->port_number,
 		ps3_mm_phys_to_lpar(__pa(buf)), bytes, bytes_written);
@@ -503,24 +507,54 @@ int ps3_vuart_read(struct ps3_vuart_port_device *dev, void* buf,
 
 		if (bytes_read < lb->tail - lb->head) {
 			lb->head += bytes_read;
+			dev_dbg(&dev->core, "%s:%d: buf_%lu: dequeued %lxh "
+				"bytes\n", __func__, __LINE__, lb->dbg_number,
+				bytes_read);
 			spin_unlock_irqrestore(&dev->rx_list.lock, flags);
-
-			dev_dbg(&dev->core,
-				"%s:%d: dequeued buf_%lu, %lxh bytes\n",
-				__func__, __LINE__, lb->dbg_number, bytes_read);
 			return 0;
 		}
 
-		dev_dbg(&dev->core, "%s:%d free buf_%lu\n", __func__, __LINE__,
-			lb->dbg_number);
+		dev_dbg(&dev->core, "%s:%d: buf_%lu: free, dequeued %lxh "
+			"bytes\n", __func__, __LINE__, lb->dbg_number,
+			bytes_read);
 
 		list_del(&lb->link);
 		kfree(lb);
 	}
-	spin_unlock_irqrestore(&dev->rx_list.lock, flags);
 
-	dev_dbg(&dev->core, "%s:%d: dequeued buf_%lu, %xh bytes\n",
-		__func__, __LINE__, lb->dbg_number, bytes);
+	spin_unlock_irqrestore(&dev->rx_list.lock, flags);
+	return 0;
+}
+
+int ps3_vuart_read_async(struct ps3_vuart_port_device *dev, work_func_t func,
+	unsigned int bytes)
+{
+	unsigned long flags;
+
+	if(dev->work_trigger) {
+		dev_dbg(&dev->core, "%s:%d: warning, multiple calls\n",
+			__func__, __LINE__);
+		return -EAGAIN;
+	}
+
+	BUG_ON(!bytes);
+
+	PREPARE_WORK(&dev->work, func);
+
+	//spin_lock_irqsave(&dev->work_lock, flags);
+	if(dev->rx_list.bytes_held >= bytes) {
+		dev_dbg(&dev->core, "%s:%d: schedule_work %xh bytes\n",
+			__func__, __LINE__, bytes);
+		schedule_work(&dev->work);
+		//spin_unlock_irqsave(&dev->work_lock, flags);
+		return 0;
+	}
+
+	dev->work_trigger = bytes;
+	//spin_unlock_irqsave(&dev->work_lock, flags);
+
+	dev_dbg(&dev->core, "%s:%d: waiting for %u(%xh) bytes\n", __func__,
+		__LINE__, bytes, bytes);
 
 	return 0;
 }
@@ -629,8 +663,20 @@ static int ps3_vuart_handle_interrupt_rx(struct ps3_vuart_port_device *dev)
 	dev->rx_list.bytes_held += bytes;
 	spin_unlock_irqrestore(&dev->rx_list.lock, flags);
 
-	dev_dbg(&dev->core, "%s:%d: queued buf_%lu, %lxh bytes\n",
+	dev_dbg(&dev->core, "%s:%d: buf_%lu: queued %lxh bytes\n",
 		__func__, __LINE__, lb->dbg_number, bytes);
+
+	// lock
+	if(dev->work_trigger
+		&& dev->rx_list.bytes_held >= dev->work_trigger) {
+		dev_dbg(&dev->core, "%s:%d: schedule_work %lxh bytes\n",
+			__func__, __LINE__, dev->work_trigger);
+		dev->work_trigger = 0;
+		//unlock
+		schedule_work(&dev->work);
+		return 0; // need this or unlock twice ok???
+	}
+	//unlock
 
 	return 0;
 }
@@ -656,7 +702,7 @@ static int ps3_vuart_handle_port_interrupt(struct ps3_vuart_port_device *dev)
 	int result;
 	unsigned long status;
 
-	result = ps3_vuart_get_interrupt_mask(dev, &status);
+	result = ps3_vuart_get_interrupt_status(dev, &status);
 
 	if (result)
 		return result;
@@ -778,8 +824,11 @@ static int ps3_vuart_probe(struct device *_dev)
 
 	INIT_LIST_HEAD(&dev->tx_list.head);
 	spin_lock_init(&dev->tx_list.lock);
+
 	INIT_LIST_HEAD(&dev->rx_list.head);
 	spin_lock_init(&dev->rx_list.lock);
+	INIT_WORK(&dev->work, NULL);
+	dev->work_trigger = 0;
 
 	vuart_private.in_use++;
 	if (vuart_private.in_use == 1) {
@@ -807,7 +856,8 @@ static int ps3_vuart_probe(struct device *_dev)
 	ps3_vuart_set_interrupt_mask(dev, INTERRUPT_MASK_RX);
 
 	/* clear stale pending interrupts */
-	ps3_vuart_get_interrupt_mask(dev, &tmp);
+
+	ps3_vuart_get_interrupt_status(dev, &tmp); // wrong, need empty rx buf!!!
 
 	ps3_vuart_set_triggers(dev, 1, 1);
 

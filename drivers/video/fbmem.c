@@ -322,9 +322,9 @@ static struct logo_data {
 #define FB_LOGO_EX_NUM_MAX 10
 static struct logo_data_extra {
 	const struct linux_logo *logo;
-	int n;
+	unsigned int n;
 } fb_logo_ex[FB_LOGO_EX_NUM_MAX];
-static int fb_logo_ex_num = 0;
+static unsigned int fb_logo_ex_num = 0;
 
 static void fb_rotate_logo_ud(const u8 *in, u8 *out, u32 width, u32 height)
 {
@@ -384,9 +384,9 @@ static void fb_rotate_logo(struct fb_info *info, u8 *dst,
 }
 
 static void fb_do_show_logo(struct fb_info *info, struct fb_image *image,
-			    int rotate, int num)
+			    int rotate, unsigned int num)
 {
-	int x;
+	unsigned int x;
 
 	if (rotate == FB_ROTATE_UR) {
 		for (x = 0;
@@ -415,9 +415,9 @@ static void fb_do_show_logo(struct fb_info *info, struct fb_image *image,
 	}
 }
 
-void fb_append_extra_logo(const struct linux_logo *logo, int n)
+void fb_append_extra_logo(const struct linux_logo *logo, unsigned int n)
 {
-	if (n <= 0 || fb_logo_ex_num == FB_LOGO_EX_NUM_MAX)
+	if (!n || fb_logo_ex_num == FB_LOGO_EX_NUM_MAX)
 		return;
 
 	fb_logo_ex[fb_logo_ex_num].logo = logo;
@@ -428,7 +428,7 @@ void fb_append_extra_logo(const struct linux_logo *logo, int n)
 int fb_prepare_logo(struct fb_info *info, int rotate)
 {
 	int depth = fb_get_color_depth(&info->var, &info->fix);
-	int yres, height, i;
+	unsigned int yres, height, i;
 
 	memset(&fb_logo, 0, sizeof(struct logo_data));
 
@@ -505,7 +505,8 @@ int fb_prepare_logo(struct fb_info *info, int rotate)
 }
 
 static int fb_show_logo_line(struct fb_info *info, int rotate,
-			     const struct linux_logo *logo, int y, int n)
+			     const struct linux_logo *logo, int y,
+			     unsigned int n)
 {
 	u32 *palette = NULL, *saved_pseudo_palette = NULL;
 	unsigned char *logo_new = NULL, *logo_rotate = NULL;

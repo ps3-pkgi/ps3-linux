@@ -41,10 +41,6 @@ struct ps3_vuart_port_driver {
 int ps3_vuart_port_driver_register(struct ps3_vuart_port_driver *drv);
 void ps3_vuart_port_driver_unregister(struct ps3_vuart_port_driver *drv);
 
-int ps3_vuart_write(struct ps3_vuart_port_device *dev,
-	const void* buf, unsigned int bytes);
-int ps3_vuart_read(struct ps3_vuart_port_device *dev, void* buf,
-	unsigned int bytes);
 static inline struct ps3_vuart_port_driver *to_ps3_vuart_port_driver(
 	struct device_driver *_drv)
 {
@@ -55,5 +51,17 @@ static inline struct ps3_vuart_port_device *to_ps3_vuart_port_device(
 {
 	return container_of(_dev, struct ps3_vuart_port_device, core);
 }
+static inline struct ps3_vuart_port_device *ps3_vuart_work_to_port_device(
+	struct work_struct *_work)
+{
+	return container_of(_work, struct ps3_vuart_port_device, work);
+}
+
+int ps3_vuart_write(struct ps3_vuart_port_device *dev, const void* buf,
+	unsigned int bytes);
+int ps3_vuart_read(struct ps3_vuart_port_device *dev, void* buf,
+	unsigned int bytes);
+int ps3_vuart_read_async(struct ps3_vuart_port_device *dev, work_func_t func,
+	unsigned int bytes);
 
 #endif

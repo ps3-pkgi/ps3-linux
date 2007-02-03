@@ -384,6 +384,8 @@ struct ps3_vuart_port_device {
 		spinlock_t lock;
 		struct list_head head;
 	} rx_list;
+	struct work_struct work;
+	unsigned long work_trigger;
 	struct ps3_vuart_stats stats;
 };
 
