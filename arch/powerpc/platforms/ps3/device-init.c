@@ -418,15 +418,13 @@ static int __devinit
 ps3_register_sys_manager (void)
 {
 	int result;
-	struct ps3_vuart_port_device *dev;
+	static struct ps3_vuart_port_device dev = {
+		.match_id = PS3_MATCH_ID_SYSTEM_MANAGER,
+	};
 
 	pr_debug(" -> %s:%d\n", __func__, __LINE__);
 
-	dev = kzalloc(sizeof(struct ps3_vuart_port_device), GFP_KERNEL);
-
-	dev->match_id = PS3_MATCH_ID_SYSTEM_MANAGER;
-
-	result = ps3_vuart_port_device_register(dev);
+	result = ps3_vuart_port_device_register(&dev);
 
 	if (result)
 		pr_debug("%s:%d ps3_vuart_port_device_register failed\n",

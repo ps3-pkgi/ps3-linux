@@ -1,8 +1,8 @@
 /*
  *  PS3 System Manager.
  *
- *  Copyright (C) 2006 Sony Computer Entertainment Inc.
- *  Copyright 2006 Sony Corp.
+ *  Copyright (C) 2007 Sony Computer Entertainment Inc.
+ *  Copyright 2007 Sony Corp.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -26,6 +26,7 @@
 #include <asm/ps3.h>
 #include "vuart.h"
 
+
 MODULE_AUTHOR("Sony Corporation");
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("PS3 System Manager");
@@ -33,11 +34,10 @@ MODULE_DESCRIPTION("PS3 System Manager");
 /**
  * The system manager is an application running in the system policy module.
  * Guests communicate with the system manager through port 2 of the vuart using
- * a simple packaged(?) message protocol.  Messages are comprised of a fixed
- * field message header followed by a message specific payload.
- * One of the roles of the system manager is to coordinate proper system
- * reboot and shutdown sequences.
- *
+ * a simple packaged message protocol.  Messages are comprised of a fixed
+ * field message header followed by a message specific payload.  One of the
+ * roles of the system manager is to coordinate proper system reboot and
+ * shutdown sequences.
  */
 
 /**
@@ -148,8 +148,8 @@ enum ps3_sys_manager_next_op {
  * enum ps3_sys_manager_wake_source - Next-op wakeup source (bit position mask).
  * @PS3_SM_WAKE_DEFAULT: Disk insert, power button, eject button, IR
  * controller, and bluetooth controller.
- * @PS3_SM_WAKE_RTC: .
- * @PS3_SM_WAKE_RTC_ERROR: .
+ * @PS3_SM_WAKE_RTC:
+ * @PS3_SM_WAKE_RTC_ERROR:
  * @PS3_SM_WAKE_P_O_R: Power on reset.
  *
  * Additional wakeup sources when specifying PS3_SM_NEXT_OP_SYS_SHUTDOWN.
@@ -195,10 +195,10 @@ static int ps3_sys_manager_write(struct ps3_vuart_port_device *dev,
 
 	result = ps3_vuart_write(dev, header,
 		sizeof(struct ps3_sys_manager_header));
-	
+
 	if (!result)
 		result = ps3_vuart_write(dev, payload, header->payload_size);
-	
+
 	return result;
 }
 
@@ -334,7 +334,7 @@ static int ps3_sys_manager_send_response(struct ps3_vuart_port_device *dev,
 	BUILD_BUG_ON(sizeof(payload) != 16);
 
 	dev_dbg(&dev->core, "%s:%d: (%s)\n", __func__, __LINE__,
-		(status ? "nak" : "ack");
+		(status ? "nak" : "ack"));
 
 	memset(&payload, 0, sizeof(payload));
 	payload.version = 1;
@@ -344,11 +344,11 @@ static int ps3_sys_manager_send_response(struct ps3_vuart_port_device *dev,
 }
 
 /**
- * ps3_sys_manager_handle_event - Second stage asyncronous event handler.
+ * ps3_sys_manager_handle_event - Second stage event msg handler.
  *
  */
 
-static void ps3_sys_manager_handle_event(struct ps3_vuart_port_device *dev)
+static int ps3_sys_manager_handle_event(struct ps3_vuart_port_device *dev)
 {
 	int result;
 	struct {
@@ -361,15 +361,13 @@ static void ps3_sys_manager_handle_event(struct ps3_vuart_port_device *dev)
 
 	BUILD_BUG_ON(sizeof(event) != 16);
 
-	dev_dbg(&dev->core, "%s:%d: -> \n", __func__, __LINE__);
-
 	result = ps3_vuart_read(dev, &event, sizeof(event));
 	BUG_ON(result);
 
 	if (event.version != 1) {
 		dev_dbg(&dev->core, "%s:%d: unsupported event version (%u)\n",
 			__func__, __LINE__, event.version);
-		return;
+		return -EIO;
 	}
 
 	switch (event.type) {
@@ -395,18 +393,18 @@ static void ps3_sys_manager_handle_event(struct ps3_vuart_port_device *dev)
 	default:
 		dev_dbg(&dev->core, "%s:%d: unknown event (%u)\n",
 			__func__, __LINE__, event.type);
-		break;
+		return -EIO;
 	}
 
-	dev_dbg(&dev->core, "%s:%d: <- \n", __func__, __LINE__);
+	return 0;
 }
 /**
- * ps3_sys_manager_handle_cmd - Second stage asyncronous command handler.
+ * ps3_sys_manager_handle_cmd - Second stage command msg handler.
  *
  * The system manager sends this in reply to a 'request' message from the guest.
  */
 
-static void ps3_sys_manager_handle_cmd(struct ps3_vuart_port_device *dev)
+static int ps3_sys_manager_handle_cmd(struct ps3_vuart_port_device *dev)
 {
 	int result;
 	struct {
@@ -417,49 +415,46 @@ static void ps3_sys_manager_handle_cmd(struct ps3_vuart_port_device *dev)
 
 	BUILD_BUG_ON(sizeof(cmd) != 16);
 
-	dev_dbg(&dev->core, "%s:%d: -> \n", __func__, __LINE__);
+	dev_dbg(&dev->core, "%s:%d\n", __func__, __LINE__);
 
 	result = ps3_vuart_read(dev, &cmd, sizeof(cmd));
-	BUG_ON(result);
+
+	if(result)
+		return result;
 
 	if (cmd.version != 1) {
 		dev_dbg(&dev->core, "%s:%d: unsupported cmd version (%u)\n",
 			__func__, __LINE__, cmd.version);
-		return;
+		return -EIO;
 	}
 
 	if (cmd.type != PS3_SM_CMD_SHUTDOWN) {
 		dev_dbg(&dev->core, "%s:%d: unknown cmd (%u)\n",
 			__func__, __LINE__, cmd.type);
-		return;
+		return -EIO;
 	}
 
-	//ctrl_alt_del();
-
-	//need to call this with success somehow when the kernel is ready...
 	ps3_sys_manager_send_response(dev, 0);
-
-	dev_dbg(&dev->core, "%s:%d: <- \n", __func__, __LINE__);
+	return 0;
 }
 
 /**
- * ps3_sys_manager_handle_msg - First stage asyncronous msg handler.
+ * ps3_sys_manager_handle_msg - First stage msg handler.
  *
- * Signaled when a complete message arrives at the vuart port.
  */
 
-static void ps3_sys_manager_handle_msg(struct work_struct *work)
+static int ps3_sys_manager_handle_msg(struct ps3_vuart_port_device *dev)
 {
 	int result;
-	struct ps3_vuart_port_device *dev = ps3_vuart_work_to_port_device(work);
 	struct ps3_sys_manager_header header;
 
-	dev_dbg(&dev->core, "%s:%d: -> \n", __func__, __LINE__);
+	dev_dbg(&dev->core, "%s:%d\n", __func__, __LINE__);
 
 	result = ps3_vuart_read(dev, &header,
 		sizeof(struct ps3_sys_manager_header));
 
-	BUG_ON(result);
+	if(result)
+		return result;
 
 	if (header.version != 1) {
 		dev_dbg(&dev->core, "%s:%d: unsupported header version (%u)\n",
@@ -474,58 +469,127 @@ static void ps3_sys_manager_handle_msg(struct work_struct *work)
 	switch (header.service_id) {
 	case PS3_SM_SERVICE_ID_EXTERN_EVENT:
 		dev_dbg(&dev->core, "%s:%d: EVENT\n", __func__, __LINE__);
-		ps3_sys_manager_handle_event(dev);
-		break;
+		return ps3_sys_manager_handle_event(dev);
 	case PS3_SM_SERVICE_ID_COMMAND:
 		dev_dbg(&dev->core, "%s:%d: COMMAND\n", __func__, __LINE__);
-		ps3_sys_manager_handle_cmd(dev);
-		break;
+		return ps3_sys_manager_handle_cmd(dev);
 	default:
 		dev_dbg(&dev->core, "%s:%d: unknown service_id (%u)\n",
 			__func__, __LINE__, header.service_id);
-		goto fail_id;
+		break;
 	}
-	goto read_next;
+	goto fail_id;
 
 fail_header:
-	// clear rx buffer here!!!
-	BUG();
-	goto read_next;
-
+	ps3_vuart_clear_rx_bytes(dev, 0);
+	return -EIO;
 fail_id:
-	// read payload bytes here!!!
-	BUG();
-	goto read_next;
+	ps3_vuart_clear_rx_bytes(dev, header.payload_size);
+	return -EIO;
+}
 
-read_next:
-	result = ps3_vuart_read_async(dev, ps3_sys_manager_handle_msg,
-		PS3_SM_RX_MSG_LEN);
-	BUG_ON(result);
-	dev_dbg(&dev->core, "%s:%d: <- \n", __func__, __LINE__);
+/**
+ * ps3_sys_manager_work - Asyncronous read handler.
+ *
+ * Signaled when a complete message arrives at the vuart port.
+ */
+
+static void ps3_sys_manager_work(struct work_struct *work)
+{
+	struct ps3_vuart_port_device *dev = ps3_vuart_work_to_port_device(work);
+
+	ps3_sys_manager_handle_msg(dev);
+	ps3_vuart_read_async(dev, ps3_sys_manager_work, PS3_SM_RX_MSG_LEN);
+}
+
+struct {
+	struct ps3_vuart_port_device *dev;
+} static drv_priv;
+
+/**
+ * ps3_sys_manager_restart - The final platform machine_restart routine.
+ *
+ * This routine never returns.  The routine disables asyncronous vuart reads
+ * then spins calling ps3_sys_manager_handle_msg() to receive and acknowledge
+ * the shutdown command sent from the system manager.  Soon after the
+ * acknowledgement is sent the lpar is destroyed by the HV.  This routine
+ * should only be called from ps3_restart().
+ */
+
+void ps3_sys_manager_restart(void)
+{
+	struct ps3_vuart_port_device *dev = drv_priv.dev;
+
+	BUG_ON(!drv_priv.dev);
+
+	dev_dbg(&dev->core, "%s:%d\n", __func__, __LINE__);
+
+	ps3_vuart_cancel_async(dev);
+
+	ps3_sys_manager_send_attr(dev, 0);
+	ps3_sys_manager_send_next_op(dev, PS3_SM_NEXT_OP_LPAR_REBOOT,
+		PS3_SM_WAKE_DEFAULT);
+	ps3_sys_manager_send_request_shutdown(dev);
+
+	printk(KERN_EMERG "System Halted, OK to turn off power\n");
+
+	while(1)
+		ps3_sys_manager_handle_msg(dev);
+}
+
+/**
+ * ps3_sys_manager_power_off - The final platform machine_power_off routine.
+ *
+ * This routine never returns.  The routine disables asyncronous vuart reads
+ * then spins calling ps3_sys_manager_handle_msg() to receive and acknowledge
+ * the shutdown command sent from the system manager.  Soon after the
+ * acknowledgement is sent the lpar is destroyed by the HV.  This routine
+ * should only be called from ps3_power_off().
+ */
+
+void ps3_sys_manager_power_off(void)
+{
+	struct ps3_vuart_port_device *dev = drv_priv.dev;
+
+	BUG_ON(!drv_priv.dev);
+
+	dev_dbg(&dev->core, "%s:%d\n", __func__, __LINE__);
+
+	ps3_vuart_cancel_async(dev);
+
+	ps3_sys_manager_send_next_op(dev, PS3_SM_NEXT_OP_SYS_SHUTDOWN,
+		PS3_SM_WAKE_DEFAULT);
+	ps3_sys_manager_send_request_shutdown(dev);
+
+	printk(KERN_EMERG "System Halted, OK to turn off power\n");
+
+	while(1)
+		ps3_sys_manager_handle_msg(dev);
 }
 
 static int ps3_sys_manager_probe(struct ps3_vuart_port_device *dev)
 {
 	int result;
-	dev_dbg(&dev->core, "%s:%d: -> \n", __func__, __LINE__);
+	dev_dbg(&dev->core, "%s:%d\n", __func__, __LINE__);
+
+	BUG_ON(drv_priv.dev);
+	drv_priv.dev = dev;
 
 	result = ps3_sys_manager_send_attr(dev, PS3_SM_ATTR_ALL);
 	BUG_ON(result);
 
-	result = ps3_vuart_read_async(dev, ps3_sys_manager_handle_msg,
+	result = ps3_vuart_read_async(dev, ps3_sys_manager_work,
 		PS3_SM_RX_MSG_LEN);
 	BUG_ON(result);
 
-	dev_dbg(&dev->core, "%s:%d: <- \n", __func__, __LINE__);
 	return result;
 }
 
-static int
-ps3_sys_manager_remove (struct ps3_vuart_port_device *dev)
+static int ps3_sys_manager_remove(struct ps3_vuart_port_device *dev)
 {
-	dev_dbg(&dev->core, "%s:%d: -> \n", __func__, __LINE__);
-	BUG_ON("do");
-	dev_dbg(&dev->core, "%s:%d: <- \n", __func__, __LINE__);
+	dev_dbg(&dev->core, "%s:%d\n", __func__, __LINE__);
+	ps3_sys_manager_send_attr(dev, 0);
+	drv_priv.dev = NULL;
 	return 0;
 }
 
@@ -538,25 +602,16 @@ static struct ps3_vuart_port_driver ps3_sys_manager = {
 	.remove = ps3_sys_manager_remove,
 };
 
-static int __init
-ps3_sys_manager_init (void)
+static int __init ps3_sys_manager_init(void)
 {
-	int result;
-
-	pr_debug(" -> %s:%d\n", __func__, __LINE__);
-	result = ps3_vuart_port_driver_register(&ps3_sys_manager);
-	pr_debug(" <- %s:%d\n", __func__, __LINE__);
-	return result;
+	return ps3_vuart_port_driver_register(&ps3_sys_manager);
 }
 
-static void __exit
-ps3_sys_manager_exit (void)
+static void __exit ps3_sys_manager_exit(void)
 {
-	pr_debug(" -> %s:%d\n", __func__, __LINE__);
 	ps3_vuart_port_driver_unregister(&ps3_sys_manager);
-	pr_debug(" <- %s:%d\n", __func__, __LINE__);
 }
 
-module_init (ps3_sys_manager_init);
-module_exit (ps3_sys_manager_exit);
+module_init(ps3_sys_manager_init);
+module_exit(ps3_sys_manager_exit);
 
