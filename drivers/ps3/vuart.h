@@ -35,7 +35,7 @@ struct ps3_vuart_work {
 	struct work_struct work;
 	unsigned long trigger;
 	spinlock_t lock;
-	struct ps3_vuart_port_device* dev; /* for work to device */
+	struct ps3_vuart_port_device* dev; /* to convert work to device */
 };
 
 /**
@@ -94,7 +94,6 @@ static inline struct ps3_vuart_port_device *ps3_vuart_work_to_port_device(
 {
 	struct ps3_vuart_work *vw = container_of(_work, struct ps3_vuart_work,
 		work);
-	BUG_ON(!vw->dev); // remove!!!
 	return vw->dev;
 }
 

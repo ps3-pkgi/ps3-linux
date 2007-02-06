@@ -42,6 +42,10 @@
 #define DBG(fmt...) do{if(0)printk(fmt);}while(0)
 #endif
 
+#if !defined(CONFIG_SMP)
+static void smp_send_stop(void) {}
+#endif
+
 int ps3_get_firmware_version(union ps3_firmware_version *v)
 {
 	int result = lv1_get_version_info(&v->raw);
@@ -66,19 +70,9 @@ static void ps3_power_save(void)
 	lv1_pause(0);
 }
 
-static void ps3_machine_shutdown(void)
-{
-	/* common, called prior to all others. */
-	DBG("%s:%d\n", __func__, __LINE__);
-}
-
-#if !defined(CONFIG_SMP)
-static void smp_send_stop(void) {}
-#endif
-
 static void ps3_restart(char *cmd)
 {
-	DBG("%s:%d\n", __func__, __LINE__);
+	DBG("%s:%d cmd '%s'\n", __func__, __LINE__, cmd);
 
 	smp_send_stop();
 	ps3_sys_manager_restart(); /* never returns */
@@ -256,7 +250,6 @@ define_machine(ps3) {
 	.get_rtc_time			= ps3_get_rtc_time,
 	.calibrate_decr			= ps3_calibrate_decr,
 	.progress			= ps3_progress,
-	.machine_shutdown		= ps3_machine_shutdown,
 	.restart			= ps3_restart,
 	.power_off			= ps3_power_off,
 #if defined(CONFIG_KEXEC)

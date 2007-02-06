@@ -165,11 +165,11 @@ struct ps3_stor_dev_info {
 
 	u64 sector_size;	/* copied from lv1 repository at initialize */
 	/* devices may change these value */
-	rwlock_t bounce_lock;	/* protect the following members:
-				 * bounce_buf (pointer itself, not buffer),
-				 * dedicated_bounce_size
-				 * max_sectors in scsi_dev->request_queue
-				 */
+	struct rw_semaphore bounce_sem;	/* protect the following members:
+					* bounce_buf (pointer itself, not buffer),
+					* dedicated_bounce_size
+					* max_sectors in scsi_dev->request_queue
+					*/
 	int  dedicated_bounce;	/* set nonzero if the bounce buffer is dedicated */
 	int  dedicated_bounce_size;
 	int  dedicated_dma_region; /* set if partial dma region allocated */

@@ -17,7 +17,6 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
-#define DEBUG
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -339,8 +338,6 @@ static int ps3_vuart_raw_write(struct ps3_vuart_port_device *dev,
 {
 	int result;
 
-	//dev_dbg(&dev->core, "%s:%d: %xh\n", __func__, __LINE__, bytes);
-
 	result = lv1_write_virtual_uart(dev->priv->port_number,
 		ps3_mm_phys_to_lpar(__pa(buf)), bytes, bytes_written);
 
@@ -430,6 +427,7 @@ void ps3_vuart_clear_rx_bytes(struct ps3_vuart_port_device *dev,
 
 	dev->priv->stats.bytes_read -= bytes_waiting;
 }
+
 /**
  * struct list_buffer - An element for a port device fifo buffer list.
  */
@@ -715,19 +713,14 @@ static int ps3_vuart_handle_interrupt_rx(struct ps3_vuart_port_device *dev)
 		__func__, __LINE__, lb->dbg_number, bytes);
 
 	spin_lock_irqsave(&dev->priv->work.lock, flags);
-
 	if(dev->priv->work.trigger
 		&& dev->priv->rx_list.bytes_held >= dev->priv->work.trigger) {
 		dev_dbg(&dev->core, "%s:%d: schedule_work %lxh bytes\n",
 			__func__, __LINE__, dev->priv->work.trigger);
 		dev->priv->work.trigger = 0;
-		spin_unlock_irqrestore(&dev->priv->work.lock, flags);
 		schedule_work(&dev->priv->work.work);
-		return 0; // need this or unlock twice ok???
 	}
-
 	spin_unlock_irqrestore(&dev->priv->work.lock, flags);
-
 	return 0;
 }
 
@@ -1065,8 +1058,6 @@ static void ps3_vuart_port_release_device(struct device *_dev)
 	BUG_ON(dev->priv && "forgot to free");
 	memset(&dev->core, 0, sizeof(dev->core));
 #endif
-
-	//anything else???
 }
 
 /**

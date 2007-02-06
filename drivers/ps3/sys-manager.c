@@ -18,30 +18,33 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#define DEBUG 1
-
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/workqueue.h>
+#include <linux/reboot.h>
 #include <asm/ps3.h>
 #include "vuart.h"
-
 
 MODULE_AUTHOR("Sony Corporation");
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("PS3 System Manager");
 
 /**
- * The system manager is an application running in the system policy module.
- * Guests communicate with the system manager through port 2 of the vuart using
- * a simple packaged message protocol.  Messages are comprised of a fixed
- * field message header followed by a message specific payload.  One of the
- * roles of the system manager is to coordinate proper system reboot and
- * shutdown sequences.
+ * ps3_sys_manager - PS3 system manager driver.
+ *
+ * The system manager provides an asyncronous system event notification
+ * mechanism for reporting events like thermal alert and button presses to
+ * guests.  It also provides support to control system shutdown and startup.
+ *
+ * The actual system manager is implemented as an application running in the
+ * system policy module in lpar_1.  Guests communicate with the system manager
+ * through port 2 of the vuart using a simple packet message protocol.
+ * Messages are comprised of a fixed field header followed by a message
+ * specific payload.
  */
 
 /**
- * struct ps3_sys_manager_header - System Manager message header.
+ * struct ps3_sys_manager_header - System manager message header.
  * @version: Header version, currently 1.
  * @size: Header size in bytes, curently 16.
  * @payload_size: Message payload size in bytes.
@@ -115,11 +118,11 @@ enum ps3_sys_manager_attr {
 /**
  * enum ps3_sys_manager_event - External event type, reported by system manager.
  * @PS3_SM_EVENT_POWER_PRESSED: payload.value not used.
- * PS3_SM_EVENT_POWER_RELEASED: payload.value = time pressed in millisec.
- * PS3_SM_EVENT_RESET_PRESSED: payload.value not used.
- * PS3_SM_EVENT_RESET_RELEASED: payload.value = time pressed in millisec.
- * PS3_SM_EVENT_THERMAL_ALERT: payload.value = thermal zone id.
- * PS3_SM_EVENT_THERMAL_CLEARED: payload.value = thermal zone id.
+ * @PS3_SM_EVENT_POWER_RELEASED: payload.value = time pressed in millisec.
+ * @PS3_SM_EVENT_RESET_PRESSED: payload.value not used.
+ * @PS3_SM_EVENT_RESET_RELEASED: payload.value = time pressed in millisec.
+ * @PS3_SM_EVENT_THERMAL_ALERT: payload.value = thermal zone id.
+ * @PS3_SM_EVENT_THERMAL_CLEARED: payload.value = thermal zone id.
  */
 
 enum ps3_sys_manager_event {
@@ -169,7 +172,7 @@ enum ps3_sys_manager_wake_source {
  *
  * The guest completes the actions needed, then acks or naks the command via
  * ps3_sys_manager_send_response().  In the case of @PS3_SM_CMD_SHUTDOWN,
- * the guest must be fully prepared for a system reset prior to acking the
+ * the guest must be fully prepared for a system poweroff prior to acking the
  * command.
  */
 
@@ -274,11 +277,13 @@ static int ps3_sys_manager_send_next_op(struct ps3_vuart_port_device *dev,
 /**
  * ps3_sys_manager_send_request_shutdown - Send 'request' to the system manager.
  *
- * The guest sends this message to request an operation or action.  The reply
- * is a command message from the system manager.  The guest performs the
- * requested opperation in the command handler.  The result of the command is
- * then communicated back to the system manager with a with a response message.
- * Currently the only supported request it the 'shutdown self' request.
+ * The guest sends this message to request an operation or action of the system
+ * manager.  The reply is a command message from the system manager.  In the
+ * command handler the guest performs the requested operation.  The result of
+ * the command is then communicated back to the system manager with a response
+ * message.
+ *
+ * Currently, the only supported request it the 'shutdown self' request.
  */
 
 static int ps3_sys_manager_send_request_shutdown(struct ps3_vuart_port_device *dev)
@@ -311,7 +316,7 @@ static int ps3_sys_manager_send_request_shutdown(struct ps3_vuart_port_device *d
  * ps3_sys_manager_send_response - Send a 'response' to the system manager.
  * @status: zero = success, others fail.
  *
- * The guest sends this message to the system manager to acnowledge suscess or
+ * The guest sends this message to the system manager to acnowledge success or
  * failure of a command sent by the system manager.
  */
 
@@ -378,13 +383,12 @@ static int ps3_sys_manager_handle_event(struct ps3_vuart_port_device *dev)
 	case PS3_SM_EVENT_POWER_RELEASED:
 		dev_dbg(&dev->core, "%s:%d: POWER_RELEASED (%u ms)\n",
 			__func__, __LINE__, event.value);
-		ps3_sys_manager_send_next_op(dev, PS3_SM_NEXT_OP_SYS_SHUTDOWN,
-			PS3_SM_WAKE_DEFAULT);
-		ps3_sys_manager_send_request_shutdown(dev);
+		kill_cad_pid(SIGINT, 1);
 		break;
 	case PS3_SM_EVENT_THERMAL_ALERT:
 		dev_dbg(&dev->core, "%s:%d: THERMAL_ALERT (zone %u)\n",
 			__func__, __LINE__, event.value);
+		printk(KERN_INFO "PS3 Thermal Alert Zone %u\n", event.value);
 		break;
 	case PS3_SM_EVENT_THERMAL_CLEARED:
 		dev_dbg(&dev->core, "%s:%d: THERMAL_CLEARED (zone %u)\n",
@@ -447,8 +451,6 @@ static int ps3_sys_manager_handle_msg(struct ps3_vuart_port_device *dev)
 {
 	int result;
 	struct ps3_sys_manager_header header;
-
-	dev_dbg(&dev->core, "%s:%d\n", __func__, __LINE__);
 
 	result = ps3_vuart_read(dev, &header,
 		sizeof(struct ps3_sys_manager_header));
@@ -536,6 +538,7 @@ void ps3_sys_manager_restart(void)
 	while(1)
 		ps3_sys_manager_handle_msg(dev);
 }
+EXPORT_SYMBOL_GPL(ps3_sys_manager_restart);
 
 /**
  * ps3_sys_manager_power_off - The final platform machine_power_off routine.
@@ -566,6 +569,7 @@ void ps3_sys_manager_power_off(void)
 	while(1)
 		ps3_sys_manager_handle_msg(dev);
 }
+EXPORT_SYMBOL_GPL(ps3_sys_manager_power_off);
 
 static int ps3_sys_manager_probe(struct ps3_vuart_port_device *dev)
 {

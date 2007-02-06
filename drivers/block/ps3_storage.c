@@ -31,6 +31,7 @@
 #include <linux/blkdev.h>
 #include <linux/kthread.h>
 #include <linux/interrupt.h>
+#include <linux/rwsem.h>
 #include <scsi/scsi.h>
 #include <scsi/scsi_host.h>
 #include <scsi/scsi_cmnd.h>
@@ -854,7 +855,7 @@ static int ps3_stor_common_handle_read(struct ps3_stor_dev_info * dev_info,
 	}
 
 	/* issue read */
-	read_lock(&dev_info->bounce_lock);
+	down_read(&dev_info->bounce_sem);
 	lpar_addr = ps3_stor_virtual_to_lpar(dev_info, dev_info->bounce_buf);
 	region_id = lv1_dev_info->region_info_array[(cmnd[1] >> 5)].region_id;
 	init_completion(&(dev_info->irq_done));
@@ -896,7 +897,7 @@ static int ps3_stor_common_handle_read(struct ps3_stor_dev_info * dev_info,
 	}
 
 	ps3_stor_srb_done(dev_info);
-	read_unlock(&dev_info->bounce_lock);
+	up_read(&dev_info->bounce_sem);
 	return ret;
 }
 
@@ -930,7 +931,7 @@ static int ps3_stor_common_handle_write(struct ps3_stor_dev_info * dev_info,
 		break;
 	}
 
-	read_lock(&dev_info->bounce_lock);
+	down_read(&dev_info->bounce_sem);
 	ret = fetch_to_dev_buffer(dev_info->srb,
 				  dev_info->bounce_buf,
 				  sectors * dev_info->sector_size);
@@ -974,7 +975,7 @@ static int ps3_stor_common_handle_write(struct ps3_stor_dev_info * dev_info,
 
 	}
 	ps3_stor_srb_done(dev_info);
-	read_unlock(&dev_info->bounce_lock);
+	up_read(&dev_info->bounce_sem);
 	return ret;
 }
 
@@ -1073,7 +1074,7 @@ static int ps3_stor_handle_write_flash(struct ps3_stor_dev_info * dev_info,
 		return ps3_stor_common_handle_write(dev_info, srb);
 	};
 
-	read_lock(&dev_info->bounce_lock);
+	down_read(&dev_info->bounce_sem);
 	region_id = region_info->region_id;
 
 
@@ -1258,7 +1259,7 @@ static int ps3_stor_handle_write_flash(struct ps3_stor_dev_info * dev_info,
 	} /* for */
  done:
 	ps3_stor_srb_done(dev_info);
-	read_unlock(&dev_info->bounce_lock);
+	up_read(&dev_info->bounce_sem);
 	DPRINTK(KERN_ERR "%s: end\n", __FUNCTION__);
 	return ret;
 }
@@ -1763,7 +1764,7 @@ static int ps3_stor_add_adapter(struct ps3_stor_lv1_bus_info * lv1_bus_info)
                 dev_info->host_info = host_info;
 		INIT_LIST_HEAD(&dev_info->dev_list);
 		spin_lock_init(&dev_info->srb_lock);
-		rwlock_init(&dev_info->bounce_lock);
+		init_rwsem(&dev_info->bounce_sem);
                 list_add_tail(&dev_info->dev_list, &host_info->dev_info_list);
         }
 
@@ -2168,7 +2169,7 @@ static int ps3_stor_slave_alloc(struct scsi_device * scsi_dev)
 	FUNC_STEP_C("3");
 
 	/* prepare dma regions for the device */
-	write_lock(&dev_info->bounce_lock);
+	down_write(&dev_info->bounce_sem);
 	switch (get_dedicated_buffer_type(lv1_dev_info->device_type)) {
 	case DEDICATED_KMALLOC:
 		/*
@@ -2179,7 +2180,7 @@ static int ps3_stor_slave_alloc(struct scsi_device * scsi_dev)
 		/* create its own static bouce buffer */
 		dev_info->dedicated_bounce_size = get_default_max_sector(lv1_dev_info) * lv1_dev_info->sector_size;
 		dev_info->bounce_buf = kmalloc(dev_info->dedicated_bounce_size, GFP_KERNEL | __GFP_DMA);
-		write_unlock(&dev_info->bounce_lock);
+		up_write(&dev_info->bounce_sem);
 		if (!dev_info->bounce_buf) {
 			printk(KERN_ERR "%s:kmalloc for static bounce buffer failed %#x\n", __FUNCTION__,
 			       dev_info->dedicated_bounce_size);
@@ -2198,7 +2199,7 @@ static int ps3_stor_slave_alloc(struct scsi_device * scsi_dev)
 			error = -ENOMEM;
 			goto fail_free_irq;
 		}
-		write_unlock(&dev_info->bounce_lock);
+		up_write(&dev_info->bounce_sem);
 		dev_info->bounce_type = DEDICATED_SPECIAL;
 		break;
 	}
@@ -2425,9 +2426,9 @@ static ssize_t ps3_stor_get_max_sectors(struct device *dev,
 		(struct ps3_stor_dev_info *)scsi_dev->hostdata;
 	ssize_t ret;
 
-	read_lock(&dev_info->bounce_lock);
+	down_read(&dev_info->bounce_sem);
 	ret = sprintf(buf, "%u\n", scsi_dev->request_queue->max_sectors);
-	read_unlock(&dev_info->bounce_lock);
+	up_read(&dev_info->bounce_sem);
 	return ret;
 }
 
@@ -2449,12 +2450,12 @@ static ssize_t ps3_stor_set_max_sectors(struct device *dev,
 			/* FIXME: need remap dma region !!! */
 			return -EINVAL;
 		}
-		write_lock(&dev_info->bounce_lock);
+		down_write(&dev_info->bounce_sem);
 		if (dev_info->bounce_type == DEDICATED_KMALLOC) {
 			/* try to allocate new bounce buffer */
 			bounce_buf = kmalloc(max_sectors * lv1_dev_info->sector_size, GFP_NOIO | __GFP_DMA | __GFP_NOWARN);
 			if (!bounce_buf) {
-				write_unlock(&dev_info->bounce_lock);
+				up_write(&dev_info->bounce_sem);
 				return -ENOMEM;
 			}
 			kfree(dev_info->bounce_buf);
@@ -2462,7 +2463,7 @@ static ssize_t ps3_stor_set_max_sectors(struct device *dev,
 			dev_info->dedicated_bounce_size = max_sectors * lv1_dev_info->sector_size;
 		}
 		blk_queue_max_sectors(scsi_dev->request_queue, max_sectors);
-		write_unlock(&dev_info->bounce_lock);
+		up_write(&dev_info->bounce_sem);
 		return strlen(buf);
 	}
 	return -EINVAL;

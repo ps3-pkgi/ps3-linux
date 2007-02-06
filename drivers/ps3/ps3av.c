@@ -301,8 +301,8 @@ static int ps3av_set_av_video_mute(u32 mute)
 {
 	int i, num_of_av_port, res;
 
-	num_of_av_port = ps3av.av_hw_conf.num_of_hdmi
-	    + ps3av.av_hw_conf.num_of_avmulti;
+	num_of_av_port = ps3av.av_hw_conf.num_of_hdmi +
+			 ps3av.av_hw_conf.num_of_avmulti;
 	/* video mute on */
 	for (i = 0; i < num_of_av_port; i++) {
 		res = ps3av_cmd_av_video_mute(1, &ps3av.av_port[i], mute);
@@ -319,7 +319,7 @@ static int ps3av_set_video_disable_sig(void)
 
 	num_of_hdmi_port = ps3av.av_hw_conf.num_of_hdmi;
 	num_of_av_port = ps3av.av_hw_conf.num_of_hdmi +
-	    ps3av.av_hw_conf.num_of_avmulti;
+			 ps3av.av_hw_conf.num_of_avmulti;
 
 	/* tv mute */
 	for (i = 0; i < num_of_hdmi_port; i++) {
@@ -352,7 +352,7 @@ static int ps3av_set_audio_mute(u32 mute)
 	int i, num_of_av_port, num_of_opt_port, res;
 
 	num_of_av_port = ps3av.av_hw_conf.num_of_hdmi +
-	    ps3av.av_hw_conf.num_of_avmulti;
+			 ps3av.av_hw_conf.num_of_avmulti;
 	num_of_opt_port = ps3av.av_hw_conf.num_of_spdif;
 
 	for (i = 0; i < num_of_av_port; i++) {
@@ -376,8 +376,9 @@ int ps3av_set_audio_mode(u32 ch, u32 fs, u32 word_bits, u32 format, u32 source)
 	struct ps3av_pkt_audio_mode audio_mode;
 	u32 len = 0;
 
-	num_of_audio = ps3av.av_hw_conf.num_of_hdmi
-	    + ps3av.av_hw_conf.num_of_avmulti + ps3av.av_hw_conf.num_of_spdif;
+	num_of_audio = ps3av.av_hw_conf.num_of_hdmi +
+		       ps3av.av_hw_conf.num_of_avmulti +
+		       ps3av.av_hw_conf.num_of_spdif;
 
 	avb_param.num_of_video_pkt = 0;
 	avb_param.num_of_audio_pkt = PS3AV_AVB_NUM_AUDIO;	/* always 0 */
