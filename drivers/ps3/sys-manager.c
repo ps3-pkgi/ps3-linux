@@ -263,7 +263,7 @@ static int ps3_sys_manager_send_next_op(struct ps3_vuart_port_device *dev,
 
 	BUILD_BUG_ON(sizeof(payload) != 16);
 
-	dev_dbg(&dev->core, "%s:%d: (%d)\n", __func__, __LINE__, op);
+	dev_dbg(&dev->core, "%s:%d: (%xh)\n", __func__, __LINE__, op);
 
 	memset(&payload, 0, sizeof(payload));
 	payload.version = 3;
@@ -538,7 +538,6 @@ void ps3_sys_manager_restart(void)
 	while(1)
 		ps3_sys_manager_handle_msg(dev);
 }
-EXPORT_SYMBOL_GPL(ps3_sys_manager_restart);
 
 /**
  * ps3_sys_manager_power_off - The final platform machine_power_off routine.
@@ -569,11 +568,11 @@ void ps3_sys_manager_power_off(void)
 	while(1)
 		ps3_sys_manager_handle_msg(dev);
 }
-EXPORT_SYMBOL_GPL(ps3_sys_manager_power_off);
 
 static int ps3_sys_manager_probe(struct ps3_vuart_port_device *dev)
 {
 	int result;
+
 	dev_dbg(&dev->core, "%s:%d\n", __func__, __LINE__);
 
 	BUG_ON(drv_priv.dev);
@@ -589,21 +588,12 @@ static int ps3_sys_manager_probe(struct ps3_vuart_port_device *dev)
 	return result;
 }
 
-static int ps3_sys_manager_remove(struct ps3_vuart_port_device *dev)
-{
-	dev_dbg(&dev->core, "%s:%d\n", __func__, __LINE__);
-	ps3_sys_manager_send_attr(dev, 0);
-	drv_priv.dev = NULL;
-	return 0;
-}
-
 static struct ps3_vuart_port_driver ps3_sys_manager = {
 	.match_id = PS3_MATCH_ID_SYSTEM_MANAGER,
 	.core = {
 		.name = "ps3_sys_manager",
 	},
 	.probe = ps3_sys_manager_probe,
-	.remove = ps3_sys_manager_remove,
 };
 
 static int __init ps3_sys_manager_init(void)
@@ -611,11 +601,4 @@ static int __init ps3_sys_manager_init(void)
 	return ps3_vuart_port_driver_register(&ps3_sys_manager);
 }
 
-static void __exit ps3_sys_manager_exit(void)
-{
-	ps3_vuart_port_driver_unregister(&ps3_sys_manager);
-}
-
 module_init(ps3_sys_manager_init);
-module_exit(ps3_sys_manager_exit);
-

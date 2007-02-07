@@ -31,19 +31,18 @@ SECTIONS
 
   _etext = .;			/* End of text section */
 
-  RODATA
-
-#ifdef CONFIG_SHARED_KERNEL
-  . = ALIGN(1048576);		/* VM shared segments are 1MB aligned */
-#endif
-
-  . = ALIGN(4096);
-  _eshared = .;			/* End of shareable data */
-
   . = ALIGN(16);		/* Exception table */
   __start___ex_table = .;
   __ex_table : { *(__ex_table) }
   __stop___ex_table = .;
+
+  RODATA
+
+#ifdef CONFIG_SHARED_KERNEL
+  . = ALIGN(1048576);		/* VM shared segments are 1MB aligned */
+
+  _eshared = .;			/* End of shareable data */
+#endif
 
   .data : {			/* Data */
 	*(.data)

@@ -28,9 +28,11 @@
 #include <linux/input.h>
 #include <linux/wait.h>
 
+#undef DEBUG
+#undef DEBUG_DATA
+
 #include <linux/hid.h>
 #include <linux/hiddev.h>
-#include <linux/hid-debug.h>
 
 /*
  * Version Information
@@ -949,7 +951,7 @@ int hid_input_report(struct hid_device *hid, int type, u8 *data, int size, int i
 		return -1;
 	}
 
-#ifdef CONFIG_HID_DEBUG
+#ifdef DEBUG_DATA
 	printk(KERN_DEBUG __FILE__ ": report (size %u) (%snumbered)\n", size, report_enum->numbered ? "" : "un");
 #endif
 
@@ -959,7 +961,7 @@ int hid_input_report(struct hid_device *hid, int type, u8 *data, int size, int i
 		size--;
 	}
 
-#ifdef CONFIG_HID_DEBUG
+#ifdef DEBUG_DATA
 	{
 		int i;
 		printk(KERN_DEBUG __FILE__ ": report %d (size %u) = ", n, size);

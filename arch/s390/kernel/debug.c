@@ -120,7 +120,7 @@ struct debug_view debug_hex_ascii_view = {
 	NULL
 };
 
-static struct debug_view debug_level_view = {
+struct debug_view debug_level_view = {
 	"level",
 	&debug_prolog_level_fn,
 	NULL,
@@ -129,7 +129,7 @@ static struct debug_view debug_level_view = {
 	NULL
 };
 
-static struct debug_view debug_pages_view = {
+struct debug_view debug_pages_view = {
 	"pages",
 	&debug_prolog_pages_fn,
 	NULL,
@@ -138,7 +138,7 @@ static struct debug_view debug_pages_view = {
 	NULL
 };
 
-static struct debug_view debug_flush_view = {
+struct debug_view debug_flush_view = {
         "flush",
         NULL,
         NULL,
@@ -156,14 +156,14 @@ struct debug_view debug_sprintf_view = {
 	NULL
 };
 
-/* used by dump analysis tools to determine version of debug feature */
+
 unsigned int debug_feature_version = __DEBUG_FEATURE_VERSION;
 
 /* static globals */
 
 static debug_info_t *debug_area_first = NULL;
 static debug_info_t *debug_area_last = NULL;
-static DECLARE_MUTEX(debug_lock);
+DECLARE_MUTEX(debug_lock);
 
 static int initialized;
 
@@ -905,7 +905,7 @@ static struct ctl_table s390dbf_dir_table[] = {
 	{ .ctl_name = 0 }
 };
 
-static struct ctl_table_header *s390dbf_sysctl_header;
+struct ctl_table_header *s390dbf_sysctl_header;
 
 void
 debug_stop_all(void)
@@ -1300,7 +1300,8 @@ out:
  * flushes debug areas
  */
  
-static void debug_flush(debug_info_t* id, int area)
+void
+debug_flush(debug_info_t* id, int area)
 {
         unsigned long flags;
         int i,j;
@@ -1510,7 +1511,8 @@ out:
 /*
  * clean up module
  */
-static void __exit debug_exit(void)
+void
+__exit debug_exit(void)
 {
 	debugfs_remove(debug_debugfs_root_entry);
 	unregister_sysctl_table(s390dbf_sysctl_header);

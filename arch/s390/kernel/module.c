@@ -30,7 +30,6 @@
 #include <linux/fs.h>
 #include <linux/string.h>
 #include <linux/kernel.h>
-#include <linux/moduleloader.h>
 
 #if 0
 #define DEBUGP printk
@@ -59,7 +58,7 @@ void module_free(struct module *mod, void *module_region)
            table entries. */
 }
 
-static void
+static inline void
 check_rela(Elf_Rela *rela, struct module *me)
 {
 	struct mod_arch_syminfo *info;
@@ -182,7 +181,7 @@ apply_relocate(Elf_Shdr *sechdrs, const char *strtab, unsigned int symindex,
 	return -ENOEXEC;
 }
 
-static int
+static inline int
 apply_rela(Elf_Rela *rela, Elf_Addr base, Elf_Sym *symtab, 
 	   struct module *me)
 {

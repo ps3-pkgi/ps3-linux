@@ -13,7 +13,6 @@
 #include <linux/mm.h>
 #include <linux/uaccess.h>
 #include <asm/futex.h>
-#include "uaccess.h"
 
 #ifndef __s390x__
 #define AHI	"ahi"
@@ -28,6 +27,9 @@
 #define LHI	"lghi"
 #define SLR	"slgr"
 #endif
+
+extern size_t copy_from_user_pt(size_t n, const void __user *from, void *to);
+extern size_t copy_to_user_pt(size_t n, void __user *to, const void *from);
 
 size_t copy_from_user_std(size_t size, const void __user *ptr, void *x)
 {
@@ -70,8 +72,7 @@ size_t copy_from_user_std(size_t size, const void __user *ptr, void *x)
 	return size;
 }
 
-static size_t copy_from_user_std_check(size_t size, const void __user *ptr,
-				       void *x)
+size_t copy_from_user_std_check(size_t size, const void __user *ptr, void *x)
 {
 	if (size <= 1024)
 		return copy_from_user_std(size, ptr, x);
@@ -109,16 +110,14 @@ size_t copy_to_user_std(size_t size, void __user *ptr, const void *x)
 	return size;
 }
 
-static size_t copy_to_user_std_check(size_t size, void __user *ptr,
-				     const void *x)
+size_t copy_to_user_std_check(size_t size, void __user *ptr, const void *x)
 {
 	if (size <= 1024)
 		return copy_to_user_std(size, ptr, x);
 	return copy_to_user_pt(size, ptr, x);
 }
 
-static size_t copy_in_user_std(size_t size, void __user *to,
-			       const void __user *from)
+size_t copy_in_user_std(size_t size, void __user *to, const void __user *from)
 {
 	unsigned long tmp1;
 
@@ -149,7 +148,7 @@ static size_t copy_in_user_std(size_t size, void __user *to,
 	return size;
 }
 
-static size_t clear_user_std(size_t size, void __user *to)
+size_t clear_user_std(size_t size, void __user *to)
 {
 	unsigned long tmp1, tmp2;
 
@@ -255,7 +254,7 @@ size_t strncpy_from_user_std(size_t size, const char __user *src, char *dst)
 		: "0" (-EFAULT), "d" (oparg), "a" (uaddr),		\
 		  "m" (*uaddr) : "cc");
 
-int futex_atomic_op_std(int op, int __user *uaddr, int oparg, int *old)
+int futex_atomic_op(int op, int __user *uaddr, int oparg, int *old)
 {
 	int oldval = 0, newval, ret;
 
@@ -287,7 +286,7 @@ int futex_atomic_op_std(int op, int __user *uaddr, int oparg, int *old)
 	return ret;
 }
 
-int futex_atomic_cmpxchg_std(int __user *uaddr, int oldval, int newval)
+int futex_atomic_cmpxchg(int __user *uaddr, int oldval, int newval)
 {
 	int ret;
 
@@ -312,6 +311,6 @@ struct uaccess_ops uaccess_std = {
 	.clear_user = clear_user_std,
 	.strnlen_user = strnlen_user_std,
 	.strncpy_from_user = strncpy_from_user_std,
-	.futex_atomic_op = futex_atomic_op_std,
-	.futex_atomic_cmpxchg = futex_atomic_cmpxchg_std,
+	.futex_atomic_op = futex_atomic_op,
+	.futex_atomic_cmpxchg = futex_atomic_cmpxchg,
 };

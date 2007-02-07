@@ -58,7 +58,7 @@ static void ack_kn02_irq(unsigned int irq)
 }
 
 static struct irq_chip kn02_irq_type = {
-	.name = "KN02-CSR",
+	.typename = "KN02-CSR",
 	.ack = ack_kn02_irq,
 	.mask = mask_kn02_irq,
 	.mask_ack = ack_kn02_irq,

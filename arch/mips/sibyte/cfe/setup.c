@@ -343,9 +343,10 @@ void __init prom_init(void)
 	prom_meminit();
 }
 
-void __init prom_free_prom_memory(void)
+unsigned long __init prom_free_prom_memory(void)
 {
 	/* Not sure what I'm supposed to do here.  Nothing, I think */
+	return 0;
 }
 
 void prom_putchar(char c)

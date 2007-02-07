@@ -709,8 +709,7 @@ out_free:
  *	  PCIXCC/CEX2C device to the request distributor
  * @xcRB: pointer to the send_cprb request buffer
  */
-static long zcrypt_pcixcc_send_cprb(struct zcrypt_device *zdev,
-				    struct ica_xcRB *xcRB)
+long zcrypt_pcixcc_send_cprb(struct zcrypt_device *zdev, struct ica_xcRB *xcRB)
 {
 	struct ap_message ap_msg;
 	struct response_type resp_type = {

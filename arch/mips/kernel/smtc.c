@@ -26,6 +26,16 @@
  * This file should be built into the kernel only if CONFIG_MIPS_MT_SMTC is set.
  */
 
+/*
+ * MIPSCPU_INT_BASE is identically defined in both
+ * asm-mips/mips-boards/maltaint.h and asm-mips/mips-boards/simint.h,
+ * but as yet there's no properly organized include structure that
+ * will ensure that the right *int.h file will be included for a
+ * given platform build.
+ */
+
+#define MIPSCPU_INT_BASE	16
+
 #define MIPS_CPU_IPI_IRQ	1
 
 #define LOCK_MT_PRA() \
@@ -67,15 +77,15 @@ unsigned int ipi_timer_latch[NR_CPUS];
 
 #define IPIBUF_PER_CPU 4
 
-static struct smtc_ipi_q IPIQ[NR_CPUS];
-static struct smtc_ipi_q freeIPIq;
+struct smtc_ipi_q IPIQ[NR_CPUS];
+struct smtc_ipi_q freeIPIq;
 
 
 /* Forward declarations */
 
 void ipi_decode(struct smtc_ipi *);
-static void post_direct_ipi(int cpu, struct smtc_ipi *pipi);
-static void setup_cross_vpe_interrupts(void);
+void post_direct_ipi(int cpu, struct smtc_ipi *pipi);
+void setup_cross_vpe_interrupts(void);
 void init_smtc_stats(void);
 
 /* Global SMTC Status */
@@ -190,7 +200,7 @@ void __init sanitize_tlb_entries(void)
  * Configure shared TLB - VPC configuration bit must be set by caller
  */
 
-static void smtc_configure_tlb(void)
+void smtc_configure_tlb(void)
 {
 	int i,tlbsiz,vpes;
 	unsigned long mvpconf0;
@@ -638,7 +648,7 @@ int setup_irq_smtc(unsigned int irq, struct irqaction * new,
  * the VPE.
  */
 
-static void smtc_ipi_qdump(void)
+void smtc_ipi_qdump(void)
 {
 	int i;
 
@@ -675,6 +685,28 @@ static __inline__ int atomic_postincrement(unsigned int *pv)
 
 	return result;
 }
+
+/* No longer used in IPI dispatch, but retained for future recycling */
+
+static __inline__ int atomic_postclear(unsigned int *pv)
+{
+	unsigned long result;
+
+	unsigned long temp;
+
+	__asm__ __volatile__(
+	"1:	ll	%0, %2					\n"
+	"	or	%1, $0, $0				\n"
+	"	sc	%1, %2					\n"
+	"	beqz	%1, 1b					\n"
+	"	sync						\n"
+	: "=&r" (result), "=&r" (temp), "=m" (*pv)
+	: "m" (*pv)
+	: "memory");
+
+	return result;
+}
+
 
 void smtc_send_ipi(int cpu, int type, unsigned int action)
 {
@@ -749,7 +781,7 @@ void smtc_send_ipi(int cpu, int type, unsigned int action)
 /*
  * Send IPI message to Halted TC, TargTC/TargVPE already having been set
  */
-static void post_direct_ipi(int cpu, struct smtc_ipi *pipi)
+void post_direct_ipi(int cpu, struct smtc_ipi *pipi)
 {
 	struct pt_regs *kstack;
 	unsigned long tcstatus;
@@ -889,7 +921,7 @@ void smtc_timer_broadcast(int vpe)
  * interrupts.
  */
 
-static int cpu_ipi_irq = MIPS_CPU_IRQ_BASE + MIPS_CPU_IPI_IRQ;
+static int cpu_ipi_irq = MIPSCPU_INT_BASE + MIPS_CPU_IPI_IRQ;
 
 static irqreturn_t ipi_interrupt(int irq, void *dev_idm)
 {
@@ -968,7 +1000,7 @@ static void ipi_irq_dispatch(void)
 
 static struct irqaction irq_ipi;
 
-static void setup_cross_vpe_interrupts(void)
+void setup_cross_vpe_interrupts(void)
 {
 	if (!cpu_has_vint)
 		panic("SMTC Kernel requires Vectored Interupt support");
@@ -1159,7 +1191,7 @@ void smtc_get_new_mmu_context(struct mm_struct *mm, unsigned long cpu)
 	 * It would be nice to be able to use a spinlock here,
 	 * but this is invoked from within TLB flush routines
 	 * that protect themselves with DVPE, so if a lock is
-	 * held by another TC, it'll never be freed.
+         * held by another TC, it'll never be freed.
 	 *
 	 * DVPE/DMT must not be done with interrupts enabled,
 	 * so even so most callers will already have disabled
@@ -1264,7 +1296,7 @@ void smtc_flush_tlb_asid(unsigned long asid)
  * Support for single-threading cache flush operations.
  */
 
-static int halt_state_save[NR_CPUS];
+int halt_state_save[NR_CPUS];
 
 /*
  * To really, really be sure that nothing is being done

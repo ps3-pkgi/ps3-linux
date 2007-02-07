@@ -39,7 +39,6 @@
 #ifndef _LANGUAGE_ASSEMBLY
 
 #include <linux/delay.h>
-#include <linux/types.h>
 #include <asm/io.h>
 
 /* cpu pipeline flush */

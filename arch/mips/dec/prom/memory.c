@@ -92,9 +92,9 @@ void __init prom_meminit(u32 magic)
 		rex_setup_memory_region();
 }
 
-void __init prom_free_prom_memory(void)
+unsigned long __init prom_free_prom_memory(void)
 {
-	unsigned long end;
+	unsigned long addr, end;
 
 	/*
 	 * Free everything below the kernel itself but leave
@@ -114,5 +114,16 @@ void __init prom_free_prom_memory(void)
 #endif
 		end = __pa(&_text);
 
-	free_init_pages("unused PROM memory", PAGE_SIZE, end);
+	addr = PAGE_SIZE;
+	while (addr < end) {
+		ClearPageReserved(virt_to_page(__va(addr)));
+		init_page_count(virt_to_page(__va(addr)));
+		free_page((unsigned long)__va(addr));
+		addr += PAGE_SIZE;
+	}
+
+	printk("Freeing unused PROM memory: %ldkb freed\n",
+	       (end - PAGE_SIZE) >> 10);
+
+	return end - PAGE_SIZE;
 }

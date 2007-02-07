@@ -54,11 +54,9 @@ static unsigned int cached_irq_mask = 0xffff;
 
 void disable_8259A_irq(unsigned int irq)
 {
-	unsigned int mask;
+	unsigned int mask = 1 << irq;
 	unsigned long flags;
 
-	irq -= I8259A_IRQ_BASE;
-	mask = 1 << irq;
 	spin_lock_irqsave(&i8259A_lock, flags);
 	cached_irq_mask |= mask;
 	if (irq & 8)
@@ -70,11 +68,9 @@ void disable_8259A_irq(unsigned int irq)
 
 void enable_8259A_irq(unsigned int irq)
 {
-	unsigned int mask;
+	unsigned int mask = ~(1 << irq);
 	unsigned long flags;
 
-	irq -= I8259A_IRQ_BASE;
-	mask = ~(1 << irq);
 	spin_lock_irqsave(&i8259A_lock, flags);
 	cached_irq_mask &= mask;
 	if (irq & 8)
@@ -86,12 +82,10 @@ void enable_8259A_irq(unsigned int irq)
 
 int i8259A_irq_pending(unsigned int irq)
 {
-	unsigned int mask;
+	unsigned int mask = 1 << irq;
 	unsigned long flags;
 	int ret;
 
-	irq -= I8259A_IRQ_BASE;
-	mask = 1 << irq;
 	spin_lock_irqsave(&i8259A_lock, flags);
 	if (irq < 8)
 		ret = inb(PIC_MASTER_CMD) & mask;
@@ -140,11 +134,9 @@ static inline int i8259A_irq_real(unsigned int irq)
  */
 void mask_and_ack_8259A(unsigned int irq)
 {
-	unsigned int irqmask;
+	unsigned int irqmask = 1 << irq;
 	unsigned long flags;
 
-	irq -= I8259A_IRQ_BASE;
-	irqmask = 1 << irq;
 	spin_lock_irqsave(&i8259A_lock, flags);
 	/*
 	 * Lightweight spurious IRQ detection. We do not want
@@ -177,8 +169,8 @@ handle_real_irq:
 		outb(0x60+irq,PIC_MASTER_CMD);	/* 'Specific EOI to master */
 	}
 #ifdef CONFIG_MIPS_MT_SMTC
-	if (irq_hwmask[irq] & ST0_IM)
-		set_c0_status(irq_hwmask[irq] & ST0_IM);
+        if (irq_hwmask[irq] & ST0_IM)
+        	set_c0_status(irq_hwmask[irq] & ST0_IM);
 #endif /* CONFIG_MIPS_MT_SMTC */
 	spin_unlock_irqrestore(&i8259A_lock, flags);
 	return;
@@ -330,8 +322,8 @@ void __init init_i8259_irqs (void)
 
 	init_8259A(0);
 
-	for (i = I8259A_IRQ_BASE; i < I8259A_IRQ_BASE + 16; i++)
+	for (i = 0; i < 16; i++)
 		set_irq_chip_and_handler(i, &i8259A_chip, handle_level_irq);
 
-	setup_irq(I8259A_IRQ_BASE + PIC_CASCADE_IR, &irq2);
+	setup_irq(PIC_CASCADE_IR, &irq2);
 }

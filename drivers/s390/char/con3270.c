@@ -69,7 +69,8 @@ static void con3270_update(struct con3270 *);
 /*
  * Setup timeout for a device. On timeout trigger an update.
  */
-static void con3270_set_timer(struct con3270 *cp, int expires)
+void
+con3270_set_timer(struct con3270 *cp, int expires)
 {
 	if (expires == 0) {
 		if (timer_pending(&cp->timer))

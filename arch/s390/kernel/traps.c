@@ -283,7 +283,7 @@ char *task_show_regs(struct task_struct *task, char *buffer)
 	return buffer;
 }
 
-static DEFINE_SPINLOCK(die_lock);
+DEFINE_SPINLOCK(die_lock);
 
 void die(const char * str, struct pt_regs * regs, long err)
 {
@@ -364,7 +364,8 @@ void __kprobes do_single_step(struct pt_regs *regs)
 		force_sig(SIGTRAP, current);
 }
 
-static void default_trap_handler(struct pt_regs * regs, long interruption_code)
+asmlinkage void
+default_trap_handler(struct pt_regs * regs, long interruption_code)
 {
         if (regs->psw.mask & PSW_MASK_PSTATE) {
 		local_irq_enable();
@@ -375,7 +376,7 @@ static void default_trap_handler(struct pt_regs * regs, long interruption_code)
 }
 
 #define DO_ERROR_INFO(signr, str, name, sicode, siaddr) \
-static void name(struct pt_regs * regs, long interruption_code) \
+asmlinkage void name(struct pt_regs * regs, long interruption_code) \
 { \
         siginfo_t info; \
         info.si_signo = signr; \
@@ -441,7 +442,7 @@ do_fp_trap(struct pt_regs *regs, void __user *location,
 		"floating point exception", regs, &si);
 }
 
-static void illegal_op(struct pt_regs * regs, long interruption_code)
+asmlinkage void illegal_op(struct pt_regs * regs, long interruption_code)
 {
 	siginfo_t info;
         __u8 opcode[6];
@@ -490,15 +491,8 @@ static void illegal_op(struct pt_regs * regs, long interruption_code)
 #endif
 		} else
 			signal = SIGILL;
-	} else {
-		/*
-		 * If we get an illegal op in kernel mode, send it through the
-		 * kprobes notifier. If kprobes doesn't pick it up, SIGILL
-		 */
-		if (notify_die(DIE_BPT, "bpt", regs, interruption_code,
-			       3, SIGTRAP) != NOTIFY_STOP)
-			signal = SIGILL;
-	}
+	} else
+		signal = SIGILL;
 
 #ifdef CONFIG_MATHEMU
         if (signal == SIGFPE)
@@ -591,7 +585,7 @@ DO_ERROR_INFO(SIGILL, "specification exception", specification_exception,
 	      ILL_ILLOPN, get_check_address(regs));
 #endif
 
-static void data_exception(struct pt_regs * regs, long interruption_code)
+asmlinkage void data_exception(struct pt_regs * regs, long interruption_code)
 {
 	__u16 __user *location;
 	int signal = 0;
@@ -681,7 +675,7 @@ static void data_exception(struct pt_regs * regs, long interruption_code)
 	}
 }
 
-static void space_switch_exception(struct pt_regs * regs, long int_code)
+asmlinkage void space_switch_exception(struct pt_regs * regs, long int_code)
 {
         siginfo_t info;
 

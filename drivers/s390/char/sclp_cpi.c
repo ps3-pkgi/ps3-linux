@@ -169,7 +169,7 @@ cpi_prepare_req(void)
 	}
 
 	/* prepare request data structure presented to SCLP driver */
-	req->command = SCLP_CMDW_WRITE_EVENT_DATA;
+	req->command = SCLP_CMDW_WRITEDATA;
 	req->sccb = sccb;
 	req->status = SCLP_REQ_FILLED;
 	req->callback = cpi_callback;

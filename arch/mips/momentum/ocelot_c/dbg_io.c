@@ -1,4 +1,6 @@
 
+#ifdef CONFIG_KGDB
+
 #include <asm/serial.h> /* For the serial port location and base baud */
 
 /* --- CONFIG --- */
@@ -119,3 +121,5 @@ int putDebugChar(uint8 byte)
 	UART16550_WRITE(OFS_SEND_BUFFER, byte);
 	return 1;
 }
+
+#endif

@@ -132,8 +132,9 @@ void __init prom_init(void)
 	add_memory_region(0, lasat_board_info.li_memsize, BOOT_MEM_RAM);
 }
 
-void __init prom_free_prom_memory(void)
+unsigned long __init prom_free_prom_memory(void)
 {
+	return 0;
 }
 
 const char *get_system_type(void)

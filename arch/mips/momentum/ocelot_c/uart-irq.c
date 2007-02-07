@@ -77,7 +77,7 @@ void ll_uart_irq(void)
 }
 
 struct irq_chip uart_irq_type = {
-	.name = "UART/FPGA",
+	.typename = "UART/FPGA",
 	.ack = mask_uart_irq,
 	.mask = mask_uart_irq,
 	.mask_ack = mask_uart_irq,

@@ -25,7 +25,7 @@
 #include <linux/bootmem.h>
 #include <linux/pfn.h>
 #include <linux/poison.h>
-#include <linux/initrd.h>
+
 #include <asm/processor.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -95,17 +95,19 @@ static void __init setup_ro_region(void)
 	pte_t new_pte;
 	unsigned long address, end;
 
-	address = ((unsigned long)&_stext) & PAGE_MASK;
-	end = PFN_ALIGN((unsigned long)&_eshared);
+	address = ((unsigned long)&__start_rodata) & PAGE_MASK;
+	end = PFN_ALIGN((unsigned long)&__end_rodata);
 
 	for (; address < end; address += PAGE_SIZE) {
 		pgd = pgd_offset_k(address);
 		pmd = pmd_offset(pgd, address);
 		pte = pte_offset_kernel(pmd, address);
 		new_pte = mk_pte_phys(address, __pgprot(_PAGE_RO));
-		*pte = new_pte;
+		set_pte(pte, new_pte);
 	}
 }
+
+extern void vmem_map_init(void);
 
 /*
  * paging_init() sets up the page tables
@@ -123,11 +125,11 @@ void __init paging_init(void)
 #ifdef CONFIG_64BIT
 	pgdir_k = (__pa(swapper_pg_dir) & PAGE_MASK) | _KERN_REGION_TABLE;
 	for (i = 0; i < PTRS_PER_PGD; i++)
-		pgd_clear_kernel(pg_dir + i);
+		pgd_clear(pg_dir + i);
 #else
 	pgdir_k = (__pa(swapper_pg_dir) & PAGE_MASK) | _KERNSEG_TABLE;
 	for (i = 0; i < PTRS_PER_PGD; i++)
-		pmd_clear_kernel((pmd_t *)(pg_dir + i));
+		pmd_clear((pmd_t *)(pg_dir + i));
 #endif
 	vmem_map_init();
 	setup_ro_region();
@@ -172,8 +174,10 @@ void __init mem_init(void)
                 datasize >>10,
                 initsize >> 10);
 	printk("Write protected kernel read-only data: %#lx - %#lx\n",
-	       (unsigned long)&_stext,
-	       PFN_ALIGN((unsigned long)&_eshared) - 1);
+	       (unsigned long)&__start_rodata,
+	       PFN_ALIGN((unsigned long)&__end_rodata) - 1);
+	printk("Virtual memmap size: %ldk\n",
+	       (max_pfn * sizeof(struct page)) >> 10);
 }
 
 void free_initmem(void)

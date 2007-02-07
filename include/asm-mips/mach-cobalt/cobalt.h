@@ -12,8 +12,6 @@
 #ifndef __ASM_COBALT_H
 #define __ASM_COBALT_H
 
-#include <irq.h>
-
 /*
  * i8259 legacy interrupts used on Cobalt:
  *
@@ -27,7 +25,7 @@
 /*
  * CPU IRQs  are 16 ... 23
  */
-#define COBALT_CPU_IRQ		MIPS_CPU_IRQ_BASE
+#define COBALT_CPU_IRQ		16
 
 #define COBALT_GALILEO_IRQ	(COBALT_CPU_IRQ + 2)
 #define COBALT_SCC_IRQ          (COBALT_CPU_IRQ + 3)	/* pre-production has 85C30 */

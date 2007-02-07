@@ -6,10 +6,9 @@
 #ifndef __ASM_RTLX_H
 #define __ASM_RTLX_H_
 
-#include <irq.h>
-
 #define LX_NODE_BASE 10
 
+#define MIPSCPU_INT_BASE       16
 #define MIPS_CPU_RTLX_IRQ 0
 
 #define RTLX_VERSION 2

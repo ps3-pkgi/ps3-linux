@@ -36,7 +36,7 @@
 struct tty_driver *tty3270_driver;
 static int tty3270_max_index;
 
-static struct raw3270_fn tty3270_fn;
+struct raw3270_fn tty3270_fn;
 
 struct tty3270_cell {
 	unsigned char character;
@@ -119,7 +119,8 @@ static void tty3270_update(struct tty3270 *);
 /*
  * Setup timeout for a device. On timeout trigger an update.
  */
-static void tty3270_set_timer(struct tty3270 *tp, int expires)
+void
+tty3270_set_timer(struct tty3270 *tp, int expires)
 {
 	if (expires == 0) {
 		if (timer_pending(&tp->timer) && del_timer(&tp->timer))
@@ -840,7 +841,7 @@ tty3270_del_views(void)
 	}
 }
 
-static struct raw3270_fn tty3270_fn = {
+struct raw3270_fn tty3270_fn = {
 	.activate = tty3270_activate,
 	.deactivate = tty3270_deactivate,
 	.intv = (void *) tty3270_irq,
@@ -1753,7 +1754,8 @@ static const struct tty_operations tty3270_ops = {
 	.set_termios = tty3270_set_termios
 };
 
-static void tty3270_notifier(int index, int active)
+void
+tty3270_notifier(int index, int active)
 {
 	if (active)
 		tty_register_device(tty3270_driver, index, NULL);
@@ -1765,7 +1767,8 @@ static void tty3270_notifier(int index, int active)
  * 3270 tty registration code called from tty_init().
  * Most kernel services (incl. kmalloc) are available at this poimt.
  */
-static int __init tty3270_init(void)
+int __init
+tty3270_init(void)
 {
 	struct tty_driver *driver;
 	int ret;

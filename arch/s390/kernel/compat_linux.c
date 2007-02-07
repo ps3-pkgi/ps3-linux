@@ -69,12 +69,6 @@
 
 #include "compat_linux.h"
 
-long psw_user32_bits	= (PSW_BASE32_BITS | PSW_MASK_DAT | PSW_ASC_HOME |
-			   PSW_MASK_IO | PSW_MASK_EXT | PSW_MASK_MCHECK |
-			   PSW_MASK_PSTATE | PSW_DEFAULT_KEY);
-long psw32_user_bits	= (PSW32_BASE_BITS | PSW32_MASK_DAT | PSW32_ASC_HOME |
-			   PSW32_MASK_IO | PSW32_MASK_EXT | PSW32_MASK_MCHECK |
-			   PSW32_MASK_PSTATE);
  
 /* For this source file, we want overflow handling. */
 
@@ -422,7 +416,7 @@ asmlinkage long sys32_sysinfo(struct sysinfo32 __user *info)
 	mm_segment_t old_fs = get_fs ();
 	
 	set_fs (KERNEL_DS);
-	ret = sys_sysinfo((struct sysinfo __force __user *) &s);
+	ret = sys_sysinfo((struct sysinfo __user *) &s);
 	set_fs (old_fs);
 	err = put_user (s.uptime, &info->uptime);
 	err |= __put_user (s.loads[0], &info->loads[0]);
@@ -451,8 +445,7 @@ asmlinkage long sys32_sched_rr_get_interval(compat_pid_t pid,
 	mm_segment_t old_fs = get_fs ();
 	
 	set_fs (KERNEL_DS);
-	ret = sys_sched_rr_get_interval(pid,
-					(struct timespec __force __user *) &t);
+	ret = sys_sched_rr_get_interval(pid, (struct timespec __user *) &t);
 	set_fs (old_fs);
 	if (put_compat_timespec(&t, interval))
 		return -EFAULT;
@@ -479,8 +472,8 @@ asmlinkage long sys32_rt_sigprocmask(int how, compat_sigset_t __user *set,
 	}
 	set_fs (KERNEL_DS);
 	ret = sys_rt_sigprocmask(how,
-				 set ? (sigset_t __force __user *) &s : NULL,
-				 oset ? (sigset_t __force __user *) &s : NULL,
+				 set ? (sigset_t __user *) &s : NULL,
+				 oset ? (sigset_t __user *) &s : NULL,
 				 sigsetsize);
 	set_fs (old_fs);
 	if (ret) return ret;
@@ -506,7 +499,7 @@ asmlinkage long sys32_rt_sigpending(compat_sigset_t __user *set,
 	mm_segment_t old_fs = get_fs();
 		
 	set_fs (KERNEL_DS);
-	ret = sys_rt_sigpending((sigset_t __force __user *) &s, sigsetsize);
+	ret = sys_rt_sigpending((sigset_t __user *) &s, sigsetsize);
 	set_fs (old_fs);
 	if (!ret) {
 		switch (_NSIG_WORDS) {
@@ -531,7 +524,7 @@ sys32_rt_sigqueueinfo(int pid, int sig, compat_siginfo_t __user *uinfo)
 	if (copy_siginfo_from_user32(&info, uinfo))
 		return -EFAULT;
 	set_fs (KERNEL_DS);
-	ret = sys_rt_sigqueueinfo(pid, sig, (siginfo_t __force __user *) &info);
+	ret = sys_rt_sigqueueinfo(pid, sig, (siginfo_t __user *) &info);
 	set_fs (old_fs);
 	return ret;
 }
@@ -689,7 +682,7 @@ asmlinkage long sys32_sendfile(int out_fd, int in_fd, compat_off_t __user *offse
 		
 	set_fs(KERNEL_DS);
 	ret = sys_sendfile(out_fd, in_fd,
-			   offset ? (off_t __force __user *) &of : NULL, count);
+			   offset ? (off_t __user *) &of : NULL, count);
 	set_fs(old_fs);
 	
 	if (offset && put_user(of, offset))
@@ -710,8 +703,7 @@ asmlinkage long sys32_sendfile64(int out_fd, int in_fd,
 		
 	set_fs(KERNEL_DS);
 	ret = sys_sendfile64(out_fd, in_fd,
-			     offset ? (loff_t __force __user *) &lof : NULL,
-			     count);
+			     offset ? (loff_t __user *) &lof : NULL, count);
 	set_fs(old_fs);
 	
 	if (offset && put_user(lof, offset))

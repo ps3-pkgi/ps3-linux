@@ -188,7 +188,6 @@ static inline void key_alloc_serial(struct key *key)
 
 	spin_lock(&key_serial_lock);
 
-attempt_insertion:
 	parent = NULL;
 	p = &key_serial_tree.rb_node;
 
@@ -203,32 +202,38 @@ attempt_insertion:
 		else
 			goto serial_exists;
 	}
-
-	/* we've found a suitable hole - arrange for this key to occupy it */
-	rb_link_node(&key->serial_node, parent, p);
-	rb_insert_color(&key->serial_node, &key_serial_tree);
-
-	spin_unlock(&key_serial_lock);
-	return;
+	goto insert_here;
 
 	/* we found a key with the proposed serial number - walk the tree from
 	 * that point looking for the next unused serial number */
 serial_exists:
 	for (;;) {
 		key->serial++;
-		if (key->serial < 3) {
-			key->serial = 3;
-			goto attempt_insertion;
-		}
+		if (key->serial < 2)
+			key->serial = 2;
+
+		if (!rb_parent(parent))
+			p = &key_serial_tree.rb_node;
+		else if (rb_parent(parent)->rb_left == parent)
+			p = &(rb_parent(parent)->rb_left);
+		else
+			p = &(rb_parent(parent)->rb_right);
 
 		parent = rb_next(parent);
 		if (!parent)
-			goto attempt_insertion;
+			break;
 
 		xkey = rb_entry(parent, struct key, serial_node);
 		if (key->serial < xkey->serial)
-			goto attempt_insertion;
+			goto insert_here;
 	}
+
+	/* we've found a suitable hole - arrange for this key to occupy it */
+insert_here:
+	rb_link_node(&key->serial_node, parent, p);
+	rb_insert_color(&key->serial_node, &key_serial_tree);
+
+	spin_unlock(&key_serial_lock);
 
 } /* end key_alloc_serial() */
 

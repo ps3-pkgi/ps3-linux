@@ -59,8 +59,9 @@ extern void galileo_machine_power_off(void);
  */
 extern struct pci_ops galileo_pci_ops;
 
-void __init prom_free_prom_memory(void)
+unsigned long __init prom_free_prom_memory(void)
 {
+	return 0;
 }
 
 /*

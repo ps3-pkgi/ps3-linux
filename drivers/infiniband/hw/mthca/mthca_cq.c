@@ -534,7 +534,7 @@ static inline int mthca_poll_one(struct mthca_dev *dev,
 		}
 	}
 
-	entry->qp = &(*cur_qp)->ibqp;
+	entry->qp_num = (*cur_qp)->qpn;
 
 	if (is_send) {
 		wq = &(*cur_qp)->sq;

@@ -66,7 +66,7 @@ sclp_conbuf_callback(struct sclp_buffer *buffer, int rc)
 	} while (buffer && sclp_emit_buffer(buffer, sclp_conbuf_callback));
 }
 
-static void
+static inline void
 sclp_conbuf_emit(void)
 {
 	struct sclp_buffer* buffer;

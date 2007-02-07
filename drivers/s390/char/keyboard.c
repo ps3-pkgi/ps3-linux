@@ -148,7 +148,6 @@ kbd_ascebc(struct kbd_data *kbd, unsigned char *ascebc)
 	}
 }
 
-#if 0
 /*
  * Generate ebcdic -> ascii translation table from kbd_data.
  */
@@ -174,7 +173,6 @@ kbd_ebcasc(struct kbd_data *kbd, unsigned char *ebcasc)
 		}
 	}
 }
-#endif
 
 /*
  * We have a combining character DIACR here, followed by the character CH.

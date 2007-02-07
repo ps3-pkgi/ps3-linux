@@ -50,7 +50,6 @@ struct cpuinfo_S390
         unsigned long pgtable_cache_sz;
 };
 
-extern void s390_adjust_jiffies(void);
 extern void print_cpu_info(struct cpuinfo_S390 *);
 
 /* Lazy FPU handling on uni-processor */
@@ -145,8 +144,7 @@ struct stack_frame {
 #ifndef __s390x__
 
 #define start_thread(regs, new_psw, new_stackp) do {            \
-	set_fs(USER_DS);					\
-	regs->psw.mask	= psw_user_bits;			\
+        regs->psw.mask  = PSW_USER_BITS;                        \
         regs->psw.addr  = new_psw | PSW_ADDR_AMODE;             \
         regs->gprs[15]  = new_stackp ;                          \
 } while (0)
@@ -154,15 +152,13 @@ struct stack_frame {
 #else /* __s390x__ */
 
 #define start_thread(regs, new_psw, new_stackp) do {            \
-	set_fs(USER_DS);					\
-	regs->psw.mask	= psw_user_bits;			\
+        regs->psw.mask  = PSW_USER_BITS;                        \
         regs->psw.addr  = new_psw;                              \
         regs->gprs[15]  = new_stackp;                           \
 } while (0)
 
 #define start_thread31(regs, new_psw, new_stackp) do {          \
-	set_fs(USER_DS);					\
-	regs->psw.mask	= psw_user32_bits;			\
+	regs->psw.mask  = PSW_USER32_BITS;			\
         regs->psw.addr  = new_psw;                              \
         regs->gprs[15]  = new_stackp;                           \
 } while (0)
@@ -205,8 +201,9 @@ unsigned long get_wchan(struct task_struct *p);
 static inline void cpu_relax(void)
 {
 	if (MACHINE_HAS_DIAG44)
-		asm volatile("diag 0,0,68");
-	barrier();
+		asm volatile("diag 0,0,68" : : : "memory");
+	else
+		barrier();
 }
 
 /*
@@ -329,18 +326,6 @@ static inline void disabled_wait(unsigned long code)
 		: "a" (&dw_psw), "a" (&ctl_buf), "m" (dw_psw) : "cc", "0");
 #endif /* __s390x__ */
 }
-
-/*
- * Basic Machine Check/Program Check Handler.
- */
-
-extern void s390_base_mcck_handler(void);
-extern void s390_base_pgm_handler(void);
-extern void s390_base_ext_handler(void);
-
-extern void (*s390_base_mcck_handler_fn)(void);
-extern void (*s390_base_pgm_handler_fn)(void);
-extern void (*s390_base_ext_handler_fn)(void);
 
 /*
  * CPU idle notifier chain.

@@ -31,8 +31,9 @@
 #include <linux/slab.h>
 #include <linux/kernel.h>
 
+#undef DEBUG
+
 #include <linux/hid.h>
-#include <linux/hid-debug.h>
 
 static int hid_pb_fnmode = 1;
 module_param_named(pb_fnmode, hid_pb_fnmode, int, 0644);
@@ -251,9 +252,9 @@ static void hidinput_configure_usage(struct hid_input *hidinput, struct hid_fiel
 
 	field->hidinput = hidinput;
 
-#ifdef CONFIG_HID_DEBUG
+#ifdef DEBUG
 	printk(KERN_DEBUG "Mapping: ");
-	hid_resolv_usage(usage->hid);
+	resolv_usage(usage->hid);
 	printk(" ---> ");
 #endif
 
@@ -681,14 +682,14 @@ static void hidinput_configure_usage(struct hid_input *hidinput, struct hid_fiel
 			field->dpad = usage->code;
 	}
 
-	hid_resolv_event(usage->type, usage->code);
-#ifdef CONFIG_HID_DEBUG
+#ifdef DEBUG
+	resolv_event(usage->type, usage->code);
 	printk("\n");
 #endif
 	return;
 
 ignore:
-#ifdef CONFIG_HID_DEBUG
+#ifdef DEBUG
 	printk("IGNORED\n");
 #endif
 	return;
@@ -803,18 +804,6 @@ int hidinput_find_field(struct hid_device *hid, unsigned int type, unsigned int 
 }
 EXPORT_SYMBOL_GPL(hidinput_find_field);
 
-static int hidinput_open(struct input_dev *dev)
-{
-	struct hid_device *hid = dev->private;
-	return hid->hid_open(hid);
-}
-
-static void hidinput_close(struct input_dev *dev)
-{
-	struct hid_device *hid = dev->private;
-	hid->hid_close(hid);
-}
-
 /*
  * Register the input device; print a message.
  * Configure the input layer interface
@@ -827,7 +816,6 @@ int hidinput_connect(struct hid_device *hid)
 	struct hid_input *hidinput = NULL;
 	struct input_dev *input_dev;
 	int i, j, k;
-	int max_report_type = HID_OUTPUT_REPORT;
 
 	INIT_LIST_HEAD(&hid->inputs);
 
@@ -840,10 +828,7 @@ int hidinput_connect(struct hid_device *hid)
 	if (i == hid->maxcollection)
 		return -1;
 
-	if (hid->quirks & HID_QUIRK_SKIP_OUTPUT_REPORTS)
-		max_report_type = HID_INPUT_REPORT;
-
-	for (k = HID_INPUT_REPORT; k <= max_report_type; k++)
+	for (k = HID_INPUT_REPORT; k <= HID_OUTPUT_REPORT; k++)
 		list_for_each_entry(report, &hid->report_enum[k].report_list, list) {
 
 			if (!report->maxfield)
@@ -861,8 +846,8 @@ int hidinput_connect(struct hid_device *hid)
 
 				input_dev->private = hid;
 				input_dev->event = hid->hidinput_input_event;
-				input_dev->open = hidinput_open;
-				input_dev->close = hidinput_close;
+				input_dev->open = hid->hidinput_open;
+				input_dev->close = hid->hidinput_close;
 
 				input_dev->name = hid->name;
 				input_dev->phys = hid->phys;

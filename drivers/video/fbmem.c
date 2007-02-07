@@ -586,7 +586,6 @@ int fb_show_logo(struct fb_info *info, int rotate)
 	return y;
 }
 #else
-void fb_append_extra_logo(const struct linux_logo *logo, int n) {}
 int fb_prepare_logo(struct fb_info *info, int rotate) { return 0; }
 int fb_show_logo(struct fb_info *info, int rotate) { return 0; }
 #endif /* CONFIG_LOGO */
@@ -1602,7 +1601,6 @@ EXPORT_SYMBOL(register_framebuffer);
 EXPORT_SYMBOL(unregister_framebuffer);
 EXPORT_SYMBOL(num_registered_fb);
 EXPORT_SYMBOL(registered_fb);
-EXPORT_SYMBOL(fb_append_extra_logo);
 EXPORT_SYMBOL(fb_prepare_logo);
 EXPORT_SYMBOL(fb_show_logo);
 EXPORT_SYMBOL(fb_set_var);

@@ -67,8 +67,9 @@ void prom_printf(char *fmt, ...)
 	va_end(args);
 }
 
-void __init prom_free_prom_memory(void)
+unsigned long prom_free_prom_memory(void)
 {
+	return 0;
 }
 
 /*

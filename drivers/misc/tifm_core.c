@@ -14,7 +14,7 @@
 #include <linux/idr.h>
 
 #define DRIVER_NAME "tifm_core"
-#define DRIVER_VERSION "0.7"
+#define DRIVER_VERSION "0.6"
 
 static DEFINE_IDR(tifm_adapter_idr);
 static DEFINE_SPINLOCK(tifm_adapter_lock);
@@ -60,41 +60,10 @@ static int tifm_uevent(struct device *dev, char **envp, int num_envp,
 	return 0;
 }
 
-#ifdef CONFIG_PM
-
-static int tifm_device_suspend(struct device *dev, pm_message_t state)
-{
-	struct tifm_dev *fm_dev = container_of(dev, struct tifm_dev, dev);
-	struct tifm_driver *drv = fm_dev->drv;
-
-	if (drv && drv->suspend)
-		return drv->suspend(fm_dev, state);
-	return 0;
-}
-
-static int tifm_device_resume(struct device *dev)
-{
-	struct tifm_dev *fm_dev = container_of(dev, struct tifm_dev, dev);
-	struct tifm_driver *drv = fm_dev->drv;
-
-	if (drv && drv->resume)
-		return drv->resume(fm_dev);
-	return 0;
-}
-
-#else
-
-#define tifm_device_suspend NULL
-#define tifm_device_resume NULL
-
-#endif /* CONFIG_PM */
-
 static struct bus_type tifm_bus_type = {
 	.name    = "tifm",
 	.match   = tifm_match,
 	.uevent  = tifm_uevent,
-	.suspend = tifm_device_suspend,
-	.resume  = tifm_device_resume
 };
 
 static void tifm_free(struct class_device *cdev)
@@ -102,6 +71,8 @@ static void tifm_free(struct class_device *cdev)
 	struct tifm_adapter *fm = container_of(cdev, struct tifm_adapter, cdev);
 
 	kfree(fm->sockets);
+	if (fm->wq)
+		destroy_workqueue(fm->wq);
 	kfree(fm);
 }
 
@@ -130,8 +101,7 @@ void tifm_free_adapter(struct tifm_adapter *fm)
 }
 EXPORT_SYMBOL(tifm_free_adapter);
 
-int tifm_add_adapter(struct tifm_adapter *fm,
-		     int (*mediathreadfn)(void *data))
+int tifm_add_adapter(struct tifm_adapter *fm)
 {
 	int rc;
 
@@ -143,10 +113,10 @@ int tifm_add_adapter(struct tifm_adapter *fm,
 	spin_unlock(&tifm_adapter_lock);
 	if (!rc) {
 		snprintf(fm->cdev.class_id, BUS_ID_SIZE, "tifm%u", fm->id);
-		fm->media_switcher = kthread_create(mediathreadfn,
-						    fm, "tifm/%u", fm->id);
+		strncpy(fm->wq_name, fm->cdev.class_id, KOBJ_NAME_LEN);
 
-		if (!IS_ERR(fm->media_switcher))
+		fm->wq = create_singlethread_workqueue(fm->wq_name);
+		if (fm->wq)
 			return class_device_add(&fm->cdev);
 
 		spin_lock(&tifm_adapter_lock);
@@ -171,27 +141,27 @@ EXPORT_SYMBOL(tifm_remove_adapter);
 void tifm_free_device(struct device *dev)
 {
 	struct tifm_dev *fm_dev = container_of(dev, struct tifm_dev, dev);
+	if (fm_dev->wq)
+		destroy_workqueue(fm_dev->wq);
 	kfree(fm_dev);
 }
 EXPORT_SYMBOL(tifm_free_device);
 
-static void tifm_dummy_signal_irq(struct tifm_dev *sock,
-				  unsigned int sock_irq_status)
-{
-	return;
-}
-
-struct tifm_dev *tifm_alloc_device(struct tifm_adapter *fm)
+struct tifm_dev *tifm_alloc_device(struct tifm_adapter *fm, unsigned int id)
 {
 	struct tifm_dev *dev = kzalloc(sizeof(struct tifm_dev), GFP_KERNEL);
 
 	if (dev) {
 		spin_lock_init(&dev->lock);
-
+		snprintf(dev->wq_name, KOBJ_NAME_LEN, "tifm%u:%u", fm->id, id);
+		dev->wq = create_singlethread_workqueue(dev->wq_name);
+		if (!dev->wq) {
+			kfree(dev);
+			return NULL;
+		}
 		dev->dev.parent = fm->dev;
 		dev->dev.bus = &tifm_bus_type;
 		dev->dev.release = tifm_free_device;
-		dev->signal_irq = tifm_dummy_signal_irq;
 	}
 	return dev;
 }
@@ -249,7 +219,6 @@ static int tifm_device_remove(struct device *dev)
 	struct tifm_driver *drv = fm_dev->drv;
 
 	if (drv) {
-		fm_dev->signal_irq = tifm_dummy_signal_irq;
 		if (drv->remove)
 			drv->remove(fm_dev);
 		fm_dev->drv = NULL;
@@ -264,8 +233,6 @@ int tifm_register_driver(struct tifm_driver *drv)
 	drv->driver.bus = &tifm_bus_type;
 	drv->driver.probe = tifm_device_probe;
 	drv->driver.remove = tifm_device_remove;
-	drv->driver.suspend = tifm_device_suspend;
-	drv->driver.resume = tifm_device_resume;
 
 	return driver_register(&drv->driver);
 }

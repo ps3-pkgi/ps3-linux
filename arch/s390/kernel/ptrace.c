@@ -86,13 +86,15 @@ FixPerRegisters(struct task_struct *task)
 		per_info->control_regs.bits.storage_alt_space_ctl = 0;
 }
 
-static void set_single_step(struct task_struct *task)
+void
+set_single_step(struct task_struct *task)
 {
 	task->thread.per_info.single_step = 1;
 	FixPerRegisters(task);
 }
 
-static void clear_single_step(struct task_struct *task)
+void
+clear_single_step(struct task_struct *task)
 {
 	task->thread.per_info.single_step = 0;
 	FixPerRegisters(task);
@@ -230,9 +232,9 @@ poke_user(struct task_struct *child, addr_t addr, addr_t data)
 		 */
 		if (addr == (addr_t) &dummy->regs.psw.mask &&
 #ifdef CONFIG_COMPAT
-		    data != PSW_MASK_MERGE(psw_user32_bits, data) &&
+		    data != PSW_MASK_MERGE(PSW_USER32_BITS, data) &&
 #endif
-		    data != PSW_MASK_MERGE(psw_user_bits, data))
+		    data != PSW_MASK_MERGE(PSW_USER_BITS, data))
 			/* Invalid psw mask. */
 			return -EINVAL;
 #ifndef CONFIG_64BIT
@@ -307,7 +309,7 @@ do_ptrace_normal(struct task_struct *child, long request, long addr, long data)
 		copied = access_process_vm(child, addr, &tmp, sizeof(tmp), 0);
 		if (copied != sizeof(tmp))
 			return -EIO;
-		return put_user(tmp, (unsigned long __force __user *) data);
+		return put_user(tmp, (unsigned long __user *) data);
 
 	case PTRACE_PEEKUSR:
 		/* read the word at location addr in the USER area. */
@@ -329,7 +331,7 @@ do_ptrace_normal(struct task_struct *child, long request, long addr, long data)
 
 	case PTRACE_PEEKUSR_AREA:
 	case PTRACE_POKEUSR_AREA:
-		if (copy_from_user(&parea, (void __force __user *) addr,
+		if (copy_from_user(&parea, (void __user *) addr,
 							sizeof(parea)))
 			return -EFAULT;
 		addr = parea.kernel_addr;
@@ -339,11 +341,10 @@ do_ptrace_normal(struct task_struct *child, long request, long addr, long data)
 			if (request == PTRACE_PEEKUSR_AREA)
 				ret = peek_user(child, addr, data);
 			else {
-				addr_t utmp;
-				if (get_user(utmp,
-					     (addr_t __force __user *) data))
+				addr_t tmp;
+				if (get_user (tmp, (addr_t __user *) data))
 					return -EFAULT;
-				ret = poke_user(child, addr, utmp);
+				ret = poke_user(child, addr, tmp);
 			}
 			if (ret)
 				return ret;
@@ -393,7 +394,7 @@ peek_user_emu31(struct task_struct *child, addr_t addr, addr_t data)
 		if (addr == (addr_t) &dummy32->regs.psw.mask) {
 			/* Fake a 31 bit psw mask. */
 			tmp = (__u32)(task_pt_regs(child)->psw.mask >> 32);
-			tmp = PSW32_MASK_MERGE(psw32_user_bits, tmp);
+			tmp = PSW32_MASK_MERGE(PSW32_USER_BITS, tmp);
 		} else if (addr == (addr_t) &dummy32->regs.psw.addr) {
 			/* Fake a 31 bit psw address. */
 			tmp = (__u32) task_pt_regs(child)->psw.addr |
@@ -468,11 +469,11 @@ poke_user_emu31(struct task_struct *child, addr_t addr, addr_t data)
 		 */
 		if (addr == (addr_t) &dummy32->regs.psw.mask) {
 			/* Build a 64 bit psw mask from 31 bit mask. */
-			if (tmp != PSW32_MASK_MERGE(psw32_user_bits, tmp))
+			if (tmp != PSW32_MASK_MERGE(PSW32_USER_BITS, tmp))
 				/* Invalid psw mask. */
 				return -EINVAL;
 			task_pt_regs(child)->psw.mask =
-				PSW_MASK_MERGE(psw_user32_bits, (__u64) tmp << 32);
+				PSW_MASK_MERGE(PSW_USER32_BITS, (__u64) tmp << 32);
 		} else if (addr == (addr_t) &dummy32->regs.psw.addr) {
 			/* Build a 64 bit psw address from 31 bit address. */
 			task_pt_regs(child)->psw.addr =
@@ -549,7 +550,7 @@ do_ptrace_emu31(struct task_struct *child, long request, long addr, long data)
 		copied = access_process_vm(child, addr, &tmp, sizeof(tmp), 0);
 		if (copied != sizeof(tmp))
 			return -EIO;
-		return put_user(tmp, (unsigned int __force __user *) data);
+		return put_user(tmp, (unsigned int __user *) data);
 
 	case PTRACE_PEEKUSR:
 		/* read the word at location addr in the USER area. */
@@ -570,7 +571,7 @@ do_ptrace_emu31(struct task_struct *child, long request, long addr, long data)
 
 	case PTRACE_PEEKUSR_AREA:
 	case PTRACE_POKEUSR_AREA:
-		if (copy_from_user(&parea, (void __force __user *) addr,
+		if (copy_from_user(&parea, (void __user *) addr,
 							sizeof(parea)))
 			return -EFAULT;
 		addr = parea.kernel_addr;
@@ -580,11 +581,10 @@ do_ptrace_emu31(struct task_struct *child, long request, long addr, long data)
 			if (request == PTRACE_PEEKUSR_AREA)
 				ret = peek_user_emu31(child, addr, data);
 			else {
-				__u32 utmp;
-				if (get_user(utmp,
-					     (__u32 __force __user *) data))
+				__u32 tmp;
+				if (get_user (tmp, (__u32 __user *) data))
 					return -EFAULT;
-				ret = poke_user_emu31(child, addr, utmp);
+				ret = poke_user_emu31(child, addr, tmp);
 			}
 			if (ret)
 				return ret;
@@ -595,19 +595,17 @@ do_ptrace_emu31(struct task_struct *child, long request, long addr, long data)
 		return 0;
 	case PTRACE_GETEVENTMSG:
 		return put_user((__u32) child->ptrace_message,
-				(unsigned int __force __user *) data);
+				(unsigned int __user *) data);
 	case PTRACE_GETSIGINFO:
 		if (child->last_siginfo == NULL)
 			return -EINVAL;
-		return copy_siginfo_to_user32((compat_siginfo_t
-					       __force __user *) data,
+		return copy_siginfo_to_user32((compat_siginfo_t __user *) data,
 					      child->last_siginfo);
 	case PTRACE_SETSIGINFO:
 		if (child->last_siginfo == NULL)
 			return -EINVAL;
 		return copy_siginfo_from_user32(child->last_siginfo,
-						(compat_siginfo_t
-						 __force __user *) data);
+						(compat_siginfo_t __user *) data);
 	}
 	return ptrace_request(child, request, addr, data);
 }

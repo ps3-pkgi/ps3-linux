@@ -27,7 +27,6 @@
 #include <linux/slab.h>
 #include <linux/interrupt.h>
 #include <linux/kernel_stat.h>
-#include <linux/kernel.h>
 #include <linux/random.h>
 
 #include <asm/i8259.h>
@@ -290,7 +289,7 @@ msc_irqmap_t __initdata msc_irqmap[] = {
 	{MSC01C_INT_TMR,		MSC01_IRQ_EDGE, 0},
 	{MSC01C_INT_PCI,		MSC01_IRQ_LEVEL, 0},
 };
-int __initdata msc_nr_irqs = ARRAY_SIZE(msc_irqmap);
+int __initdata msc_nr_irqs = sizeof(msc_irqmap)/sizeof(msc_irqmap_t);
 
 msc_irqmap_t __initdata msc_eicirqmap[] = {
 	{MSC01E_INT_SW0,		MSC01_IRQ_LEVEL, 0},
@@ -304,14 +303,14 @@ msc_irqmap_t __initdata msc_eicirqmap[] = {
 	{MSC01E_INT_PERFCTR,		MSC01_IRQ_LEVEL, 0},
 	{MSC01E_INT_CPUCTR,		MSC01_IRQ_LEVEL, 0}
 };
-int __initdata msc_nr_eicirqs = ARRAY_SIZE(msc_eicirqmap);
+int __initdata msc_nr_eicirqs = sizeof(msc_eicirqmap)/sizeof(msc_irqmap_t);
 
 void __init arch_init_irq(void)
 {
 	init_i8259_irqs();
 
 	if (!cpu_has_veic)
-		mips_cpu_irq_init();
+		mips_cpu_irq_init (MIPSCPU_INT_BASE);
 
         switch(mips_revision_corid) {
         case MIPS_REVISION_CORID_CORE_MSC:

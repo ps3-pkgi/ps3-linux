@@ -10,9 +10,8 @@
  * scatterlist interface.  Changed LGPL to GPL per section 3 of the LGPL.
  *
  * s390 Version:
- *   Copyright IBM Corp. 2003
- *   Author(s): Thomas Spatzier
- *		Jan Glauber (jan.glauber@de.ibm.com)
+ *   Copyright (C) 2003 IBM Deutschland GmbH, IBM Corporation
+ *   Author(s): Thomas Spatzier (tspat@de.ibm.com)
  *
  * Derived from "crypto/des.c"
  *   Copyright (c) 1992 Dana L. How.
@@ -31,7 +30,6 @@
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/crypto.h>
-#include "crypto_des.h"
 
 #define ROR(d,c,o)	((d) = (d) >> (c) | (d) << (o))
 
