@@ -646,6 +646,8 @@ struct ps3av_pkt_avb_param {
 struct ps3av {
 	int available;
 	struct semaphore sem;
+	struct semaphore ping;
+	struct semaphore pong;
 	struct mutex mutex;
 	int open_count;
 	struct ps3_vuart_port_device *dev;
@@ -657,6 +659,7 @@ struct ps3av {
 	u32 head[PS3AV_HEAD_MAX];
 	u32 audio_port;
 	int ps3av_mode;
+	int ps3av_mode_old;
 };
 
 /** command status **/

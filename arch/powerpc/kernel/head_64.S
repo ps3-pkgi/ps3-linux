@@ -626,7 +626,7 @@ system_call_pSeries:
 /*** pSeries interrupt support ***/
 
 	/* moved from 0xf00 */
-	MASKABLE_EXCEPTION_PSERIES(., performance_monitor)
+	STD_EXCEPTION_PSERIES(., performance_monitor)
 
 /*
  * An interrupt came in while soft-disabled; clear EE in SRR1,

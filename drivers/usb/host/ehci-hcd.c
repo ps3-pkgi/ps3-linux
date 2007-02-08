@@ -388,6 +388,7 @@ static void ehci_stop (struct usb_hcd *hcd)
 	/* let companion controllers work when we aren't */
 	ehci_writel(ehci, 0, &ehci->regs->configured_flag);
 
+	remove_companion_file(ehci);
 	remove_debug_files (ehci);
 
 	/* root hub is shut down separately (first, when possible) */
@@ -500,6 +501,9 @@ static int ehci_run (struct usb_hcd *hcd)
 	u32			temp;
 	u32			hcc_params;
 
+	hcd->uses_new_polling = 1;
+	hcd->poll_rh = 0;
+
 	/* EHCI spec section 4.1 */
 	if ((retval = ehci_reset(ehci)) != 0) {
 		ehci_mem_cleanup(ehci);
@@ -563,6 +567,7 @@ static int ehci_run (struct usb_hcd *hcd)
 	 * since the class device isn't created that early.
 	 */
 	create_debug_files(ehci);
+	create_companion_file(ehci);
 
 	return 0;
 }
@@ -572,7 +577,7 @@ static int ehci_run (struct usb_hcd *hcd)
 static irqreturn_t ehci_irq (struct usb_hcd *hcd)
 {
 	struct ehci_hcd		*ehci = hcd_to_ehci (hcd);
-	u32			status;
+	u32			status, pcd_status = 0;
 	int			bh;
 
 	spin_lock (&ehci->lock);
@@ -622,6 +627,7 @@ static irqreturn_t ehci_irq (struct usb_hcd *hcd)
 	/* remote wakeup [4.3.1] */
 	if (status & STS_PCD) {
 		unsigned	i = HCS_N_PORTS (ehci->hcs_params);
+		pcd_status = status;
 
 		/* resume root hub? */
 		if (!(ehci_readl(ehci, &ehci->regs->command) & CMD_RUN))
@@ -668,6 +674,8 @@ dead:
 	if (bh)
 		ehci_work (ehci);
 	spin_unlock (&ehci->lock);
+	if (pcd_status & STS_PCD)
+		usb_hcd_poll_rh_status(hcd);
 	return IRQ_HANDLED;
 }
 

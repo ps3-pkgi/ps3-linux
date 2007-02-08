@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.20
-# Tue Feb  6 14:47:43 2007
+# Thu Feb  8 12:39:34 2007
 #
 CONFIG_PPC64=y
 CONFIG_64BIT=y
@@ -131,6 +131,7 @@ CONFIG_PPC_MULTIPLATFORM=y
 # CONFIG_PPC_PSERIES is not set
 # CONFIG_PPC_ISERIES is not set
 # CONFIG_PPC_MPC52xx is not set
+# CONFIG_PPC_MPC5200 is not set
 # CONFIG_PPC_PMAC is not set
 # CONFIG_PPC_MAPLE is not set
 # CONFIG_PPC_PASEMI is not set
@@ -138,6 +139,7 @@ CONFIG_PPC_CELL=y
 # CONFIG_PPC_CELL_NATIVE is not set
 # CONFIG_PPC_IBM_CELL_BLADE is not set
 CONFIG_PPC_PS3=y
+# CONFIG_PPC_CELLEB is not set
 # CONFIG_U3_DART is not set
 # CONFIG_PPC_RTAS is not set
 # CONFIG_MMIO_NVRAM is not set
@@ -667,6 +669,7 @@ CONFIG_LOGO_LINUX_CLUT224=y
 # HID Devices
 #
 CONFIG_HID=y
+# CONFIG_HID_DEBUG is not set
 
 #
 # USB support
@@ -681,7 +684,6 @@ CONFIG_USB_DEBUG=y
 # Miscellaneous USB options
 #
 # CONFIG_USB_DEVICEFS is not set
-# CONFIG_USB_BANDWIDTH is not set
 # CONFIG_USB_DYNAMIC_MINORS is not set
 # CONFIG_USB_OTG is not set
 
@@ -746,6 +748,7 @@ CONFIG_USB_HID=y
 # CONFIG_USB_ATI_REMOTE2 is not set
 # CONFIG_USB_KEYSPAN_REMOTE is not set
 # CONFIG_USB_APPLETOUCH is not set
+# CONFIG_USB_GTCO is not set
 
 #
 # USB Imaging devices
@@ -1074,6 +1077,8 @@ CONFIG_PPC_EARLY_DEBUG=y
 # CONFIG_PPC_EARLY_DEBUG_RTAS_CONSOLE is not set
 # CONFIG_PPC_EARLY_DEBUG_MAPLE is not set
 # CONFIG_PPC_EARLY_DEBUG_ISERIES is not set
+# CONFIG_PPC_EARLY_DEBUG_PAS_REALMODE is not set
+# CONFIG_PPC_EARLY_DEBUG_BEAT is not set
 
 #
 # Security options
