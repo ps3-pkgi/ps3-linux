@@ -34,11 +34,6 @@
 #define DBG(fmt...) do{if(0)printk(fmt);}while(0)
 #endif
 
-unsigned long ps3_legacy_virq_to_outlet(unsigned int virq)
-{
-	return virq_to_hw(virq);
-}
-
 /**
  * struct ps3_bmp - a per cpu irq status and mask bitmap structure
  * @status: 256 bit status bitmap indexed by plug
