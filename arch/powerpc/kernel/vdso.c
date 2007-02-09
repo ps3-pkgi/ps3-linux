@@ -38,7 +38,8 @@
 
 #include "setup.h"
 
-#undef DEBUG
+
+#define DEBUG
 
 #ifdef DEBUG
 #define DBG(fmt...) printk(fmt)
@@ -49,8 +50,8 @@
 /* Max supported size for symbol names */
 #define MAX_SYMNAME	64
 
-#define VDSO32_MAXPAGES	(((0x3000 + PAGE_MASK) >> PAGE_SHIFT) + 2)
-#define VDSO64_MAXPAGES	(((0x3000 + PAGE_MASK) >> PAGE_SHIFT) + 2)
+#define VDSO32_MAXPAGES	(((unsigned int)(0x3000 + PAGE_MASK) >> PAGE_SHIFT) + 2)
+#define VDSO64_MAXPAGES	(((unsigned int)(0x3000 + PAGE_MASK) >> PAGE_SHIFT) + 2)
 
 extern char vdso32_start, vdso32_end;
 static void *vdso32_kbase = &vdso32_start;
@@ -690,6 +691,10 @@ void __init vdso_init(void)
 	 * Calculate the size of the 64 bits vDSO
 	 */
 	vdso64_pages = (&vdso64_end - &vdso64_start) >> PAGE_SHIFT;
+
+	printk("%s:%d: vdso64_end %u, vdso64_start %u\n", 
+		__func__, __LINE__, vdso64_end, vdso64_start);
+
 	DBG("vdso64_kbase: %p, 0x%x pages\n", vdso64_kbase, vdso64_pages);
 #endif /* CONFIG_PPC64 */
 
@@ -718,6 +723,37 @@ void __init vdso_init(void)
 #endif
 		return;
 	}
+
+	printk("%s:%d: PAGE_MASK = %xh\n", __func__, __LINE__, 
+		(unsigned int)(PAGE_MASK));
+
+	printk("%s:%d: PAGE_MASK = %lxh\n", __func__, __LINE__, 
+		(unsigned long)(PAGE_MASK));
+
+	printk("%s:%d: PAGE_SHIFT = %u\n", __func__, __LINE__,
+		(unsigned int)PAGE_SHIFT);
+
+
+	printk("%s:%d: (unsigned int)(0x3000 + PAGE_MASK) = %xh\n", __func__, __LINE__,
+		(unsigned int)(0x3000 + PAGE_MASK));
+
+	printk("%s:%d: ((0x3000 + PAGE_MASK) >> PAGE_SHIFT) = %xh\n", __func__, __LINE__,
+		(unsigned int)((0x3000 + PAGE_MASK) >> PAGE_SHIFT));
+
+	printk("%s:%d: (((0x3000 + PAGE_MASK) >> PAGE_SHIFT) + 2) = %xh\n", __func__, __LINE__,
+		(unsigned int)(((0x3000 + PAGE_MASK) >> PAGE_SHIFT) + 2));
+
+	printk("%s:%d: ((unsigned long)((unsigned long)(0x3000UL + (unsigned long)PAGE_MASK) >> PAGE_SHIFT) + 2) = %lxh\n", __func__, __LINE__,
+		((unsigned long)((unsigned long)(0x3000UL + (unsigned long)PAGE_MASK) >> PAGE_SHIFT) + 2));
+
+	printk("%s:%d: (unsigned int)((unsigned int)(0x3000 + PAGE_MASK) >> PAGE_SHIFT) = %xh\n", __func__, __LINE__,
+		(unsigned int)((unsigned int)(0x3000 + PAGE_MASK) >> PAGE_SHIFT));
+
+
+
+
+	printk("%s:%d: vdso32_pages %u, VDSO32_MAXPAGES %xh\n", 
+		__func__, __LINE__, vdso32_pages, VDSO32_MAXPAGES, VDSO32_MAXPAGES);
 
 	/* Make sure pages are in the correct state */
 	BUG_ON(vdso32_pages + 2 > VDSO32_MAXPAGES);
