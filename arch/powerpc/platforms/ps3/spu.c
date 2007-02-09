@@ -28,6 +28,7 @@
 #include <asm/spu_priv1.h>
 #include <asm/lv1call.h>
 
+#include "../cell/spufs/spufs.h"
 #include "platform.h"
 
 /* spu_management_ops */
@@ -447,10 +448,23 @@ static int __init ps3_enumerate_spus(int (*fn)(void *data))
 	return num_resource_id;
 }
 
+static int ps3_enable_spu(struct spu_context *ctx)
+{
+	return -ENOSYS;
+}
+
+static int ps3_disable_spu(struct spu_context *ctx)
+{
+	ctx->ops->runcntl_stop(ctx);
+	return -ENOSYS;
+}
+
 const struct spu_management_ops spu_management_ps3_ops = {
 	.enumerate_spus = ps3_enumerate_spus,
 	.create_spu = ps3_create_spu,
 	.destroy_spu = ps3_destroy_spu,
+	.enable_spu = ps3_enable_spu,
+	.disable_spu = ps3_disable_spu,
 };
 
 /* spu_priv1_ops */
