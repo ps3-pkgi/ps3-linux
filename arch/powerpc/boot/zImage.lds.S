@@ -2,6 +2,12 @@ OUTPUT_ARCH(powerpc:common)
 ENTRY(_zimage_start)
 SECTIONS
 {
+  . = (0);
+  .vectors :
+  {
+    *(.vectors)
+  }
+
   . = (4*1024*1024);
   _start = .;
   .text      :

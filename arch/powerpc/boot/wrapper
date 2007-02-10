@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/sh -x
 
 # Copyright (C) 2006 Paul Mackerras, IBM Corporation <paulus@samba.org>
 # This program may be used under the terms of version 2 of the GNU
@@ -113,7 +113,6 @@ if [ -z "$kernel" ]; then
     kernel=vmlinux
 fi
 
-crt0=$object/crt0.o
 platformo=$object/"$platform".o
 lds=$object/zImage.lds
 ext=strip
@@ -138,14 +137,8 @@ miboot|uboot)
     ksection=image
     isection=initrd
     ;;
-ps3rom)
-    crt0=$object/ps3crt0.o
-    lds=$object/zImage.ps3rom.lds
-#    ext=bin
-#    objflags="-O binary"
-#    tmp="$ofile"
-#    ksection=image
-#    isection=initrd
+ps3)
+    platformo="$object/ps3-head.o $object/ps3.o"
     ;;
 esac
 
@@ -200,8 +193,8 @@ if [ -n "$dtb" ]; then
 fi
 
 if [ "$platform" != "miboot" ]; then
-    ${CROSS}ld -m elf32ppc -T $lds -o "$ofile" \
-	$crt0 $platformo $tmp $object/wrapper.a
+    ${CROSS}ld -m elf32ppc -Map "$ofile.map" -T $lds -o "$ofile" \
+	$object/crt0.o $platformo $tmp $object/wrapper.a
     rm $tmp
 fi
 
@@ -213,5 +206,8 @@ pseries|chrp)
 pmaccoff)
     ${CROSS}objcopy -O aixcoff-rs6000 --set-start 0x500000 "$ofile"
     $object/hack-coff "$ofile"
+    ;;
+ps3)
+    ${CROSS}objcopy -O binary "$ofile" "$ofile".rom
     ;;
 esac

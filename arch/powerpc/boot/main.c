@@ -290,6 +290,39 @@ static void set_cmdline(char *buf)
 		setprop(devp, "bootargs", buf, strlen(buf) + 1);
 }
 
+static volatile u32 smp_secondary_flag = 0;
+
+/**
+ * smp_secondary_release - Release any secondary cpus.
+ */
+
+void smp_secondary_release(void)
+{
+	smp_secondary_flag = 1;
+}
+
+/**
+ * smp_secondary_hold - Hold any secondary cpus.
+ *
+ * Called from the early entry code
+ */
+
+void smp_secondary_hold(void)
+{
+	kernel_entry_t kentry;
+
+	while(!smp_secondary_flag);
+
+	kentry = (volatile kernel_entry_t) vmlinux.addr;
+
+	kentry(0, 0, NULL);
+
+	/* console closed so printf below may not work */
+	printf("Error: Linux kernel (secondary) returned to zImage boot "
+		"wrapper!\n\r");
+	exit();
+}
+
 struct platform_ops platform_ops;
 struct dt_ops dt_ops;
 struct console_ops console_ops;
@@ -339,6 +372,8 @@ void start(unsigned long a1, unsigned long a2, void *promptr, void *sp)
 
 	if (console_ops.close)
 		console_ops.close();
+
+	smp_secondary_release();
 
 	kentry = (kernel_entry_t) vmlinux.addr;
 	if (ft_addr)

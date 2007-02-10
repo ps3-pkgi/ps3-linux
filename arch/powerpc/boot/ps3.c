@@ -1,8 +1,8 @@
 /*
- *  PS3 Platform bootrom support.
+ *  PS3 bootwrapper support.
  *
- *  Copyright (C) 2006 Sony Computer Entertainment Inc.
- *  Copyright 2006 Sony Corp.
+ *  Copyright (C) 2007 Sony Computer Entertainment Inc.
+ *  Copyright 2007 Sony Corp.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -17,6 +17,7 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
+
 #include <stdarg.h>
 #include <stddef.h>
 #include "types.h"
@@ -32,3 +33,4 @@ int platform_init(void *promptr, char *dt_blob_start, char *dt_blob_end)
 {
 	return 0;
 }
+

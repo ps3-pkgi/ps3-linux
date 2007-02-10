@@ -42,7 +42,8 @@ $(addprefix $(obj)/,$(zlib) main.o): $(addprefix $(obj)/,$(zliblinuxheader)) \
 
 src-wlib := string.S stdio.c main.c flatdevtree.c flatdevtree_misc.c \
 		ns16550.c serial.c simple_alloc.c div64.S util.S $(zlib)
-src-plat := of.c ps3rom.c ps3crt0.S
+src-plat-$(CONFIG_PPC_PS3) += ps3-head.S ps3.c
+src-plat := of.c $(src-plat-y)
 src-boot := crt0.S $(src-wlib) $(src-plat) empty.c
 
 src-boot := $(addprefix $(obj)/, $(src-boot))
@@ -71,12 +72,11 @@ $(addprefix $(obj)/,$(zliblinuxheader)): $(obj)/%: $(srctree)/include/linux/%
 $(obj)/empty.c:
 	@touch $@
 
-$(obj)/zImage.lds $(obj)/zImage.coff.lds $(obj)/zImage.ps3rom.lds: $(obj)/%: $(srctree)/$(src)/%.S
+$(obj)/zImage.lds $(obj)/zImage.coff.lds: $(obj)/%: $(srctree)/$(src)/%.S
 	@cp $< $@
 
 clean-files := $(zlib) $(zlibheader) $(zliblinuxheader) \
-		empty.c zImage zImage.coff.lds zImage.lds zImage.sandpoint \
-		 zImage.ps3rom.lds
+		empty.c zImage zImage.coff.lds zImage.lds zImage.sandpoint
 
 quiet_cmd_bootcc = BOOTCC  $@
       cmd_bootcc = $(CROSS32CC) -Wp,-MD,$(depfile) $(BOOTCFLAGS) -c -o $@ $<
@@ -98,8 +98,7 @@ $(obj)/wrapper.a: $(obj-wlib)
 hostprogs-y	:= addnote addRamDisk hack-coff mktree
 
 extra-y		:= $(obj)/crt0.o $(obj)/wrapper.a $(obj-plat) $(obj)/empty.o \
-		   $(obj)/zImage.lds $(obj)/zImage.coff.lds \
-		   $(obj)/zImage.ps3rom.lds
+		   $(obj)/zImage.lds $(obj)/zImage.coff.lds
 
 wrapper		:=$(srctree)/$(src)/wrapper
 wrapperbits	:= $(extra-y) $(addprefix $(obj)/,addnote hack-coff mktree)
@@ -116,7 +115,7 @@ endif
 endif
 
 quiet_cmd_wrap	= WRAP    $@
-      cmd_wrap	=$(CONFIG_SHELL) $(wrapper) -c -o $@ -p $2 $(CROSSWRAP) vmlinux
+      cmd_wrap	=$(CONFIG_SHELL) -x $(wrapper) -c -o $@ -p $2 $(CROSSWRAP) vmlinux
 quiet_cmd_wrap_initrd = WRAP    $@
       cmd_wrap_initrd =$(CONFIG_SHELL) $(wrapper) -c -o $@ -p $2 $(CROSSWRAP) \
 				-i $(obj)/ramdisk.image.gz vmlinux
@@ -151,14 +150,13 @@ $(obj)/zImage.miboot: vmlinux $(wrapperbits)
 $(obj)/zImage.initrd.miboot: vmlinux $(wrapperbits)
 	$(call cmd,wrap_initrd,miboot)
 
-$(obj)/zImage.ps3: vmlinux
+$(obj)/zImage.ps3: vmlinux $(wrapper) $(wrapperbits)
+	$(call cmd,wrap,ps3 -s $(srctree)/$(src)/dts/ps3.dts)
+	cp -f $@ $@.wrap
 	$(STRIP) -s -R .comment $< -o $@
 
-$(obj)/zImage.initrd.ps3: vmlinux
-	@echo "  WARNING zImage.initrd.ps3 not supported (yet)"
-
-$(obj)/zImage.ps3rom: vmlinux $(extra-y)
-	$(call cmd,wrap,ps3rom -s $(srctree)/$(src)/dts/ps3.dts)
+$(obj)/zImage.initrd.ps3: vmlinux  $(wrapper) $(wrapperbits)
+	$(call cmd,wrap_initrd,ps3 -s $(srctree)/$(src)/dts/ps3.dts)
 
 $(obj)/uImage: vmlinux $(wrapperbits)
 	$(call cmd,wrap,uboot)

@@ -68,10 +68,15 @@
  *   1. The MMU is on (as it always is for iSeries)
  *   2. The kernel is entered at system_reset_iSeries
  *
- *  For ps3:
+ *  For ps3 1st stage:
  *   1. The MMU is off
  *   2. The kernel is loaded at lpar address zero
- *   3. The kernel is entered at 0x100 (System Reset exception)
+ *   3. The kernel is entered by both threads at 0x100 (System Reset)
+ *
+ *  For ps3 2nd stage:
+ *   1. The MMU is off
+ *   2. The kernel is entered at __start
+ *   3. Other details TBD
  */
 
 	.text
@@ -80,8 +85,13 @@ _stext:
 _GLOBAL(__start)
 	/* NOP this out unconditionally */
 BEGIN_FTR_SECTION
+/*
+ * This hack puts a branch to the PS3 1st stage startup routine at the
+ * PS3 2nd stage entry.  This allows you to use the installed bootloader
+ * to load your 1st stage bootloader image as a 2nd stage image for testing.
+ */
 #if defined(CONFIG_PPC_PS3)
-	b	.__start_initialization_ps3
+	b	.__start_ps3_stage1
 #else
 	b	.__start_initialization_multiplatform
 #endif
@@ -491,8 +501,8 @@ END_FTR_SECTION_IFSET(CPU_FTR_CAN_NAP)
 	.globl __start_interrupts
 __start_interrupts:
 
-#if defined(CONFIG_PPC_PS3_ROMBOOT)
-	b .__start_initialization_ps3
+#if defined(CONFIG_PPC_PS3)
+	b .__start_ps3_stage1
 #else
 	STD_EXCEPTION_PSERIES(0x100, system_reset)
 #endif
@@ -1650,26 +1660,24 @@ _STATIC(__start_initialization_iSeries)
 	b	.start_here_common
 #endif /* CONFIG_PPC_ISERIES */
 
-#if defined(CONFIG_PPC_PS3_ROMBOOT)
-_STATIC(__start_initialization_ps3)
-	/*
-	 * We start up with both threads running.  Start up with thread 0
-	 * and send the other off to __secondary_hold with the Linux processor
-	 * number in r3.
-	 */
+#if defined(CONFIG_PPC_PS3)
+/*
+ * PS3 starts up with both threads running.  We continue with thread 0 and send
+ * the other off to __secondary_hold with the thread number in r3.
+ */
+
+_STATIC(__start_ps3_stage1)
 	mfspr	r3, SPRN_CTRLF
 	cntlzw.	r3, r3
 	beq	1f
 	b	.__secondary_hold
 1:
-
-	/* current thread is thread 0 */
-	li	r5, 0	/* r5 == NULL -> kexec style entry. */
+	li	r5, 0				/* kexec style entry. */
 	LOAD_REG_IMMEDIATE(r3, dt_blob_start)
-	clrldi	r3, r3, 2	/* strip top 2 bits (convert vaddr to paddr) */
-	li	r4, 0	/* r4 is a physical pointer to the kernel itself */
+	clrldi	r3, r3, 2			/* DT physical addr */
+	li	r4, 0				/* kernel physical addr */
 	b .__start_initialization_multiplatform
-#endif /* defined(CONFIG_PPC_PS3_ROMBOOT) */
+#endif
 
 _STATIC(__mmu_off)
 	mfmsr	r3
