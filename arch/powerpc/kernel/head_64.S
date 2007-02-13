@@ -67,16 +67,6 @@
  *  For iSeries:
  *   1. The MMU is on (as it always is for iSeries)
  *   2. The kernel is entered at system_reset_iSeries
- *
- *  For ps3 1st stage:
- *   1. The MMU is off
- *   2. The kernel is loaded at lpar address zero
- *   3. The kernel is entered by both threads at 0x100 (System Reset)
- *
- *  For ps3 2nd stage:
- *   1. The MMU is off
- *   2. The kernel is entered at __start
- *   3. Other details TBD
  */
 
 	.text
@@ -1578,7 +1568,6 @@ _GLOBAL(generic_secondary_smp_init)
 	
 	/* turn on 64-bit mode */
 	bl	.enable_64b_mode
-	isync
 
 	/* Set up a paca value for this processor. Since we have the
 	 * physical cpu id in r24, we need to search the pacas to find
@@ -1892,7 +1881,6 @@ __secondary_start_pmac_0:
 _GLOBAL(pmac_secondary_start)
 	/* turn on 64-bit mode */
 	bl	.enable_64b_mode
-	isync
 
 	/* Copy some CPU settings from CPU 0 */
 	bl	.__restore_cpu_ppc970

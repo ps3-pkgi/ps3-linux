@@ -17,7 +17,7 @@
  *  2 of the License, or (at your option) any later version.
  *
  */
-#define DEBUG
+
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -384,9 +384,6 @@ void __init mem_init(void)
 		initsize >> 10);
 
 	mem_init_done = 1;
-
-	/* Initialize the vDSO */
-	vdso_init();
 }
 
 /*

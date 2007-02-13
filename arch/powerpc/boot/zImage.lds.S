@@ -2,11 +2,7 @@ OUTPUT_ARCH(powerpc:common)
 ENTRY(_zimage_start)
 SECTIONS
 {
-  . = (0);
-  .vectors :
-  {
-    *(.vectors)
-  }
+  .vectors 0 : { *(.vectors) }
 
   . = (4*1024*1024);
   _start = .;

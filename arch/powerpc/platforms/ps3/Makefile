@@ -2,10 +2,12 @@ obj-y += setup.o mm.o time.o hvcall.o htab.o repository.o
 obj-y += interrupt.o exports.o os-area.o
 obj-y += system-bus.o
 obj-y += device-init.o
-obj-y += dt.o
 
 obj-$(CONFIG_SMP) += smp.o
 obj-$(CONFIG_SPU_BASE) += spu.o
+
+# There is no bootwrapper so link the dt directly into the kernel image.
+obj-y += dt.o
 
 quiet_cmd_dtc = DTC     $@
       cmd_dtc = dtc -b 0 -O asm $< > $@.tmp && mv $@.tmp $@

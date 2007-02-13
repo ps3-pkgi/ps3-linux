@@ -25,13 +25,17 @@ all: $(obj)/zImage
 HOSTCC		:= gcc
 BOOTCFLAGS	:= $(HOSTCFLAGS) -fno-builtin -nostdinc -isystem \
 		   $(shell $(CROSS32CC) -print-file-name=include) -fPIC
-BOOTAFLAGS	:= -D__ASSEMBLY__ $(BOOTCFLAGS) -traditional -nostdinc
+BOOTAFLAGS	:= -D__ASSEMBLY__ $(BOOTCFLAGS) -nostdinc
 
 ifeq ($(call cc-option-yn, -fstack-protector),y)
 BOOTCFLAGS	+= -fno-stack-protector
 endif
 
 BOOTCFLAGS	+= -I$(obj) -I$(srctree)/$(obj)
+BOOTAFLAGS	+= -I$(obj) -I$(srctree)/$(obj)
+
+src-plat-$(CONFIG_PPC_PS3) += ps3-head.S ps3.c ps3-hvcall.S
+inc-plat-$(CONFIG_PPC_PS3) += lv1call.h
 
 zlib       := inffast.c inflate.c inftrees.c
 zlibheader := inffast.h inffixed.h inflate.h inftrees.h infutil.h
@@ -42,7 +46,6 @@ $(addprefix $(obj)/,$(zlib) main.o): $(addprefix $(obj)/,$(zliblinuxheader)) \
 
 src-wlib := string.S stdio.c main.c flatdevtree.c flatdevtree_misc.c \
 		ns16550.c serial.c simple_alloc.c div64.S util.S $(zlib)
-src-plat-$(CONFIG_PPC_PS3) += ps3-head.S ps3.c
 src-plat := of.c $(src-plat-y)
 src-boot := crt0.S $(src-wlib) $(src-plat) empty.c
 
@@ -50,6 +53,7 @@ src-boot := $(addprefix $(obj)/, $(src-boot))
 obj-boot := $(addsuffix .o, $(basename $(src-boot)))
 obj-wlib := $(addsuffix .o, $(basename $(addprefix $(obj)/, $(src-wlib))))
 obj-plat := $(addsuffix .o, $(basename $(addprefix $(obj)/, $(src-plat))))
+inc-plat := $(addprefix $(obj)/,$(inc-plat-y))
 
 quiet_cmd_copy_zlib = COPY    $@
       cmd_copy_zlib = sed "s@__attribute_used__@@;s@<linux/\([^>]\+\).*@\"\1\"@" $< > $@
@@ -67,6 +71,9 @@ $(addprefix $(obj)/,$(zlibheader)): $(obj)/%: $(srctree)/lib/zlib_inflate/%
 	$(call cmd,copy_zlibheader)
 
 $(addprefix $(obj)/,$(zliblinuxheader)): $(obj)/%: $(srctree)/include/linux/%
+	$(call cmd,copy_zliblinuxheader)
+
+$(addprefix $(obj)/,$(inc-plat-y)): $(obj)/%: $(srctree)/include/asm-powerpc/%
 	$(call cmd,copy_zliblinuxheader)
 
 $(obj)/empty.c:
@@ -97,8 +104,8 @@ $(obj)/wrapper.a: $(obj-wlib)
 
 hostprogs-y	:= addnote addRamDisk hack-coff mktree
 
-extra-y		:= $(obj)/crt0.o $(obj)/wrapper.a $(obj-plat) $(obj)/empty.o \
-		   $(obj)/zImage.lds $(obj)/zImage.coff.lds
+extra-y		:= $(obj)/crt0.o $(obj)/wrapper.a $(inc-plat) $(obj-plat) \
+		   $(obj)/empty.o $(obj)/zImage.lds $(obj)/zImage.coff.lds
 
 wrapper		:=$(srctree)/$(src)/wrapper
 wrapperbits	:= $(extra-y) $(addprefix $(obj)/,addnote hack-coff mktree)

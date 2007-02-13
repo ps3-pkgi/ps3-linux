@@ -138,7 +138,7 @@ miboot|uboot)
     isection=initrd
     ;;
 ps3)
-    platformo="$object/ps3-head.o $object/ps3.o"
+    platformo="$object/ps3-head.o $object/ps3-hvcall.o $object/ps3.o"
     ;;
 esac
 
@@ -208,6 +208,8 @@ pmaccoff)
     $object/hack-coff "$ofile"
     ;;
 ps3)
-    ${CROSS}objcopy -O binary "$ofile" "$ofile".rom
+    # The ps3's loader supports gziped binary images.
+    ${CROSS}objcopy -O binary "$ofile" "$ofile.rom"
+    gzip -f -9 "$ofile.rom"
     ;;
 esac

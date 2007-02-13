@@ -41,6 +41,15 @@
 	.globl __start_stage1
 __start_stage1:
 
+	/* switch to 32-bit mode */
+
+	mfmsr	r9
+	clrldi	r9,r9,1
+	mtmsrd	r9
+	nop
+
+	/* test thread number and branch */
+
 	mfspr	r3, 0x88
 	cntlzw.	r3, r3
 	beq	1f
