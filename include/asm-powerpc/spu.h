@@ -130,7 +130,6 @@ struct spu {
 	struct spu_runqueue *rq;
 	unsigned long long timestamp;
 	pid_t pid;
-	int prio;
 	spinlock_t register_lock;
 
 	void (* wbox_callback)(struct spu *spu);

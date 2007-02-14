@@ -24,6 +24,7 @@
 #include <linux/workqueue.h>
 #include <asm/ps3.h>
 
+#include <asm/firmware.h>
 #include <asm/lv1call.h>
 #include <asm/bitops.h>
 
@@ -1028,9 +1029,14 @@ int __init ps3_vuart_bus_init(void)
 	int result;
 
 	pr_debug("%s:%d:\n", __func__, __LINE__);
+
+	if (!firmware_has_feature(FW_FEATURE_PS3_LV1))
+		return 0;
+
 	init_MUTEX(&vuart_bus_priv.probe_mutex);
 	result = bus_register(&ps3_vuart_bus);
 	BUG_ON(result);
+
 	return result;
 }
 
@@ -1049,12 +1055,11 @@ module_exit(ps3_vuart_bus_exit);
 
 static void ps3_vuart_port_release_device(struct device *_dev)
 {
+#if defined(DEBUG)
 	struct ps3_vuart_port_device *dev = to_ps3_vuart_port_device(_dev);
 
 	dev_dbg(&dev->core, "%s:%d\n", __func__, __LINE__);
-	dump_stack();
 
-#if defined(DEBUG)
 	BUG_ON(dev->priv && "forgot to free");
 	memset(&dev->core, 0, sizeof(dev->core));
 #endif
@@ -1066,7 +1071,6 @@ static void ps3_vuart_port_release_device(struct device *_dev)
 
 int ps3_vuart_port_device_register(struct ps3_vuart_port_device *dev)
 {
-	int result;
 	static unsigned int dev_count = 1;
 
 	BUG_ON(dev->priv && "forgot to free");
@@ -1080,9 +1084,7 @@ int ps3_vuart_port_device_register(struct ps3_vuart_port_device *dev)
 
 	dev_dbg(&dev->core, "%s:%d register\n", __func__, __LINE__);
 
-	result = device_register(&dev->core);
-
-	return result;
+	return device_register(&dev->core);
 }
 
 EXPORT_SYMBOL_GPL(ps3_vuart_port_device_register);

@@ -307,11 +307,14 @@ void smp_secondary_release(void)
  * Called from the early entry code
  */
 
+void __marker_1(void);
+
 void smp_secondary_hold(void)
 {
 	kernel_entry_t kentry;
 
-	while(!smp_secondary_flag);
+	while(!smp_secondary_flag)
+		__marker_1();
 
 	kentry = (volatile kernel_entry_t) vmlinux.addr;
 
