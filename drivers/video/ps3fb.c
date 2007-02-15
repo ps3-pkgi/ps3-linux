@@ -32,6 +32,8 @@
 #include <linux/ioctl.h>
 #include <linux/notifier.h>
 #include <linux/reboot.h>
+#include <linux/freezer.h>
+#include <linux/kthread.h>
 
 #include <asm/uaccess.h>
 #include <linux/fb.h>
@@ -139,6 +141,7 @@ struct ps3fb_priv {
 	atomic_t ext_flip;	/* on/off flip with vsync */
 	atomic_t f_count;	/* fb_open count */
 	int is_blanked;
+	struct task_struct *task;
 };
 static struct ps3fb_priv ps3fb;
 
@@ -294,10 +297,10 @@ static const struct fb_videomode ps3fb_modedb[] = {
 #define VP_OFF(i)	(WIDTH(i) * Y_OFF(i) * BPP + X_OFF(i) * BPP)
 #define FB_OFF(i)	(GPU_OFFSET - VP_OFF(i) % GPU_OFFSET)
 
-static int ps3fb_mode = 0;
+static int ps3fb_mode;
 module_param(ps3fb_mode, bool, 0);
 
-static char *mode_option __initdata = NULL;
+static char *mode_option __initdata;
 
 
 static int ps3fb_get_res_table(u32 xres, u32 yres)
@@ -805,12 +808,14 @@ static int ps3fb_ioctl(struct fb_info *info, unsigned int cmd,
 
 static int ps3fbd(void *arg)
 {
-	daemonize("ps3fbd");
-	for (;;) {
-		down(&ps3fb.sem);
-		if (atomic_read(&ps3fb.ext_flip) == 0)
+	int error;
+
+	do {
+		try_to_freeze();
+		error = down_interruptible(&ps3fb.sem);
+		if (!error && !atomic_read(&ps3fb.ext_flip))
 			ps3fb_sync(0);	/* single buffer */
-	}
+	} while (!kthread_should_stop());
 	return 0;
 }
 
@@ -1050,9 +1055,17 @@ static int __init ps3fb_probe(struct platform_device *dev)
 	       "fb%d: PS3 frame buffer device, using %ld KiB of video memory\n",
 	       info->node, ps3fb_videomemory.size >> 10);
 
-	kernel_thread(ps3fbd, info, CLONE_KERNEL);
+	ps3fb.task = kthread_run(ps3fbd, info, "ps3fbd");
+	if (IS_ERR(ps3fb.task)) {
+		retval = PTR_ERR(ps3fb.task);
+		ps3fb.task = NULL;
+		goto err_unregister_framebuffer;
+	}
+
 	return 0;
 
+err_unregister_framebuffer:
+	unregister_framebuffer(info);
 err_fb_dealloc:
 	fb_dealloc_cmap(&info->cmap);
 err_framebuffer_release:
@@ -1083,6 +1096,10 @@ void ps3fb_cleanup(void)
 {
 	int status;
 
+	if (ps3fb.task) {
+		kthread_stop(ps3fb.task);
+		ps3fb.task = NULL;
+	}
 	if (ps3fb.irq_no) {
 		free_irq(ps3fb.irq_no, ps3fb.dev);
 		ps3_free_irq(ps3fb.irq_no);
