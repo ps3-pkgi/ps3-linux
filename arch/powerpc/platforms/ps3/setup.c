@@ -117,9 +117,9 @@ static void prealloc(struct ps3_prealloc *p)
 
 #ifdef CONFIG_FB_PS3
 struct ps3_prealloc ps3fb_videomemory = {
-    .name = "ps3fb videomemory",
-    .size = CONFIG_FB_PS3_DEFAULT_SIZE_M*1024*1024,
-    .align = 1024*1024			/* the GPU requires 1 MiB alignment */
+	.name = "ps3fb videomemory",
+	.size = CONFIG_FB_PS3_DEFAULT_SIZE_M*1024*1024,
+	.align = 1024*1024		/* the GPU requires 1 MiB alignment */
 };
 #define prealloc_ps3fb_videomemory()	prealloc(&ps3fb_videomemory)
 
@@ -139,9 +139,9 @@ early_param("ps3fb", early_parse_ps3fb);
 
 #if defined(CONFIG_PS3_STORAGE) || defined(CONFIG_PS3_STORAGE_MODULE)
 struct ps3_prealloc ps3_stor_bounce_buffer = {
-    .name = "ps3_stor bounce buffer",
-    .size = 256*1024,
-    .align = 256*1024
+	.name = "ps3_stor bounce buffer",
+	.size = 256*1024,
+	.align = 256*1024
 };
 EXPORT_SYMBOL_GPL(ps3_stor_bounce_buffer);
 #define prealloc_ps3_stor_bounce_buffer()	prealloc(&ps3_stor_bounce_buffer)

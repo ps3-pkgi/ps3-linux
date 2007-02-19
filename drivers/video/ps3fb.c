@@ -131,7 +131,6 @@ struct ps3fb_priv {
 	u64 context_handle, memory_handle;
 	void *xdr_ea;
 	struct gpu_driver_info *dinfo;
-	struct semaphore sem;
 	u32 res_index;
 
 	u64 vblank_count;	/* frame count */
@@ -141,6 +140,7 @@ struct ps3fb_priv {
 	atomic_t ext_flip;	/* on/off flip with vsync */
 	atomic_t f_count;	/* fb_open count */
 	int is_blanked;
+	int is_kicked;
 	struct task_struct *task;
 };
 static struct ps3fb_priv ps3fb;
@@ -680,13 +680,10 @@ EXPORT_SYMBOL_GPL(ps3fb_wait_for_vsync);
 
 void ps3fb_flip_ctl(int on)
 {
-	if (on) {
-		if (atomic_read(&ps3fb.ext_flip) > 0) {
-			atomic_dec(&ps3fb.ext_flip);
-		}
-	} else {
+	if (on)
+		atomic_dec_if_positive(&ps3fb.ext_flip);
+	else
 		atomic_inc(&ps3fb.ext_flip);
-	}
 }
 
 EXPORT_SYMBOL_GPL(ps3fb_flip_ctl);
@@ -786,8 +783,7 @@ static int ps3fb_ioctl(struct fb_info *info, unsigned int cmd,
 
 	case PS3FB_IOCTL_OFF:
 		DPRINTK("PS3FB_IOCTL_OFF:\n");
-		if (atomic_read(&ps3fb.ext_flip) > 0)
-			atomic_dec(&ps3fb.ext_flip);
+		atomic_dec_if_positive(&ps3fb.ext_flip);
 		retval = 0;
 		break;
 
@@ -808,14 +804,17 @@ static int ps3fb_ioctl(struct fb_info *info, unsigned int cmd,
 
 static int ps3fbd(void *arg)
 {
-	int error;
+	DEFINE_WAIT(wait);
+	DECLARE_WAIT_QUEUE_HEAD(wq);
 
-	do {
-		try_to_freeze();
-		error = down_interruptible(&ps3fb.sem);
-		if (!error && !atomic_read(&ps3fb.ext_flip))
-			ps3fb_sync(0);	/* single buffer */
-	} while (!kthread_should_stop());
+	while (!kthread_should_stop()) {
+		prepare_to_wait(&wq, &wait, TASK_INTERRUPTIBLE);
+		if (!ps3fb.is_kicked)
+			schedule();
+		finish_wait(&wq, &wait);
+		ps3fb.is_kicked = 0;
+		ps3fb_sync(0);	/* single buffer */
+	}
 	return 0;
 }
 
@@ -835,8 +834,11 @@ static irqreturn_t ps3fb_vsync_interrupt(int irq, void *ptr)
 	if (v1 & (1 << GPU_INTR_STATUS_VSYNC_1)) {
 		/* VSYNC */
 		ps3fb.vblank_count = head->vblank_count;
-		if (!ps3fb.is_blanked)
-			up(&ps3fb.sem);
+		if (ps3fb.task && !ps3fb.is_blanked &&
+		    !atomic_read(&ps3fb.ext_flip)) {
+			ps3fb.is_kicked = 1;
+			wake_up_process(ps3fb.task);
+		}
 		wake_up_interruptible(&ps3fb.wait_vsync);
 	}
 
@@ -973,6 +975,7 @@ static int __init ps3fb_probe(struct platform_device *dev)
 	u64 xdr_lpar;
 	int status;
 	unsigned long offset;
+	struct task_struct *task;
 
 	/* get gpu context handle */
 	status = lv1_gpu_memory_allocate(DDR_SIZE, 0, 0, 0, 0,
@@ -1055,12 +1058,13 @@ static int __init ps3fb_probe(struct platform_device *dev)
 	       "fb%d: PS3 frame buffer device, using %ld KiB of video memory\n",
 	       info->node, ps3fb_videomemory.size >> 10);
 
-	ps3fb.task = kthread_run(ps3fbd, info, "ps3fbd");
-	if (IS_ERR(ps3fb.task)) {
-		retval = PTR_ERR(ps3fb.task);
-		ps3fb.task = NULL;
+	task = kthread_run(ps3fbd, info, "ps3fbd");
+	if (IS_ERR(task)) {
+		retval = PTR_ERR(task);
 		goto err_unregister_framebuffer;
 	}
+
+	ps3fb.task = task;
 
 	return 0;
 
@@ -1097,8 +1101,9 @@ void ps3fb_cleanup(void)
 	int status;
 
 	if (ps3fb.task) {
-		kthread_stop(ps3fb.task);
+		struct task_struct *task = ps3fb.task;
 		ps3fb.task = NULL;
+		kthread_stop(task);
 	}
 	if (ps3fb.irq_no) {
 		free_irq(ps3fb.irq_no, ps3fb.dev);
@@ -1212,7 +1217,6 @@ static int __init ps3fb_init(void)
 
 	atomic_set(&ps3fb.f_count, -1);	/* fbcon opens ps3fb */
 	atomic_set(&ps3fb.ext_flip, 0);	/* for flip with vsync */
-	init_MUTEX(&ps3fb.sem);
 	init_waitqueue_head(&ps3fb.wait_vsync);
 	ps3fb.num_frames = 1;
 
