@@ -128,7 +128,7 @@ static void _debug_dump_map(const struct map* m, const char* func, int line)
 
 static struct map map;
 
-// FIXME Temporary solution for the storage driver
+// FIXME Temporary solution for the storage and sound drivers
 unsigned long ps3_mem_total;
 EXPORT_SYMBOL_GPL(ps3_mem_total);
 unsigned long ps3_rm_limit;
@@ -826,7 +826,7 @@ void __init ps3_mm_init(void)
 	/* arrange to do this in ps3_mm_add_memory */
 	ps3_mm_region_create(&map.r1, map.total - map.rm.size);
 
-	// FIXME Temporary solution for the storage driver
+	// FIXME Temporary solution for the storage and sound drivers
 	ps3_mem_total = map.rm.size + map.r1.size;
 	ps3_rm_limit = map.rm.size;
 	ps3_2nd_mem_base = map.r1.base;
