@@ -21,24 +21,57 @@
 
 #include "ppc_asm.h"
 
-#define _GLOBAL(n)	\
-	.text;		\
-	.globl n;	\
-n:
+/*
+ *  wrapper           lv1
+ *  32-bit (h,l)      64-bit
+ *
+ *  1: r3,r4          <-> r3
+ *  2: r5,r6          <-> r4
+ *  3: r7,r8          <-> r5
+ *  4: r9,r10         <-> r6
+ *  5: 8(r1),12(r1)   <-> r7
+ *  6: 16(r1),20(r1)  <-> r8
+ *  7: 24(r1),28(r1)  <-> r9
+ *  8: 32(r1),36(r1)  <-> r10
+ *
+ */
 
-#define lv1call .long 0x44000022; extsw r3, r3
+#define _GLOBAL(n) .section ".text"; .align 2; .globl n; n:
+#define lv1call .long 0x44000022; extsw r3, r3;
+
+#define LR_OFFSET 4
+#define SAVE_LR() mflr r0; stw r0, LR_OFFSET(r1);
+#define LOAD_LR() lwz r0, LR_OFFSET(r1); mtlr r0;
+
+#define LOAD_64_REG(_a,_b,_r) sldi r11, _a, 32; or _r, r11, _b;
+#define LOAD_64_STACK(_o,_r) ld _r,_o(r1);
+
+#define LOAD_r3() LOAD_64_REG(r3,r4,r3)
+#define LOAD_r4() LOAD_64_REG(r5,r6,r4)
+#define LOAD_r5() LOAD_64_REG(r7,r8,r5)
+#define LOAD_r6() LOAD_64_REG(r9,r10,r6)
+#define LOAD_r7() LOAD_64_STACK(8,r7)
+#define LOAD_r8() LOAD_64_STACK(16,r8)
+#define LOAD_r9() LOAD_64_STACK(24,r9)
+#define LOAD_r10() LOAD_64_STACK(32,r10)
+
+#define LOAD_1() LOAD_r3();
+#define LOAD_6()               \
+	LOAD_r3(); LOAD_r4();  \
+	LOAD_r5(); LOAD_r6();  \
+	LOAD_r7(); LOAD_r8();
+#define LOAD_7() LOAD_6(); LOAD_r9();
+#define LOAD_8() LOAD_7(); LOAD_r10();
+
+#define STORE_6_1() lwz r11, 24(r1); std r4, 0(r11);
 
 #define LV1_N_IN_0_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
+	SAVE_LR();				\
+	LOAD_8();				\
 	li      r11, API_NUMBER;		\
 	lv1call;				\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
+	LOAD_LR();				\
 	blr
 
 #define LV1_0_IN_0_OUT LV1_N_IN_0_OUT
@@ -52,757 +85,136 @@ _GLOBAL(_##API_NAME)				\
 
 #define LV1_0_IN_1_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	stdu    r3, -8(r1);			\
-						\
-	li      r11, API_NUMBER;		\
-	lv1call;				\
-						\
-	addi	r1, r1, 8;			\
-	ld	r11, -8(r1);			\
-	std	r4, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
-	blr
+	b ps3_no_support
 
 #define LV1_0_IN_2_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	std     r3, -8(r1);			\
-	stdu	r4, -16(r1);			\
-						\
-	li      r11, API_NUMBER;		\
-	lv1call;				\
-						\
-	addi	r1, r1, 16;			\
-	ld	r11, -8(r1);			\
-	std	r4, 0(r11);			\
-	ld	r11, -16(r1);			\
-	std	r5, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
-	blr
+	b ps3_no_support
 
 #define LV1_0_IN_3_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	std     r3, -8(r1);			\
-	std	r4, -16(r1);			\
-	stdu	r5, -24(r1);			\
-						\
-	li      r11, API_NUMBER;		\
-	lv1call;				\
-						\
-	addi	r1, r1, 24;			\
-	ld	r11, -8(r1);			\
-	std	r4, 0(r11);			\
-	ld	r11, -16(r1);			\
-	std	r5, 0(r11);			\
-	ld	r11, -24(r1);			\
-	std	r6, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
-	blr
+	b ps3_no_support
 
 #define LV1_0_IN_7_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	std     r3, -8(r1);			\
-	std	r4, -16(r1);			\
-	std	r5, -24(r1);			\
-	std	r6, -32(r1);			\
-	std	r7, -40(r1);			\
-	std	r8, -48(r1);			\
-	stdu	r9, -56(r1);			\
-						\
-	li      r11, API_NUMBER;		\
-	lv1call;				\
-						\
-	addi	r1, r1, 56;			\
-	ld	r11, -8(r1);			\
-	std	r4, 0(r11);			\
-	ld	r11, -16(r1);			\
-	std	r5, 0(r11);			\
-	ld	r11, -24(r1);			\
-	std	r6, 0(r11);			\
-	ld	r11, -32(r1);			\
-	std	r7, 0(r11);			\
-	ld	r11, -40(r1);			\
-	std	r8, 0(r11);			\
-	ld	r11, -48(r1);			\
-	std	r9, 0(r11);			\
-	ld	r11, -56(r1);			\
-	std	r10, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
-	blr
+	b ps3_no_support
 
 #define LV1_1_IN_1_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	stdu    r4, -8(r1);			\
-						\
-	li      r11, API_NUMBER;		\
-	lv1call;				\
-						\
-	addi	r1, r1, 8;			\
-	ld	r11, -8(r1);			\
-	std	r4, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
-	blr
+	b ps3_no_support
 
 #define LV1_1_IN_2_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	std     r4, -8(r1);			\
-	stdu	r5, -16(r1);			\
-						\
-	li      r11, API_NUMBER;		\
-	lv1call;				\
-						\
-	addi	r1, r1, 16;			\
-	ld	r11, -8(r1);			\
-	std	r4, 0(r11);			\
-	ld	r11, -16(r1);			\
-	std	r5, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
-	blr
+	b ps3_no_support
 
 #define LV1_1_IN_3_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	std     r4, -8(r1);			\
-	std	r5, -16(r1);			\
-	stdu	r6, -24(r1);			\
-						\
-	li      r11, API_NUMBER;		\
-	lv1call;				\
-						\
-	addi	r1, r1, 24;			\
-	ld	r11, -8(r1);			\
-	std	r4, 0(r11);			\
-	ld	r11, -16(r1);			\
-	std	r5, 0(r11);			\
-	ld	r11, -24(r1);			\
-	std	r6, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
-	blr
+	b ps3_no_support
 
 #define LV1_1_IN_4_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	std     r4, -8(r1);			\
-	std	r5, -16(r1);			\
-	std	r6, -24(r1);			\
-	stdu	r7, -32(r1);			\
-						\
-	li      r11, API_NUMBER;		\
-	lv1call;				\
-						\
-	addi	r1, r1, 32;			\
-	ld	r11, -8(r1);			\
-	std	r4, 0(r11);			\
-	ld	r11, -16(r1);			\
-	std	r5, 0(r11);			\
-	ld	r11, -24(r1);			\
-	std	r6, 0(r11);			\
-	ld	r11, -32(r1);			\
-	std	r7, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
-	blr
+	b ps3_no_support
 
 #define LV1_1_IN_5_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	std     r4, -8(r1);			\
-	std	r5, -16(r1);			\
-	std	r6, -24(r1);			\
-	std	r7, -32(r1);			\
-	stdu	r8, -40(r1);			\
-						\
-	li      r11, API_NUMBER;		\
-	lv1call;				\
-						\
-	addi	r1, r1, 40;			\
-	ld	r11, -8(r1);			\
-	std	r4, 0(r11);			\
-	ld	r11, -16(r1);			\
-	std	r5, 0(r11);			\
-	ld	r11, -24(r1);			\
-	std	r6, 0(r11);			\
-	ld	r11, -32(r1);			\
-	std	r7, 0(r11);			\
-	ld	r11, -40(r1);			\
-	std	r8, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
-	blr
+	b ps3_no_support
 
 #define LV1_1_IN_6_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	std     r4, -8(r1);			\
-	std	r5, -16(r1);			\
-	std	r6, -24(r1);			\
-	std	r7, -32(r1);			\
-	std	r8, -40(r1);			\
-	stdu	r9, -48(r1);			\
-						\
-	li      r11, API_NUMBER;		\
-	lv1call;				\
-						\
-	addi	r1, r1, 48;			\
-	ld	r11, -8(r1);			\
-	std	r4, 0(r11);			\
-	ld	r11, -16(r1);			\
-	std	r5, 0(r11);			\
-	ld	r11, -24(r1);			\
-	std	r6, 0(r11);			\
-	ld	r11, -32(r1);			\
-	std	r7, 0(r11);			\
-	ld	r11, -40(r1);			\
-	std	r8, 0(r11);			\
-	ld	r11, -48(r1);			\
-	std	r9, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
-	blr
+	b ps3_no_support
 
 #define LV1_1_IN_7_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	std     r4, -8(r1);			\
-	std	r5, -16(r1);			\
-	std	r6, -24(r1);			\
-	std	r7, -32(r1);			\
-	std	r8, -40(r1);			\
-	std	r9, -48(r1);			\
-	stdu	r10, -56(r1);			\
-						\
-	li      r11, API_NUMBER;		\
-	lv1call;				\
-						\
-	addi	r1, r1, 56;			\
-	ld	r11, -8(r1);			\
-	std	r4, 0(r11);			\
-	ld	r11, -16(r1);			\
-	std	r5, 0(r11);			\
-	ld	r11, -24(r1);			\
-	std	r6, 0(r11);			\
-	ld	r11, -32(r1);			\
-	std	r7, 0(r11);			\
-	ld	r11, -40(r1);			\
-	std	r8, 0(r11);			\
-	ld	r11, -48(r1);			\
-	std	r9, 0(r11);			\
-	ld	r11, -56(r1);			\
-	std	r10, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
-	blr
+	b ps3_no_support
 
 #define LV1_2_IN_1_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	stdu	r5, -8(r1);			\
-						\
-	li      r11, API_NUMBER;		\
-	lv1call;				\
-						\
-	addi	r1, r1, 8;			\
-	ld	r11, -8(r1);			\
-	std	r4, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
-	blr
+	b ps3_no_support
 
 #define LV1_2_IN_2_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	std     r5, -8(r1);			\
-	stdu	r6, -16(r1);			\
-						\
-	li      r11, API_NUMBER;		\
-	lv1call;				\
-						\
-	addi	r1, r1, 16;			\
-	ld	r11, -8(r1);			\
-	std	r4, 0(r11);			\
-	ld	r11, -16(r1);			\
-	std	r5, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
-	blr
+	b ps3_no_support
 
 #define LV1_2_IN_3_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	std     r5, -8(r1);			\
-	std	r6, -16(r1);			\
-	stdu	r7, -24(r1);			\
-						\
-	li      r11, API_NUMBER;		\
-	lv1call;				\
-						\
-	addi	r1, r1, 24;			\
-	ld	r11, -8(r1);			\
-	std	r4, 0(r11);			\
-	ld	r11, -16(r1);			\
-	std	r5, 0(r11);			\
-	ld	r11, -24(r1);			\
-	std	r6, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
-	blr
+	b ps3_no_support
 
 #define LV1_2_IN_4_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	std     r5, -8(r1);			\
-	std	r6, -16(r1);			\
-	std	r7, -24(r1);			\
-	stdu	r8, -32(r1);			\
-						\
-	li      r11, API_NUMBER;		\
-	lv1call;				\
-						\
-	addi	r1, r1, 32;			\
-	ld	r11, -8(r1);			\
-	std	r4, 0(r11);			\
-	ld	r11, -16(r1);			\
-	std	r5, 0(r11);			\
-	ld	r11, -24(r1);			\
-	std	r6, 0(r11);			\
-	ld	r11, -32(r1);			\
-	std	r7, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
-	blr
+	b ps3_no_support
 
 #define LV1_2_IN_5_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	std     r5, -8(r1);			\
-	std	r6, -16(r1);			\
-	std	r7, -24(r1);			\
-	std	r8, -32(r1);			\
-	stdu	r9, -40(r1);			\
-						\
-	li      r11, API_NUMBER;		\
-	lv1call;				\
-						\
-	addi	r1, r1, 40;			\
-	ld	r11, -8(r1);			\
-	std	r4, 0(r11);			\
-	ld	r11, -16(r1);			\
-	std	r5, 0(r11);			\
-	ld	r11, -24(r1);			\
-	std	r6, 0(r11);			\
-	ld	r11, -32(r1);			\
-	std	r7, 0(r11);			\
-	ld	r11, -40(r1);			\
-	std	r8, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
-	blr
+	b ps3_no_support
 
 #define LV1_3_IN_1_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	stdu	r6, -8(r1);			\
-						\
-	li      r11, API_NUMBER;		\
-	lv1call;				\
-						\
-	addi	r1, r1, 8;			\
-	ld	r11, -8(r1);			\
-	std	r4, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
-	blr
+	b ps3_no_support
 
 #define LV1_3_IN_2_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	std     r6, -8(r1);			\
-	stdu	r7, -16(r1);			\
-						\
-	li      r11, API_NUMBER;		\
-	lv1call;				\
-						\
-	addi	r1, r1, 16;			\
-	ld	r11, -8(r1);			\
-	std	r4, 0(r11);			\
-	ld	r11, -16(r1);			\
-	std	r5, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
-	blr
+	b ps3_no_support
 
 #define LV1_3_IN_3_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	std     r6, -8(r1);			\
-	std	r7, -16(r1);			\
-	stdu	r8, -24(r1);			\
-						\
-	li      r11, API_NUMBER;		\
-	lv1call;				\
-						\
-	addi	r1, r1, 24;			\
-	ld	r11, -8(r1);			\
-	std	r4, 0(r11);			\
-	ld	r11, -16(r1);			\
-	std	r5, 0(r11);			\
-	ld	r11, -24(r1);			\
-	std	r6, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
-	blr
+	b ps3_no_support
 
 #define LV1_4_IN_1_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	stdu    r7, -8(r1);			\
-						\
-	li      r11, API_NUMBER;		\
-	lv1call;				\
-						\
-	addi	r1, r1, 8;			\
-	ld	r11, -8(r1);			\
-	std	r4, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
-	blr
+	b ps3_no_support
 
 #define LV1_4_IN_2_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	std     r7, -8(r1);			\
-	stdu	r8, -16(r1);			\
-						\
-	li      r11, API_NUMBER;		\
-	lv1call;				\
-						\
-	addi	r1, r1, 16;			\
-	ld	r11, -8(r1);			\
-	std	r4, 0(r11);			\
-	ld	r11, -16(r1);			\
-	std	r5, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
-	blr
+	b ps3_no_support
 
 #define LV1_4_IN_3_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	std     r7, -8(r1);			\
-	std	r8, -16(r1);			\
-	stdu	r9, -24(r1);			\
-						\
-	li      r11, API_NUMBER;		\
-	lv1call;				\
-						\
-	addi	r1, r1, 24;			\
-	ld	r11, -8(r1);			\
-	std	r4, 0(r11);			\
-	ld	r11, -16(r1);			\
-	std	r5, 0(r11);			\
-	ld	r11, -24(r1);			\
-	std	r6, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
-	blr
+	b ps3_no_support
 
 #define LV1_5_IN_1_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	stdu    r8, -8(r1);			\
-						\
-	li      r11, API_NUMBER;		\
-	lv1call;				\
-						\
-	addi	r1, r1, 8;			\
-	ld	r11, -8(r1);			\
-	std	r4, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
-	blr
+	b ps3_no_support
 
 #define LV1_5_IN_2_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	std     r8, -8(r1);			\
-	stdu	r9, -16(r1);			\
-						\
-	li      r11, API_NUMBER;		\
-	lv1call;				\
-						\
-	addi	r1, r1, 16;			\
-	ld	r11, -8(r1);			\
-	std	r4, 0(r11);			\
-	ld	r11, -16(r1);			\
-	std	r5, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
-	blr
+	b ps3_no_support
 
 #define LV1_5_IN_3_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	std     r8, -8(r1);			\
-	std	r9, -16(r1);			\
-	stdu	r10, -24(r1);			\
-						\
-	li      r11, API_NUMBER;		\
-	lv1call;				\
-						\
-	addi	r1, r1, 24;			\
-	ld	r11, -8(r1);			\
-	std	r4, 0(r11);			\
-	ld	r11, -16(r1);			\
-	std	r5, 0(r11);			\
-	ld	r11, -24(r1);			\
-	std	r6, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
-	blr
+	b ps3_no_support
 
 #define LV1_6_IN_1_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	stdu    r9, -8(r1);			\
-						\
+	SAVE_LR();				\
+	LOAD_6();				\
 	li      r11, API_NUMBER;		\
 	lv1call;				\
-						\
-	addi	r1, r1, 8;			\
-	ld	r11, -8(r1);			\
-	std	r4, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
+	STORE_6_1();				\
+	LOAD_LR();				\
 	blr
 
 #define LV1_6_IN_2_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	std     r9, -8(r1);			\
-	stdu    r10, -16(r1);			\
-						\
-	li      r11, API_NUMBER;		\
-	lv1call;				\
-						\
-	addi	r1, r1, 16;			\
-	ld	r11, -8(r1);			\
-	std	r4, 0(r11);			\
-	ld	r11, -16(r1);			\
-	std	r5, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
-	blr
+	b ps3_no_support
 
 #define LV1_6_IN_3_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	std     r9, -8(r1);			\
-	stdu    r10, -16(r1);			\
-						\
-	li      r11, API_NUMBER;		\
-	lv1call;				\
-						\
-	addi	r1, r1, 16;			\
-	ld	r11, -8(r1);			\
-	std	r4, 0(r11);			\
-	ld	r11, -16(r1);			\
-	std	r5, 0(r11);			\
-	ld	r11, 48+8*8(r1);		\
-	std	r6, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
-	blr
+	b ps3_no_support
 
 #define LV1_7_IN_1_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	stdu    r10, -8(r1);			\
-						\
-	li      r11, API_NUMBER;		\
-	lv1call;				\
-						\
-	addi	r1, r1, 8;			\
-	ld	r11, -8(r1);			\
-	std	r4, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
-	blr
+	b ps3_no_support
 
 #define LV1_7_IN_6_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	std	r10, 48+8*7(r1);		\
-						\
-	li	r11, API_NUMBER;		\
-	lv1call;				\
-						\
-	ld	r11, 48+8*7(r1);		\
-	std	r4, 0(r11);			\
-	ld	r11, 48+8*8(r1);		\
-	std	r5, 0(r11);			\
-	ld	r11, 48+8*9(r1);		\
-	std	r6, 0(r11);			\
-	ld	r11, 48+8*10(r1);		\
-	std	r7, 0(r11);			\
-	ld	r11, 48+8*11(r1);		\
-	std	r8, 0(r11);			\
-	ld	r11, 48+8*12(r1);		\
-	std	r9, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
-	blr
+	b ps3_no_support
 
 #define LV1_8_IN_1_OUT(API_NAME, API_NUMBER)	\
 _GLOBAL(_##API_NAME)				\
-						\
-	mflr	r0;				\
-	std	r0, 16(r1);			\
-						\
-	li      r11, API_NUMBER;		\
-	lv1call;				\
-						\
-	ld	r11, 48+8*8(r1);		\
-	std	r4, 0(r11);			\
-						\
-	ld	r0, 16(r1);			\
-	mtlr	r0;				\
-	blr
-
-	.text
+	b ps3_no_support
 
 /* the lv1 underscored call definitions expand here */
 
 #define LV1_CALL(name, in, out, num) LV1_##in##_IN_##out##_OUT(lv1_##name, num)
-/* #include "lv1call.h" */
+#include "lv1call.h"
+

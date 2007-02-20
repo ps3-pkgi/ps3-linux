@@ -48,7 +48,7 @@ static char elfheader[256];
 
 typedef void (*kernel_entry_t)(unsigned long, unsigned long, void *);
 
-#undef DEBUG
+#define DEBUG
 
 #define HEAD_CRC	2
 #define EXTRA_FIELD	4
@@ -290,38 +290,42 @@ static void set_cmdline(char *buf)
 		setprop(devp, "bootargs", buf, strlen(buf) + 1);
 }
 
-static volatile u32 smp_secondary_flag = 0;
+static volatile kernel_entry_t smp_secondary_entry = 0;
 
 /**
- * smp_secondary_release - Release any secondary cpus.
+ * smp_secondary_hold - Hold any secondary cpus until kernel is ready to enter.
+ * @cpu_id: Hardware cpu id.
+ *
+ * Called from the early entry code.
  */
 
-void smp_secondary_release(void)
+void smp_secondary_hold(unsigned int cpu_id)
 {
-	smp_secondary_flag = 1;
+	while(!smp_secondary_entry)
+		(void)0;
+
+	printf("%s:%d: released cpu (%u)\n", __func__, __LINE__, cpu_id);
+
+	smp_secondary_entry(0, 0, NULL);
+
+	printf("Error: secondary cpu (%u) returned to bootwrapper!\n",
+		cpu_id);
+	exit();
 }
 
 /**
- * smp_secondary_hold - Hold any secondary cpus.
+ * smp_secondary_release - Release any secondary cpus.
+ * @kentry: The kernel entry for secondary cpus.
  *
- * Called from the early entry code
+ * Typically called by the primary cpu after the kernel is ready for entry.
  */
 
-void smp_secondary_hold(void)
+static void smp_secondary_release(kernel_entry_t kentry)
 {
-	kernel_entry_t kentry;
+	printf("%s:%d\n", __func__, __LINE__);
+	smp_secondary_entry = kentry;
 
-	while(!smp_secondary_flag)
-		(void)0;
-
-	kentry = (volatile kernel_entry_t) vmlinux.addr;
-
-	kentry(0, 0, NULL);
-
-	/* console closed so printf below may not work */
-	printf("Error: Linux kernel (secondary) returned to zImage boot "
-		"wrapper!\n\r");
-	exit();
+	/* Do we need to yield to the secondary cpus here??? */
 }
 
 struct platform_ops platform_ops;
@@ -374,9 +378,11 @@ void start(unsigned long a1, unsigned long a2, void *promptr, void *sp)
 	if (console_ops.close)
 		console_ops.close();
 
-	smp_secondary_release();
 
 	kentry = (kernel_entry_t) vmlinux.addr;
+
+	smp_secondary_release(kentry);
+
 	if (ft_addr)
 		kentry(ft_addr, 0, NULL);
 	else
