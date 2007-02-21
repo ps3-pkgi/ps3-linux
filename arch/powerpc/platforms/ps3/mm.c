@@ -130,12 +130,6 @@ static struct map map;
 
 // FIXME Temporary solution for the storage and sound drivers
 unsigned long ps3_mem_total;
-unsigned long ps3_rm_limit;
-unsigned long ps3_2nd_mem_base;
-unsigned long ps3_2nd_mem_size;
-
-// FIXME Temporary solution for the storage driver
-unsigned long ps3_mem_total;
 EXPORT_SYMBOL_GPL(ps3_mem_total);
 unsigned long ps3_rm_limit;
 EXPORT_SYMBOL_GPL(ps3_rm_limit);
@@ -833,12 +827,6 @@ void __init ps3_mm_init(void)
 	ps3_mm_region_create(&map.r1, map.total - map.rm.size);
 
 	// FIXME Temporary solution for the storage and sound drivers
-	ps3_mem_total = map.rm.size + map.r1.size;
-	ps3_rm_limit = map.rm.size;
-	ps3_2nd_mem_base = map.r1.base;
-	ps3_2nd_mem_size = map.r1.size;
-
-	// FIXME Temporary solution for the storage driver
 	ps3_mem_total = map.rm.size + map.r1.size;
 	ps3_rm_limit = map.rm.size;
 	ps3_2nd_mem_base = map.r1.base;
