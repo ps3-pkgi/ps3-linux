@@ -17,6 +17,9 @@
 #define	MAX_PATH_LEN		256
 #define	MAX_PROP_LEN		256 /* What should this be? */
 
+typedef void (*kernel_entry_t)(unsigned long, unsigned long, void *);
+void smp_secondary_release(kernel_entry_t kentry);
+
 /* Platform specific operations */
 struct platform_ops {
 	void	(*fixups)(void);
@@ -25,6 +28,8 @@ struct platform_ops {
 	void	(*free)(void *ptr);
 	void *	(*realloc)(void *ptr, unsigned long size);
 	void	(*exit)(void);
+	void *	(*vmlinux_alloc)(unsigned long size);
+	void	(*secondary_release)(kernel_entry_t kentry);
 };
 extern struct platform_ops platform_ops;
 
@@ -42,7 +47,7 @@ extern struct dt_ops dt_ops;
 /* Console operations */
 struct console_ops {
 	int	(*open)(void);
-	void	(*write)(char *buf, int len);
+	void	(*write)(const char *buf, int len);
 	void	(*edit_cmdline)(char *buf, int len);
 	void	(*close)(void);
 	void	*data;
@@ -58,7 +63,13 @@ struct serial_console_data {
 	void		(*close)(void);
 };
 
-int platform_init(void *promptr, char *dt_blob_start, char *dt_blob_end);
+struct loader_info {
+	void *promptr;
+	unsigned long initrd_addr, initrd_size;
+};
+extern struct loader_info loader_info;
+
+void start(void *sp);
 int ft_init(void *dt_blob, unsigned int max_size, unsigned int max_find_device);
 int serial_console_init(void);
 int ns16550_console_init(void *devp, struct serial_console_data *scdp);
@@ -98,5 +109,9 @@ static inline void exit(void)
 		platform_ops.exit();
 	for(;;);
 }
+
+#define PLATFORM_STACK(size) \
+	char _platform_stack[size] __attribute__((section(".stack"))); \
+	void *_platform_stack_top = _platform_stack + sizeof(_platform_stack);
 
 #endif /* _PPC_BOOT_OPS_H_ */

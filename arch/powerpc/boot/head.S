@@ -31,10 +31,6 @@
  * smp_secondary_hold().
  *
  * This implementation supports only one secondary cpu.
- *
- * For the PS3 first stage entry the MMU is off and the bootwrapper image
- * has been loaded to lpar address zero.  The bootwrapper is entered at
- * 0x100 (system reset) by both proceesor threads.
  */
 
 	.section .vectors,"ax"
@@ -60,25 +56,9 @@ __system_reset_entry:
 
 __secondary_start:
 
-	/* setup secondary's stack */
-
-	lis	r1, __debug_stack_1@ha
-	addi	r1, r1, __debug_stack_1@l
-	subi	r1, r1, 16
-
 	b	smp_secondary_hold
 
 __primary_start:
 
-	/* setup primary's stack */
-
-	lis	r1, _platform_stack@ha
-	addi	r1, r1, _platform_stack@l
-	subi	r1, r1, 16
-
 	li	r3, 0
 	b	_zimage_start
-
-	 .section .stack,"aw",@nobits
-	. = . + 4096
-__debug_stack_1:

@@ -208,6 +208,17 @@ static void of_image_hdr(const void *hdr)
 	}
 }
 
+static void *of_vmlinux_alloc(unsigned long size)
+{
+	void *p = malloc(size);
+
+	if (!p) {
+		printf("Can't allocate memory for kernel image!\n\r");
+		exit();
+	}
+	return p;
+}
+
 static void of_exit(void)
 {
 	call_prom("exit", 0, 0);
@@ -251,16 +262,17 @@ static int of_console_open(void)
 	return -1;
 }
 
-static void of_console_write(char *buf, int len)
+static void of_console_write(const char *buf, int len)
 {
 	call_prom("write", 3, 1, of_stdout_handle, buf, len);
 }
 
-int platform_init(void *promptr, char *dt_blob_start, char *dt_blob_end)
+void platform_init(unsigned long a1, unsigned long a2, void *promptr)
 {
 	platform_ops.image_hdr = of_image_hdr;
 	platform_ops.malloc = of_try_claim;
 	platform_ops.exit = of_exit;
+	platform_ops.vmlinux_alloc = of_vmlinux_alloc;
 
 	dt_ops.finddevice = of_finddevice;
 	dt_ops.getprop = of_getprop;
@@ -270,5 +282,7 @@ int platform_init(void *promptr, char *dt_blob_start, char *dt_blob_end)
 	console_ops.write = of_console_write;
 
 	prom = (int (*)(void *))promptr;
-	return 0;
+	loader_info.promptr = promptr;
+	loader_info.initrd_addr = a1;
+	loader_info.initrd_size = a2;
 }

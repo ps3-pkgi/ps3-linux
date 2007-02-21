@@ -34,7 +34,7 @@ endif
 BOOTCFLAGS	+= -I$(obj) -I$(srctree)/$(obj)
 BOOTAFLAGS	+= -I$(obj) -I$(srctree)/$(obj)
 
-src-plat-$(CONFIG_PPC_PS3) += head.S ps3.c ps3-hvcall.S
+src-plat-$(CONFIG_PPC_PS3) += head.S smp.S ps3.c ps3-hvcall.S
 inc-plat-$(CONFIG_PPC_PS3) += lv1call.h
 
 zlib       := inffast.c inflate.c inftrees.c
@@ -44,10 +44,11 @@ zliblinuxheader := zlib.h zconf.h zutil.h
 $(addprefix $(obj)/,$(zlib) main.o): $(addprefix $(obj)/,$(zliblinuxheader)) \
 		$(addprefix $(obj)/,$(zlibheader))
 
-src-wlib := string.S stdio.c main.c flatdevtree.c flatdevtree_misc.c \
-		ns16550.c serial.c simple_alloc.c div64.S util.S $(zlib)
+src-wlib := string.S crt0.S stdio.c main.c flatdevtree.c flatdevtree_misc.c \
+		ns16550.c serial.c simple_alloc.c div64.S util.S \
+		gunzip_util.c $(zlib)
 src-plat := of.c $(src-plat-y)
-src-boot := crt0.S $(src-wlib) $(src-plat) empty.c
+src-boot := $(src-wlib) $(src-plat) empty.c
 
 src-boot := $(addprefix $(obj)/, $(src-boot))
 obj-boot := $(addsuffix .o, $(basename $(src-boot)))
@@ -79,11 +80,11 @@ $(addprefix $(obj)/,$(inc-plat-y)): $(obj)/%: $(srctree)/include/asm-powerpc/%
 $(obj)/empty.c:
 	@touch $@
 
-$(obj)/zImage.lds $(obj)/zImage.coff.lds: $(obj)/%: $(srctree)/$(src)/%.S
+$(obj)/zImage.lds $(obj)/zImage.coff.lds $(obj)/zImage.ps3.lds: $(obj)/%: $(srctree)/$(src)/%.S
 	@cp $< $@
 
 clean-files := $(zlib) $(zlibheader) $(zliblinuxheader) \
-		empty.c zImage zImage.coff.lds zImage.lds zImage.sandpoint
+		empty.c zImage zImage.coff.lds zImage.ps3.lds zImage.lds zImage.sandpoint
 
 quiet_cmd_bootcc = BOOTCC  $@
       cmd_bootcc = $(CROSS32CC) -Wp,-MD,$(depfile) $(BOOTCFLAGS) -c -o $@ $<
@@ -104,8 +105,8 @@ $(obj)/wrapper.a: $(obj-wlib)
 
 hostprogs-y	:= addnote addRamDisk hack-coff mktree
 
-extra-y		:= $(obj)/crt0.o $(obj)/wrapper.a $(inc-plat) $(obj-plat) \
-		   $(obj)/empty.o $(obj)/zImage.lds $(obj)/zImage.coff.lds
+extra-y		:= $(obj)/wrapper.a  $(inc-plat) $(obj-plat) $(obj)/empty.o \
+		   $(obj)/zImage.lds $(obj)/zImage.coff.lds $(obj)/zImage.ps3.lds
 
 wrapper		:=$(srctree)/$(src)/wrapper
 wrapperbits	:= $(extra-y) $(addprefix $(obj)/,addnote hack-coff mktree)

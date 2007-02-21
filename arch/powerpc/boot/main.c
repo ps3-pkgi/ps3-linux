@@ -14,8 +14,8 @@
 #include "page.h"
 #include "string.h"
 #include "stdio.h"
-#include "zlib.h"
 #include "ops.h"
+#include "gunzip_util.h"
 #include "flatdevtree.h"
 
 extern void flush_cache(void *, unsigned long);
@@ -30,84 +30,22 @@ extern char _initrd_end[];
 extern char _dtb_start[];
 extern char _dtb_end[];
 
+static struct gunzip_state gzstate;
+
 struct addr_range {
-	unsigned long addr;
+	void *addr;
 	unsigned long size;
-	unsigned long memsize;
 };
-static struct addr_range vmlinux;
-static struct addr_range vmlinuz;
-static struct addr_range initrd;
 
-static unsigned long elfoffset;
-static int is_64bit;
+struct elf_info {
+	unsigned long loadsize;
+	unsigned long memsize;
+	unsigned long elfoffset;
+};
 
-/* scratch space for gunzip; 46912 is from zlib_inflate_workspacesize() */
-static char scratch[46912];
-static char elfheader[256];
+#undef DEBUG
 
-typedef void (*kernel_entry_t)(unsigned long, unsigned long, void *);
-
-#define DEBUG
-
-#define HEAD_CRC	2
-#define EXTRA_FIELD	4
-#define ORIG_NAME	8
-#define COMMENT		0x10
-#define RESERVED	0xe0
-
-static void gunzip(void *dst, int dstlen, unsigned char *src, int *lenp)
-{
-	z_stream s;
-	int r, i, flags;
-
-	/* skip header */
-	i = 10;
-	flags = src[3];
-	if (src[2] != Z_DEFLATED || (flags & RESERVED) != 0) {
-		printf("bad gzipped data\n\r");
-		exit();
-	}
-	if ((flags & EXTRA_FIELD) != 0)
-		i = 12 + src[10] + (src[11] << 8);
-	if ((flags & ORIG_NAME) != 0)
-		while (src[i++] != 0)
-			;
-	if ((flags & COMMENT) != 0)
-		while (src[i++] != 0)
-			;
-	if ((flags & HEAD_CRC) != 0)
-		i += 2;
-	if (i >= *lenp) {
-		printf("gunzip: ran out of data in header\n\r");
-		exit();
-	}
-
-	if (zlib_inflate_workspacesize() > sizeof(scratch)) {
-		printf("gunzip needs more mem\n");
-		exit();
-	}
-	memset(&s, 0, sizeof(s));
-	s.workspace = scratch;
-	r = zlib_inflateInit2(&s, -MAX_WBITS);
-	if (r != Z_OK) {
-		printf("inflateInit2 returned %d\n\r", r);
-		exit();
-	}
-	s.next_in = src + i;
-	s.avail_in = *lenp - i;
-	s.next_out = dst;
-	s.avail_out = dstlen;
-	r = zlib_inflate(&s, Z_FULL_FLUSH);
-	if (r != Z_OK && r != Z_STREAM_END) {
-		printf("inflate returned %d msg: %s\n\r", r, s.msg);
-		exit();
-	}
-	*lenp = s.next_out - (unsigned char *) dst;
-	zlib_inflateEnd(&s);
-}
-
-static int is_elf64(void *hdr)
+static int parse_elf64(void *hdr, struct elf_info *info)
 {
 	Elf64_Ehdr *elf64 = hdr;
 	Elf64_Phdr *elf64ph;
@@ -131,15 +69,14 @@ static int is_elf64(void *hdr)
 	if (i >= (unsigned int)elf64->e_phnum)
 		return 0;
 
-	elfoffset = (unsigned long)elf64ph->p_offset;
-	vmlinux.size = (unsigned long)elf64ph->p_filesz + elfoffset;
-	vmlinux.memsize = (unsigned long)elf64ph->p_memsz + elfoffset;
+	info->loadsize = (unsigned long)elf64ph->p_filesz;
+	info->memsize = (unsigned long)elf64ph->p_memsz;
+	info->elfoffset = (unsigned long)elf64ph->p_offset;
 
-	is_64bit = 1;
 	return 1;
 }
 
-static int is_elf32(void *hdr)
+static int parse_elf32(void *hdr, struct elf_info *info)
 {
 	Elf32_Ehdr *elf32 = hdr;
 	Elf32_Phdr *elf32ph;
@@ -155,7 +92,6 @@ static int is_elf32(void *hdr)
 	      elf32->e_machine         == EM_PPC))
 		return 0;
 
-	elf32 = (Elf32_Ehdr *)elfheader;
 	elf32ph = (Elf32_Phdr *) ((unsigned long)elf32 + elf32->e_phoff);
 	for (i = 0; i < elf32->e_phnum; i++, elf32ph++)
 		if (elf32ph->p_type == PT_LOAD)
@@ -163,100 +99,123 @@ static int is_elf32(void *hdr)
 	if (i >= elf32->e_phnum)
 		return 0;
 
-	elfoffset = elf32ph->p_offset;
-	vmlinux.size = elf32ph->p_filesz + elf32ph->p_offset;
-	vmlinux.memsize = elf32ph->p_memsz + elf32ph->p_offset;
+	info->loadsize = elf32ph->p_filesz;
+	info->memsize = elf32ph->p_memsz;
+	info->elfoffset = elf32ph->p_offset;
 	return 1;
 }
 
-static void prep_kernel(unsigned long a1, unsigned long a2)
+static struct addr_range prep_kernel(void)
 {
+	char elfheader[256];
+	void *vmlinuz_addr = _vmlinux_start;
+	unsigned long vmlinuz_size = _vmlinux_end - _vmlinux_start;
+	void *addr = 0;
+	struct elf_info ei;
 	int len;
 
-	vmlinuz.addr = (unsigned long)_vmlinux_start;
-	vmlinuz.size = (unsigned long)(_vmlinux_end - _vmlinux_start);
-
 	/* gunzip the ELF header of the kernel */
-	if (*(unsigned short *)vmlinuz.addr == 0x1f8b) {
-		len = vmlinuz.size;
-		gunzip(elfheader, sizeof(elfheader),
-				(unsigned char *)vmlinuz.addr, &len);
-	} else
-		memcpy(elfheader, (const void *)vmlinuz.addr,
-		       sizeof(elfheader));
+	gunzip_start(&gzstate, vmlinuz_addr, vmlinuz_size);
+	gunzip_exactly(&gzstate, elfheader, sizeof(elfheader));
 
-	if (!is_elf64(elfheader) && !is_elf32(elfheader)) {
+	if (!parse_elf64(elfheader, &ei) && !parse_elf32(elfheader, &ei)) {
 		printf("Error: not a valid PPC32 or PPC64 ELF file!\n\r");
 		exit();
 	}
 	if (platform_ops.image_hdr)
 		platform_ops.image_hdr(elfheader);
 
-	/* We need to alloc the memsize plus the file offset since gzip
-	 * will expand the header (file offset), then the kernel, then
-	 * possible rubbish we don't care about. But the kernel bss must
-	 * be claimed (it will be zero'd by the kernel itself)
+	/* We need to alloc the memsize: gzip will expand the kernel
+	 * text/data, then possible rubbish we don't care about. But
+	 * the kernel bss must be claimed (it will be zero'd by the
+	 * kernel itself)
 	 */
-	printf("Allocating 0x%lx bytes for kernel ...\n\r", vmlinux.memsize);
-	vmlinux.addr = (unsigned long)malloc(vmlinux.memsize);
-	if (vmlinux.addr == 0) {
-		printf("Can't allocate memory for kernel image !\n\r");
+	printf("Allocating 0x%lx bytes for kernel ...\n\r", ei.memsize);
+
+	if (platform_ops.vmlinux_alloc) {
+		addr = platform_ops.vmlinux_alloc(ei.memsize);
+	} else {
+		if ((unsigned long)_start < ei.memsize) {
+			printf("Insufficient memory for kernel at address 0!"
+			       " (_start=%lx)\n\r", _start);
+			exit();
+		}
+	}
+
+	/* Finally, gunzip the kernel */
+	printf("gunzipping (0x%p <- 0x%p:0x%p)...", addr,
+	       vmlinuz_addr, vmlinuz_addr+vmlinuz_size);
+	/* discard up to the actual load data */
+	gunzip_discard(&gzstate, ei.elfoffset - sizeof(elfheader));
+	len = gunzip_finish(&gzstate, addr, ei.memsize);
+	printf("done 0x%lx bytes\n\r", len);
+
+	flush_cache(addr, ei.loadsize);
+
+	return (struct addr_range){addr, ei.memsize};
+}
+
+static struct addr_range prep_initrd(struct addr_range vmlinux,
+				     unsigned long initrd_addr,
+				     unsigned long initrd_size)
+{
+	void *devp;
+	u32 initrd_start, initrd_end;
+
+	/* If we have an image attached to us, it overrides anything
+	 * supplied by the loader. */
+	if (_initrd_end > _initrd_start) {
+		printf("Attached initrd image at 0x%p-0x%p\n\r",
+		       _initrd_start, _initrd_end);
+		initrd_addr = (unsigned long)_initrd_start;
+		initrd_size = _initrd_end - _initrd_start;
+	} else if (initrd_size > 0) {
+		printf("Using loader supplied ramdisk at 0x%lx-0x%lx\n\r",
+		       initrd_addr, initrd_addr + initrd_size);
+	}
+
+	/* If there's no initrd at all, we're done */
+	if (! initrd_size)
+		return (struct addr_range){0, 0};
+
+	/*
+	 * If the initrd is too low it will be clobbered when the
+	 * kernel relocates to its final location.  In this case,
+	 * allocate a safer place and move it.
+	 */
+	if (initrd_addr < vmlinux.size) {
+		void *old_addr = (void *)initrd_addr;
+
+		printf("Allocating 0x%lx bytes for initrd ...\n\r",
+		       initrd_size);
+		initrd_addr = (unsigned long)malloc(initrd_size);
+		if (! initrd_addr) {
+			printf("Can't allocate memory for initial "
+			       "ramdisk !\n\r");
+			exit();
+		}
+		printf("Relocating initrd 0x%p <- 0x%p (0x%lx bytes)\n\r",
+		       initrd_addr, old_addr, initrd_size);
+		memmove((void *)initrd_addr, old_addr, initrd_size);
+	}
+
+	printf("initrd head: 0x%lx\n\r", *((unsigned long *)initrd_addr));
+
+	/* Tell the kernel initrd address via device tree */
+	devp = finddevice("/chosen");
+	if (! devp) {
+		printf("Device tree has no chosen node!\n\r");
 		exit();
 	}
 
-	/*
-	 * Now find the initrd
-	 *
-	 * First see if we have an image attached to us.  If so
-	 * allocate memory for it and copy it there.
-	 */
-	initrd.size = (unsigned long)(_initrd_end - _initrd_start);
-	initrd.memsize = initrd.size;
-	if (initrd.size > 0) {
-		printf("Allocating 0x%lx bytes for initrd ...\n\r",
-		       initrd.size);
-		initrd.addr = (unsigned long)malloc((u32)initrd.size);
-		if (initrd.addr == 0) {
-			printf("Can't allocate memory for initial "
-					"ramdisk !\n\r");
-			exit();
-		}
-		printf("initial ramdisk moving 0x%lx <- 0x%lx "
-			"(0x%lx bytes)\n\r", initrd.addr,
-			(unsigned long)_initrd_start, initrd.size);
-		memmove((void *)initrd.addr, (void *)_initrd_start,
-			initrd.size);
-		printf("initrd head: 0x%lx\n\r",
-				*((unsigned long *)initrd.addr));
-	} else if (a2 != 0) {
-		/* Otherwise, see if yaboot or another loader gave us an initrd */
-		initrd.addr = a1;
-		initrd.memsize = initrd.size = a2;
-		printf("Using loader supplied initrd at 0x%lx (0x%lx bytes)\n\r",
-		       initrd.addr, initrd.size);
-	}
+	initrd_start = (u32)initrd_addr;
+	initrd_end = (u32)initrd_addr + initrd_size;
 
-	/* Eventually gunzip the kernel */
-	if (*(unsigned short *)vmlinuz.addr == 0x1f8b) {
-		printf("gunzipping (0x%lx <- 0x%lx:0x%0lx)...",
-		       vmlinux.addr, vmlinuz.addr, vmlinuz.addr+vmlinuz.size);
-		len = vmlinuz.size;
-		gunzip((void *)vmlinux.addr, vmlinux.memsize,
-			(unsigned char *)vmlinuz.addr, &len);
-		printf("done 0x%lx bytes\n\r", len);
-	} else {
-		memmove((void *)vmlinux.addr,(void *)vmlinuz.addr,
-			vmlinuz.size);
-	}
+	setprop(devp, "linux,initrd-start", &initrd_start,
+		sizeof(initrd_start));
+	setprop(devp, "linux,initrd-end", &initrd_end, sizeof(initrd_end));
 
-	/* Skip over the ELF header */
-#ifdef DEBUG
-	printf("... skipping 0x%lx bytes of ELF header\n\r",
-			elfoffset);
-#endif
-	vmlinux.addr += elfoffset;
-
-	flush_cache((void *)vmlinux.addr, vmlinux.size);
+	return (struct addr_range){(void *)initrd_addr, initrd_size};
 }
 
 /* A buffer that may be edited by tools operating on a zImage binary so as to
@@ -290,61 +249,18 @@ static void set_cmdline(char *buf)
 		setprop(devp, "bootargs", buf, strlen(buf) + 1);
 }
 
-static volatile kernel_entry_t smp_secondary_entry = 0;
-
-/**
- * smp_secondary_hold - Hold any secondary cpus until kernel is ready to enter.
- * @cpu_id: Hardware cpu id.
- *
- * Called from the early entry code.
- */
-
-void smp_secondary_hold(unsigned int cpu_id)
-{
-	while(!smp_secondary_entry)
-		(void)0;
-
-	printf("%s:%d: released cpu (%u)\n", __func__, __LINE__, cpu_id);
-
-	smp_secondary_entry(0, 0, NULL);
-
-	printf("Error: secondary cpu (%u) returned to bootwrapper!\n",
-		cpu_id);
-	exit();
-}
-
-/**
- * smp_secondary_release - Release any secondary cpus.
- * @kentry: The kernel entry for secondary cpus.
- *
- * Typically called by the primary cpu after the kernel is ready for entry.
- */
-
-static void smp_secondary_release(kernel_entry_t kentry)
-{
-	printf("%s:%d\n", __func__, __LINE__);
-	smp_secondary_entry = kentry;
-
-	/* Do we need to yield to the secondary cpus here??? */
-}
-
 struct platform_ops platform_ops;
 struct dt_ops dt_ops;
 struct console_ops console_ops;
+struct loader_info loader_info;
 
-void start(unsigned long a1, unsigned long a2, void *promptr, void *sp)
+void start(void *sp)
 {
+	struct addr_range vmlinux, initrd;
 	kernel_entry_t kentry;
 	char cmdline[COMMAND_LINE_SIZE];
 	unsigned long ft_addr = 0;
 
-	memset(__bss_start, 0, _end - __bss_start);
-	memset(&platform_ops, 0, sizeof(platform_ops));
-	memset(&dt_ops, 0, sizeof(dt_ops));
-	memset(&console_ops, 0, sizeof(console_ops));
-
-	if (platform_init(promptr, _dtb_start, _dtb_end))
-		exit();
 	if (console_ops.open && (console_ops.open() < 0))
 		exit();
 	if (platform_ops.fixups)
@@ -353,7 +269,9 @@ void start(unsigned long a1, unsigned long a2, void *promptr, void *sp)
 	printf("\n\rzImage starting: loaded at 0x%p (sp: 0x%p)\n\r",
 	       _start, sp);
 
-	prep_kernel(a1, a2);
+	vmlinux = prep_kernel();
+	initrd = prep_initrd(vmlinux, loader_info.initrd_addr,
+			     loader_info.initrd_size);
 
 	/* If cmdline came from zimage wrapper or if we can edit the one
 	 * in the dt, print it out and edit it, if possible.
@@ -373,21 +291,21 @@ void start(unsigned long a1, unsigned long a2, void *promptr, void *sp)
 	if (ft_addr)
 		printf(" flat tree at 0x%lx\n\r", ft_addr);
 	else
-		printf(" using OF tree (promptr=%p)\n\r", promptr);
+		printf(" using OF tree (promptr=%p)\n\r", loader_info.promptr);
 
 	if (console_ops.close)
 		console_ops.close();
 
-
 	kentry = (kernel_entry_t) vmlinux.addr;
 
-	smp_secondary_release(kentry);
+	if (platform_ops.secondary_release)
+		platform_ops.secondary_release(kentry);
 
 	if (ft_addr)
 		kentry(ft_addr, 0, NULL);
 	else
-		/* XXX initrd addr/size should be passed in properties */
-		kentry(initrd.addr, initrd.size, promptr);
+		kentry((unsigned long)initrd.addr, initrd.size,
+		       loader_info.promptr);
 
 	/* console closed so printf below may not work */
 	printf("Error: Linux kernel returned to zImage boot wrapper!\n\r");

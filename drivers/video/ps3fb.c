@@ -32,6 +32,7 @@
 #include <linux/ioctl.h>
 #include <linux/notifier.h>
 #include <linux/reboot.h>
+#include <linux/freezer.h>
 #include <linux/kthread.h>
 
 #include <asm/uaccess.h>
@@ -803,13 +804,16 @@ static int ps3fb_ioctl(struct fb_info *info, unsigned int cmd,
 
 static int ps3fbd(void *arg)
 {
+	DEFINE_WAIT(wait);
+	DECLARE_WAIT_QUEUE_HEAD(wq);
+
 	while (!kthread_should_stop()) {
-		set_current_state(TASK_INTERRUPTIBLE);
-		if (ps3fb.is_kicked) {
-			ps3fb.is_kicked = 0;
-			ps3fb_sync(0);	/* single buffer */
-		}
-		schedule();
+		prepare_to_wait(&wq, &wait, TASK_INTERRUPTIBLE);
+		if (!ps3fb.is_kicked)
+			schedule();
+		finish_wait(&wq, &wait);
+		ps3fb.is_kicked = 0;
+		ps3fb_sync(0);	/* single buffer */
 	}
 	return 0;
 }
