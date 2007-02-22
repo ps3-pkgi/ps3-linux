@@ -22,7 +22,7 @@
 
 
 	.data
-	.align 2
+	.balign 4
 smp_secondary_entry:
 	.long 0
 
@@ -35,7 +35,7 @@ smp_secondary_entry:
  * Called from the early entry code.
  */
 
-	.align 2
+	.balign 4
 	.globl smp_secondary_hold
 smp_secondary_hold:
 	lis	r9, smp_secondary_entry@ha
@@ -54,7 +54,7 @@ smp_secondary_hold:
  * Typically called by the primary cpu after the kernel is ready for entry.
  */
 
-	.align 2
+	.balign 4
 	.globl smp_secondary_release
 smp_secondary_release:
 	lis	r9, smp_secondary_entry@ha

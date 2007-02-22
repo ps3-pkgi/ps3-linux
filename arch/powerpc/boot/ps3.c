@@ -49,7 +49,7 @@ static void ps3_console_write(const char *buf, int len)
 static void ps3_exit(void)
 {
 	printf("ps3_exit\n");
-	//lv1_panic();
+	lv1_panic(0); /* zero = no reboot */
 	while(1);
 }
 
@@ -67,7 +67,6 @@ int platform_init(unsigned int cpu_id)
 	platform_ops.vmlinux_alloc = platform_ops.malloc;
 
 	ft_init(_dtb_start, 0, 4);
-
 	return 0;
 }
 

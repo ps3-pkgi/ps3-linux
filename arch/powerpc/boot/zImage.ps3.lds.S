@@ -5,7 +5,7 @@ SECTIONS
 {
   .vectors 0 : { *(.vectors) }
 
-  . = (4M);
+  . = (8M);
 
   _start = .;
   .text      :

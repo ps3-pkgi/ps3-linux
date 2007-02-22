@@ -213,7 +213,7 @@ CONFIG_PPC_64K_PAGES=y
 # CONFIG_SCHED_SMT is not set
 CONFIG_PROC_DEVICETREE=y
 CONFIG_CMDLINE_BOOL=y
-CONFIG_CMDLINE="root=/dev/sda1 ip=dhcp video=ps3fb:mode:5"
+CONFIG_CMDLINE="root=/dev/sda1 ip=dhcp"
 # CONFIG_PM is not set
 # CONFIG_SECCOMP is not set
 CONFIG_ISA_DMA_API=y

@@ -491,11 +491,7 @@ END_FTR_SECTION_IFSET(CPU_FTR_CAN_NAP)
 	.globl __start_interrupts
 __start_interrupts:
 
-#if defined(CONFIG_PPC_PS3)
-	b .__start_ps3_stage1
-#else
 	STD_EXCEPTION_PSERIES(0x100, system_reset)
-#endif
 
 	. = 0x200
 _machine_check_pSeries:
@@ -1723,6 +1719,19 @@ _GLOBAL(__start_initialization_multiplatform)
 	LOAD_REG_IMMEDIATE(r4, .__after_prom_start - KERNELBASE)
 	add	r4,r4,r30
 	bl	.__mmu_off
+
+	/* test thread number and branch */
+	/* need a multi-platform way here!!! */
+	mfspr	r3, SPRN_CTRLF
+	cntlzw.	r3, r3
+	beq	1f
+	b	.__secondary_hold
+
+	/* wait for secondary cpu to enter kernel */
+	/* need a UP check here!!! */
+1:	LOAD_REG_IMMEDIATE(r4, __secondary_hold_acknowledge)
+	cmpwi	r9, 0
+	beq	1b
 	b	.__after_prom_start
 
 _STATIC(__boot_from_prom)
