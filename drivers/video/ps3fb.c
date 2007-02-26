@@ -33,6 +33,7 @@
 #include <linux/notifier.h>
 #include <linux/reboot.h>
 #include <linux/kthread.h>
+#include <linux/freezer.h>
 
 #include <asm/uaccess.h>
 #include <linux/fb.h>
@@ -804,6 +805,7 @@ static int ps3fb_ioctl(struct fb_info *info, unsigned int cmd,
 static int ps3fbd(void *arg)
 {
 	while (!kthread_should_stop()) {
+		try_to_freeze();
 		set_current_state(TASK_INTERRUPTIBLE);
 		if (ps3fb.is_kicked) {
 			ps3fb.is_kicked = 0;
