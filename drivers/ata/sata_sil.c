@@ -46,7 +46,7 @@
 #include <linux/libata.h>
 
 #define DRV_NAME	"sata_sil"
-#define DRV_VERSION	"2.0"
+#define DRV_VERSION	"2.1"
 
 enum {
 	SIL_MMIO_BAR		= 5,
@@ -183,8 +183,10 @@ static struct scsi_host_template sil_sht = {
 	.slave_configure	= ata_scsi_slave_config,
 	.slave_destroy		= ata_scsi_slave_destroy,
 	.bios_param		= ata_std_bios_param,
+#ifdef CONFIG_PM
 	.suspend		= ata_scsi_device_suspend,
 	.resume			= ata_scsi_device_resume,
+#endif
 };
 
 static const struct ata_port_operations sil_ops = {
@@ -339,7 +341,7 @@ static inline void __iomem *sil_scr_addr(struct ata_port *ap, unsigned int sc_re
 		break;
 	}
 
-	return 0;
+	return NULL;
 }
 
 static u32 sil_scr_read (struct ata_port *ap, unsigned int sc_reg)
@@ -386,8 +388,14 @@ static void sil_host_intr(struct ata_port *ap, u32 bmdma2)
 		goto freeze;
 	}
 
-	if (unlikely(!qc || qc->tf.ctl & ATA_NIEN))
+	if (unlikely(!qc))
 		goto freeze;
+
+	if (unlikely(qc->tf.flags & ATA_TFLAG_POLLING)) {
+		/* this sometimes happens, just clear IRQ */
+		ata_chk_status(ap);
+		return;
+	}
 
 	/* Check whether we are expecting interrupt in this state */
 	switch (ap->hsm_task_state) {

@@ -18,6 +18,7 @@
 #include <linux/spinlock.h>
 #include <linux/cpumask.h>
 #include <linux/irqreturn.h>
+#include <linux/errno.h>
 
 #include <asm/irq.h>
 #include <asm/ptrace.h>
@@ -197,17 +198,6 @@ extern int setup_irq(unsigned int irq, struct irqaction *new);
 
 #ifndef handle_dynamic_tick
 # define handle_dynamic_tick(a)		do { } while (0)
-#endif
-
-#ifdef CONFIG_SMP
-static inline void set_native_irq_info(int irq, cpumask_t mask)
-{
-	irq_desc[irq].affinity = mask;
-}
-#else
-static inline void set_native_irq_info(int irq, cpumask_t mask)
-{
-}
 #endif
 
 #ifdef CONFIG_SMP

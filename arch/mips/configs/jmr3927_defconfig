@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.20
-# Sun Feb 18 21:27:53 2007
+# Tue Feb 20 21:47:34 2007
 #
 CONFIG_MIPS=y
 
@@ -148,7 +148,6 @@ CONFIG_HZ=1000
 CONFIG_PREEMPT_NONE=y
 # CONFIG_PREEMPT_VOLUNTARY is not set
 # CONFIG_PREEMPT is not set
-CONFIG_RTC_DS1742=y
 # CONFIG_KEXEC is not set
 CONFIG_LOCKDEP_SUPPORT=y
 CONFIG_STACKTRACE_SUPPORT=y
@@ -384,6 +383,7 @@ CONFIG_PROC_EVENTS=y
 #
 # Plug and Play support
 #
+# CONFIG_PNPACPI is not set
 
 #
 # Block devices
@@ -513,6 +513,7 @@ CONFIG_NET_ETHERNET=y
 # CONFIG_TIGON3 is not set
 # CONFIG_BNX2 is not set
 CONFIG_QLA3XXX=y
+# CONFIG_ATL1 is not set
 
 #
 # Ethernet (10000 Mbit)
@@ -800,7 +801,28 @@ CONFIG_USB_ARCH_HAS_EHCI=y
 #
 # Real Time Clock
 #
-# CONFIG_RTC_CLASS is not set
+CONFIG_RTC_LIB=y
+CONFIG_RTC_CLASS=y
+CONFIG_RTC_HCTOSYS=y
+CONFIG_RTC_HCTOSYS_DEVICE="rtc0"
+# CONFIG_RTC_DEBUG is not set
+
+#
+# RTC interfaces
+#
+CONFIG_RTC_INTF_SYSFS=y
+CONFIG_RTC_INTF_PROC=y
+CONFIG_RTC_INTF_DEV=y
+# CONFIG_RTC_INTF_DEV_UIE_EMUL is not set
+
+#
+# RTC drivers
+#
+# CONFIG_RTC_DRV_DS1553 is not set
+CONFIG_RTC_DRV_DS1742=y
+# CONFIG_RTC_DRV_M48T86 is not set
+# CONFIG_RTC_DRV_TEST is not set
+# CONFIG_RTC_DRV_V3020 is not set
 
 #
 # DMA Engine support

@@ -1,7 +1,7 @@
 /*************************************************************************
  * myri10ge.c: Myricom Myri-10G Ethernet driver.
  *
- * Copyright (C) 2005, 2006 Myricom, Inc.
+ * Copyright (C) 2005 - 2007 Myricom, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -16,17 +16,17 @@
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  *
  *
  * If the eeprom on your board is not recent enough, you will need to get a
@@ -195,6 +195,10 @@ struct myri10ge_priv {
 	char *fw_name;
 	char eeprom_strings[MYRI10GE_EEPROM_STRINGS_SIZE];
 	char fw_version[128];
+	int fw_ver_major;
+	int fw_ver_minor;
+	int fw_ver_tiny;
+	int adopted_rx_filter_bug;
 	u8 mac_addr[6];		/* eeprom mac address */
 	unsigned long serial_number;
 	int vendor_specific_offset;
@@ -447,7 +451,6 @@ myri10ge_validate_firmware(struct myri10ge_priv *mgp,
 			   struct mcp_gen_header *hdr)
 {
 	struct device *dev = &mgp->pdev->dev;
-	int major, minor;
 
 	/* check firmware type */
 	if (ntohl(hdr->mcp_type) != MCP_TYPE_ETH) {
@@ -458,9 +461,11 @@ myri10ge_validate_firmware(struct myri10ge_priv *mgp,
 	/* save firmware version for ethtool */
 	strncpy(mgp->fw_version, hdr->version, sizeof(mgp->fw_version));
 
-	sscanf(mgp->fw_version, "%d.%d", &major, &minor);
+	sscanf(mgp->fw_version, "%d.%d.%d", &mgp->fw_ver_major,
+	       &mgp->fw_ver_minor, &mgp->fw_ver_tiny);
 
-	if (!(major == MXGEFW_VERSION_MAJOR && minor == MXGEFW_VERSION_MINOR)) {
+	if (!(mgp->fw_ver_major == MXGEFW_VERSION_MAJOR
+	      && mgp->fw_ver_minor == MXGEFW_VERSION_MINOR)) {
 		dev_err(dev, "Found firmware version %s\n", mgp->fw_version);
 		dev_err(dev, "Driver needs %d.%d\n", MXGEFW_VERSION_MAJOR,
 			MXGEFW_VERSION_MINOR);
@@ -561,6 +566,18 @@ static int myri10ge_adopt_running_firmware(struct myri10ge_priv *mgp)
 	memcpy_fromio(hdr, mgp->sram + hdr_offset, bytes);
 	status = myri10ge_validate_firmware(mgp, hdr);
 	kfree(hdr);
+
+	/* check to see if adopted firmware has bug where adopting
+	 * it will cause broadcasts to be filtered unless the NIC
+	 * is kept in ALLMULTI mode */
+	if (mgp->fw_ver_major == 1 && mgp->fw_ver_minor == 4 &&
+	    mgp->fw_ver_tiny >= 4 && mgp->fw_ver_tiny <= 11) {
+		mgp->adopted_rx_filter_bug = 1;
+		dev_warn(dev, "Adopting fw %d.%d.%d: "
+			 "working around rx filter bug\n",
+			 mgp->fw_ver_major, mgp->fw_ver_minor,
+			 mgp->fw_ver_tiny);
+	}
 	return status;
 }
 
@@ -794,6 +811,8 @@ static int myri10ge_reset(struct myri10ge_priv *mgp)
 	status = myri10ge_update_mac_address(mgp, mgp->dev->dev_addr);
 	myri10ge_change_promisc(mgp, 0, 0);
 	myri10ge_change_pause(mgp, mgp->pause);
+	if (mgp->adopted_rx_filter_bug)
+		(void)myri10ge_send_cmd(mgp, MXGEFW_ENABLE_ALLMULTI, &cmd, 1);
 	return status;
 }
 
@@ -2239,7 +2258,7 @@ static void myri10ge_set_multicast_list(struct net_device *dev)
 	myri10ge_change_promisc(mgp, dev->flags & IFF_PROMISC, 1);
 
 	/* This firmware is known to not support multicast */
-	if (!mgp->fw_multicast_support)
+	if (!mgp->fw_multicast_support || mgp->adopted_rx_filter_bug)
 		return;
 
 	/* Disable multicast filtering */

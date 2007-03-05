@@ -171,6 +171,7 @@ config ARCH_CLPS7500
 	bool "Cirrus CL-PS7500FE"
 	select TIMER_ACORN
 	select ISA
+	select NO_IOPORT
 	help
 	  Support for the Cirrus Logic PS7500FE system-on-a-chip.
 
@@ -189,6 +190,7 @@ config ARCH_CO285
 config ARCH_EBSA110
 	bool "EBSA-110"
 	select ISA
+	select NO_IOPORT
 	help
 	  This is an evaluation board for the StrongARM processor available
 	  from Digital. It has limited hardware on-board, including an

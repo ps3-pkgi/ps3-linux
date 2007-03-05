@@ -1345,7 +1345,7 @@ S:	Supported
 
 FRAMEBUFFER LAYER
 P:	Antonino Daplas
-M:	adaplas@pol.net
+M:	adaplas@gmail.com
 L:	linux-fbdev-devel@lists.sourceforge.net (subscribers-only)
 W:	http://linux-fbdev.sourceforge.net/
 S:	Maintained
@@ -1492,6 +1492,13 @@ HID CORE LAYER
 P:	Jiri Kosina
 M:	jkosina@suse.cz
 L:	linux-input@atrey.karlin.mff.cuni.cz
+T:	git kernel.org:/pub/scm/linux/kernel/git/jikos/hid.git
+S:	Maintained
+
+HIGH-RESOLUTION TIMERS, CLOCKEVENTS, DYNTICKS
+P:	Thomas Gleixner
+M:	tglx@linutronix.de
+L:	linux-kernel@vger.kernel.org
 S:	Maintained
 
 HIGH-SPEED SCC DRIVER FOR AX.25
@@ -1750,7 +1757,7 @@ S:	Maintained
 
 INTEL 810/815 FRAMEBUFFER DRIVER
 P:	Antonino Daplas
-M:	adaplas@pol.net
+M:	adaplas@gmail.com
 L:	linux-fbdev-devel@lists.sourceforge.net (subscribers-only)
 S:	Maintained
 
@@ -1898,13 +1905,6 @@ P:	Armin Schindler
 M:	mac@melware.de
 L:	isdn4linux@listserv.isdn4linux.de
 W:	http://www.melware.de
-S:	Maintained
-
-JOURNALLING FLASH FILE SYSTEM (JFFS)
-P:	Axis Communications AB
-M:	jffs-dev@axis.com
-L:	jffs-dev@axis.com
-W:	http://www.developer.axis.com/software/jffs/
 S:	Maintained
 
 JOURNALLING FLASH FILE SYSTEM V2 (JFFS2)
@@ -2472,7 +2472,7 @@ S:	Maintained
 
 NVIDIA (rivafb and nvidiafb) FRAMEBUFFER DRIVER
 P:	Antonino Daplas
-M:	adaplas@pol.net
+M:	adaplas@gmail.com
 L:	linux-fbdev-devel@lists.sourceforge.net (subscribers-only)
 S:	Maintained
 
@@ -2856,7 +2856,7 @@ S:	Orphan
 
 S3 SAVAGE FRAMEBUFFER DRIVER
 P:	Antonino Daplas
-M:	adaplas@pol.net
+M:	adaplas@gmail.com
 L:	linux-fbdev-devel@lists.sourceforge.net (subscribers-only)
 S:	Maintained
 
@@ -3178,8 +3178,8 @@ L:	linux-kernel@vger.kernel.org ?
 S:	Supported
 
 SPIDERNET NETWORK DRIVER for CELL
-P:	Jim Lewis
-M:	jim@jklewis.com
+P:	Linas Vepstas
+M:	linas@austin.ibm.com
 L:	netdev@vger.kernel.org
 S:	Supported
 
@@ -3392,6 +3392,13 @@ L:	linux-usb-devel@lists.sourceforge.net
 S:	Maintained
 W:	http://www.kroah.com/linux-usb/
 
+USB DAVICOM DM9601 DRIVER
+P:	Peter Korsgaard
+M:	jacmet@sunsite.dk
+L:	linux-usb-devel@lists.sourceforge.net
+W:	http://www.linux-usb.org/usbnet
+S:	Maintained
+
 USB EHCI DRIVER
 P:	David Brownell
 M:	dbrownell@users.sourceforge.net
@@ -3417,6 +3424,7 @@ USB HID/HIDBP DRIVERS
 P:	Jiri Kosina
 M:	jkosina@suse.cz
 L:	linux-usb-devel@lists.sourceforge.net
+T:	git kernel.org:/pub/scm/linux/kernel/git/jikos/hid.git
 S:	Maintained
 
 USB HUB DRIVER

@@ -32,11 +32,10 @@
 #include <scsi/scsi_host.h>
 #include <linux/libata.h>
 #include <linux/ata.h>
-#include "libata.h"
+#include "sis.h"
 
-#undef DRV_NAME		/* already defined in libata.h, for libata-core */
 #define DRV_NAME	"pata_sis"
-#define DRV_VERSION	"0.4.5"
+#define DRV_VERSION	"0.5.0"
 
 struct sis_chipset {
 	u16 device;			/* PCI host ID */
@@ -151,7 +150,7 @@ static int sis_66_pre_reset(struct ata_port *ap)
 
 	if (!pci_test_config_bits(pdev, &sis_enable_bits[ap->port_no])) {
 		ata_port_disable(ap);
-		printk(KERN_INFO "ata%u: port disabled. ignoring.\n", ap->id);
+		ata_port_printk(ap, KERN_INFO, "port disabled. ignoring.\n");
 		return 0;
 	}
 	/* Older chips keep cable detect in bits 4/5 of reg 0x48 */
@@ -197,7 +196,7 @@ static int sis_old_pre_reset(struct ata_port *ap)
 
 	if (!pci_test_config_bits(pdev, &sis_enable_bits[ap->port_no])) {
 		ata_port_disable(ap);
-		printk(KERN_INFO "ata%u: port disabled. ignoring.\n", ap->id);
+		ata_port_printk(ap, KERN_INFO, "port disabled. ignoring.\n");
 		return 0;
 	}
 	ap->cbl = ATA_CBL_PATA40;
@@ -576,8 +575,10 @@ static struct scsi_host_template sis_sht = {
 	.slave_configure	= ata_scsi_slave_config,
 	.slave_destroy		= ata_scsi_slave_destroy,
 	.bios_param		= ata_std_bios_param,
+#ifdef CONFIG_PM
 	.resume			= ata_scsi_device_resume,
 	.suspend		= ata_scsi_device_suspend,
+#endif
 };
 
 static const struct ata_port_operations sis_133_ops = {
@@ -1033,8 +1034,10 @@ static struct pci_driver sis_pci_driver = {
 	.id_table		= sis_pci_tbl,
 	.probe			= sis_init_one,
 	.remove			= ata_pci_remove_one,
+#ifdef CONFIG_PM
 	.suspend		= ata_pci_device_suspend,
 	.resume			= ata_pci_device_resume,
+#endif
 };
 
 static int __init sis_init(void)

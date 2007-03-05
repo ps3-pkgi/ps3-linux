@@ -41,7 +41,7 @@
 #include <linux/libata.h>
 
 #define DRV_NAME	"pata_cs5520"
-#define DRV_VERSION	"0.6.3"
+#define DRV_VERSION	"0.6.4"
 
 struct pio_clocks
 {
@@ -167,8 +167,10 @@ static struct scsi_host_template cs5520_sht = {
 	.slave_configure	= ata_scsi_slave_config,
 	.slave_destroy		= ata_scsi_slave_destroy,
 	.bios_param		= ata_std_bios_param,
+#ifdef CONFIG_PM
 	.resume			= ata_scsi_device_resume,
 	.suspend		= ata_scsi_device_suspend,
+#endif
 };
 
 static struct ata_port_operations cs5520_port_ops = {
@@ -306,9 +308,9 @@ static void __devexit cs5520_remove_one(struct pci_dev *pdev)
 	struct ata_host *host = dev_get_drvdata(dev);
 
 	ata_host_detach(host);
-	dev_set_drvdata(dev, NULL);
 }
 
+#ifdef CONFIG_PM
 /**
  *	cs5520_reinit_one	-	device resume
  *	@pdev: PCI device
@@ -325,6 +327,31 @@ static int cs5520_reinit_one(struct pci_dev *pdev)
 		pci_write_config_byte(pdev, 0x60, pcicfg | 0x40);
 	return ata_pci_device_resume(pdev);
 }
+
+/**
+ *	cs5520_pci_device_suspend	-	device suspend
+ *	@pdev: PCI device
+ *
+ *	We have to cut and waste bits from the standard method because
+ *	the 5520 is a bit odd and not just a pure ATA device. As a result
+ *	we must not disable it. The needed code is short and this avoids
+ *	chip specific mess in the core code.
+ */
+
+static int cs5520_pci_device_suspend(struct pci_dev *pdev, pm_message_t mesg)
+{
+	struct ata_host *host = dev_get_drvdata(&pdev->dev);
+	int rc = 0;
+
+	rc = ata_host_suspend(host, mesg);
+	if (rc)
+		return rc;
+
+	pci_save_state(pdev);
+	return 0;
+}
+#endif /* CONFIG_PM */
+
 /* For now keep DMA off. We can set it for all but A rev CS5510 once the
    core ATA code can handle it */
 
@@ -340,8 +367,10 @@ static struct pci_driver cs5520_pci_driver = {
 	.id_table	= pata_cs5520,
 	.probe 		= cs5520_init_one,
 	.remove		= cs5520_remove_one,
-	.suspend	= ata_pci_device_suspend,
+#ifdef CONFIG_PM
+	.suspend	= cs5520_pci_device_suspend,
 	.resume		= cs5520_reinit_one,
+#endif
 };
 
 static int __init cs5520_init(void)
