@@ -215,7 +215,7 @@ CONFIG_ARCH_MEMORY_PROBE=y
 # CONFIG_SCHED_SMT is not set
 CONFIG_PROC_DEVICETREE=y
 CONFIG_CMDLINE_BOOL=y
-CONFIG_CMDLINE="root=/dev/sda1 ip=dhcp"
+CONFIG_CMDLINE="root=/dev/sda1 ip=dhcp video=1080p"
 # CONFIG_PM is not set
 # CONFIG_SECCOMP is not set
 CONFIG_ISA_DMA_API=y
