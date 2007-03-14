@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.21-rc3
-# Mon Mar 12 13:38:44 2007
+# Tue Mar 13 18:49:13 2007
 #
 CONFIG_PPC64=y
 CONFIG_64BIT=y
@@ -732,20 +732,20 @@ CONFIG_USB=y
 #
 # Miscellaneous USB options
 #
-# CONFIG_USB_DEVICEFS is not set
+CONFIG_USB_DEVICEFS=y
 # CONFIG_USB_DYNAMIC_MINORS is not set
 # CONFIG_USB_OTG is not set
 
 #
 # USB Host Controller Drivers
 #
-CONFIG_USB_EHCI_HCD=m
+CONFIG_USB_EHCI_HCD=y
 # CONFIG_USB_EHCI_SPLIT_ISO is not set
 # CONFIG_USB_EHCI_ROOT_HUB_TT is not set
 # CONFIG_USB_EHCI_TT_NEWSCHED is not set
 CONFIG_USB_EHCI_BIG_ENDIAN_MMIO=y
 # CONFIG_USB_ISP116X_HCD is not set
-CONFIG_USB_OHCI_HCD=m
+CONFIG_USB_OHCI_HCD=y
 # CONFIG_USB_OHCI_HCD_PPC_OF is not set
 # CONFIG_USB_OHCI_BIG_ENDIAN_DESC is not set
 CONFIG_USB_OHCI_BIG_ENDIAN_MMIO=y
@@ -765,7 +765,7 @@ CONFIG_USB_OHCI_LITTLE_ENDIAN=y
 #
 # may also be needed; see USB_STORAGE Help for more information
 #
-CONFIG_USB_STORAGE=y
+CONFIG_USB_STORAGE=m
 # CONFIG_USB_STORAGE_DEBUG is not set
 # CONFIG_USB_STORAGE_DATAFAB is not set
 # CONFIG_USB_STORAGE_FREECOM is not set
@@ -781,10 +781,16 @@ CONFIG_USB_STORAGE=y
 #
 # USB Input Devices
 #
-CONFIG_USB_HID=y
+CONFIG_USB_HID=m
 # CONFIG_USB_HIDINPUT_POWERBOOK is not set
 # CONFIG_HID_FF is not set
 # CONFIG_USB_HIDDEV is not set
+
+#
+# USB HID Boot Protocol drivers
+#
+# CONFIG_USB_KBD is not set
+# CONFIG_USB_MOUSE is not set
 # CONFIG_USB_AIPTEK is not set
 # CONFIG_USB_WACOM is not set
 # CONFIG_USB_ACECAD is not set
@@ -856,6 +862,7 @@ CONFIG_USB_MON=y
 # CONFIG_USB_LD is not set
 # CONFIG_USB_TRANCEVIBRATOR is not set
 # CONFIG_USB_IOWARRIOR is not set
+# CONFIG_USB_TEST is not set
 
 #
 # USB DSL modem support
