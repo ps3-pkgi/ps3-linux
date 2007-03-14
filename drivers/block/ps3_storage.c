@@ -2361,11 +2361,6 @@ static void ps3_stor_slave_destroy(struct scsi_device * scsi_dev)
 		}
 	}
 
-	error = lv1_close_device(lv1_dev_info->repo.did.bus_id,
-				 lv1_dev_info->repo.did.dev_id);
-	if (error)
-		printk(KERN_ERR "%s: close device %d\n", __FUNCTION__, error);
-
 	free_irq(lv1_dev_info->irq_plug_id, lv1_dev_info);
 
 	ps3_disconnect_event_irq(&lv1_dev_info->repo.did,
@@ -2374,6 +2369,11 @@ static void ps3_stor_slave_destroy(struct scsi_device * scsi_dev)
 	if (error)
 		printk(KERN_ERR "%s: disconnect event irq %d\n", __FUNCTION__,
 		       error);
+
+	error = lv1_close_device(lv1_dev_info->repo.did.bus_id,
+				 lv1_dev_info->repo.did.dev_id);
+	if (error)
+		printk(KERN_ERR "%s: close device %d\n", __FUNCTION__, error);
 
 	if (dev_info) {
 		/* make this slot avaliable for re-use */

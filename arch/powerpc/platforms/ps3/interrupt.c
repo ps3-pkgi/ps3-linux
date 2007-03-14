@@ -250,13 +250,12 @@ int ps3_free_event_irq(unsigned int virq)
 
 	pr_debug(" -> %s:%d\n", __func__, __LINE__);
 
-	result = lv1_destruct_event_receive_port(virq_to_hw(virq));
+	ps3_free_irq(virq);
 
+	result = lv1_destruct_event_receive_port(virq_to_hw(virq));
 	if (result)
 		pr_debug("%s:%d: lv1_destruct_event_receive_port failed: %s\n",
 			__func__, __LINE__, ps3_result(result));
-
-	ps3_free_irq(virq);
 
 	pr_debug(" <- %s:%d\n", __func__, __LINE__);
 	return result;
