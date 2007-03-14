@@ -36,14 +36,14 @@
  *
  */
 
-.macro global name:req
+.macro global name
 	.section ".text"
 	.balign 4
 	.globl \name
 \name:
 .endm
 
-.macro no_support name:req
+.macro no_support name
 	GLOBAL \name
 	b ps3_no_support
 .endm
@@ -63,12 +63,12 @@
 	mtlr r0
 .endm
 
-.macro load_64_reg target:req,high:req,low:req
+.macro load_64_reg target,high,low
 	sldi r11, \high, 32
 	or \target, r11, \low
 .endm
 
-.macro load_64_stack target:req,offset:req
+.macro load_64_stack target,offset
 	ld \target, \offset(r1)
 .endm
 
