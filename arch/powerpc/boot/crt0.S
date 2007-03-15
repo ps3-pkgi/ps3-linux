@@ -62,7 +62,16 @@ _zimage_start:
 	sync
 	isync
 
+	/* Possibly handle SMP entry */
+.weak	smp_secondary_hold
+	lis	r8,smp_secondary_hold@ha
+	addi	r8,r8,smp_secondary_hold@l
+	cmpwi	r8,0
+	beq	_clear_bss
+	bl	smp_secondary_hold
+
 	/* Clear the BSS */
+_clear_bss:
 	lis	r9,__bss_start@ha
 	addi	r9,r9,__bss_start@l
 	lis	r8,_end@ha

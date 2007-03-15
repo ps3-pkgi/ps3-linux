@@ -34,7 +34,7 @@ endif
 BOOTCFLAGS	+= -I$(obj) -I$(srctree)/$(obj)
 BOOTAFLAGS	+= -I$(obj) -I$(srctree)/$(obj)
 
-src-plat-$(CONFIG_PPC_PS3) += head.S smp.S ps3.c ps3-hvcall.S
+src-plat-$(CONFIG_PPC_PS3) += head_64.S smp.S ps3.c ps3-hvcall.S
 inc-plat-$(CONFIG_PPC_PS3) += lv1call.h
 
 zlib       := inffast.c inflate.c inftrees.c

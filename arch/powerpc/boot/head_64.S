@@ -22,15 +22,6 @@
 
 /*
  * __system_reset_entry - For platforms entering at the reset vector.
- *
- * __system_reset_entry runs the bootwrapper code on cpu 0 to prepare the
- * wrapped kernel image.  Cpu 0 then enters the kernel at the end of the
- * bootwrapper code.  .secondary_start sends secondary cpus to
- * smp_secondary_hold() to wait until the bootwrapper code is finished
- * running.  When signled, secondary cpus enter the kernel directly from
- * smp_secondary_hold().
- *
- * This implementation supports only one secondary cpu.
  */
 
 	.section .vectors,"ax"
@@ -38,27 +29,13 @@
 	.globl __system_reset_entry
 __system_reset_entry:
 
-	/* switch to 32-bit mode */
-
+	/* Switch to 32-bit mode. */
 	mfmsr	r9
 	clrldi	r9,r9,1
 	mtmsrd	r9
 	nop
 
+	li	r3, 0
 	li	r4, 0
 	li	r5, 0
-
-	/* test thread number and branch */
-
-	mfspr	r3, 0x88
-	cntlzw.	r3, r3
-	beq	__primary_start
-
-__secondary_start:
-
-	b	smp_secondary_hold
-
-__primary_start:
-
-	li	r3, 0
 	b	_zimage_start

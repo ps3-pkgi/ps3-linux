@@ -138,7 +138,7 @@ miboot|uboot)
     isection=initrd
     ;;
 ps3)
-    platformo="$object/head.o $object/smp.o $object/ps3-hvcall.o $object/ps3.o"
+    platformo="$object/head_64.o $object/smp.o $object/ps3-hvcall.o $object/ps3.o"
     lds=$object/zImage.ps3.lds
     ;;
 esac
