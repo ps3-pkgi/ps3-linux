@@ -969,7 +969,7 @@ static void __init early_reserve_mem(void)
 
 void __init early_init_devtree(void *params)
 {
-	DBG(" -> early_init_devtree()\n");
+	DBG(" -> early_init_devtree(%p)\n", params);
 
 	/* Setup flat device-tree pointer */
 	initial_boot_params = params;

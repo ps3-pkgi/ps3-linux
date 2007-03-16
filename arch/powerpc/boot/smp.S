@@ -57,6 +57,9 @@ smp_secondary_loop:
 	lwz	r9, 0(r9)
 	cmpwi	r9, 0
 	beq	smp_secondary_loop
+	li	r3, 0
+	li	r4, 0
+	li	r5, 0
 	mtctr	r9
 	bctr
 

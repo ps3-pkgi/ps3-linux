@@ -75,13 +75,8 @@ _stext:
 _GLOBAL(__start)
 	/* NOP this out unconditionally */
 BEGIN_FTR_SECTION
-/*
- * This hack puts a branch to the PS3 1st stage startup routine at the
- * PS3 2nd stage entry.  This allows you to use the installed bootloader
- * to load your 1st stage bootloader image as a 2nd stage image for testing.
- */
 #if defined(CONFIG_PPC_PS3)
-	b	.__start_ps3_stage1
+	b	.__start_ps3_kexec
 #else
 	b	.__start_initialization_multiplatform
 #endif
@@ -112,8 +107,8 @@ __secondary_hold_acknowledge:
 
 	. = 0x60
 /*
- * The following code is used on pSeries to hold secondary processors
- * in a spin loop after they have been freed from OpenFirmware, but
+ * The following code is used to hold secondary processors
+ * in a spin loop after they have entered the kernel, but
  * before the bulk of the kernel has been relocated.  This code
  * is relocated to physical address 0x60 before prom_init is run.
  * All of it must fit below the first exception vector at 0x100.
@@ -1646,21 +1641,16 @@ _STATIC(__start_initialization_iSeries)
 #endif /* CONFIG_PPC_ISERIES */
 
 #if defined(CONFIG_PPC_PS3)
-/*
- * PS3 starts up with both threads running.  We continue with thread 0 and send
- * the other off to __secondary_hold with the thread number in r3.
- */
-
-_STATIC(__start_ps3_stage1)
-	mfspr	r3, SPRN_CTRLF
-	cntlzw.	r3, r3
-	beq	1f
-	b	.__secondary_hold
-1:
-	li	r5, 0				/* kexec style entry. */
+_STATIC(__start_ps3_kexec)
+#if 1 /* override DT passed from bootloader */
 	LOAD_REG_IMMEDIATE(r3, dt_blob_start)
-	clrldi	r3, r3, 2			/* DT physical addr */
-	li	r4, 0				/* kernel physical addr */
+	clrldi	r3, r3, 2 /* convert to physical */
+#endif
+	mfspr	r2, SPRN_CTRLF
+	cntlzw.	r2, r2
+	beq	1f
+	li	r3, 0 /* set as a secondary processor */
+1:
 	b .__start_initialization_multiplatform
 #endif
 
@@ -1716,22 +1706,31 @@ _GLOBAL(__start_initialization_multiplatform)
 2:
 
 	/* Switch off MMU if not already */
-	LOAD_REG_IMMEDIATE(r4, .__after_prom_start - KERNELBASE)
+	LOAD_REG_IMMEDIATE(r4, __mmu_off_return - KERNELBASE)
 	add	r4,r4,r30
 	bl	.__mmu_off
+__mmu_off_return:
 
-	/* test thread number and branch */
-	/* need a multi-platform way here!!! */
-	mfspr	r3, SPRN_CTRLF
-	cntlzw.	r3, r3
-	beq	1f
+	/* Test if this is a secondary cpu and if so send it off to
+	 * __secondary_hold with a thread number in r3.  Secondary processors
+	 * call _start with regs r3,r4,r5 zeroed.
+	 * Pass cpu number in r6???
+	 */
+	or.	r3, r31, r30
+	bne	1f
+	li	r3, 1
 	b	.__secondary_hold
+1:
 
-	/* wait for secondary cpu to enter kernel */
-	/* need a UP check here!!! */
+	/* The primary cpu waits here for all the expected secondary cpus to
+ 	 * enter the kernel, after which time it is safe to reclaim the
+	 * memory use by the bootwrapper.
+	 * How to know what to wait for???  Use r6???
+	*/
 1:	LOAD_REG_IMMEDIATE(r4, __secondary_hold_acknowledge)
-	cmpwi	r9, 0
+	cmpwi	r4, 0
 	beq	1b
+	mr	r3, r30
 	b	.__after_prom_start
 
 _STATIC(__boot_from_prom)
