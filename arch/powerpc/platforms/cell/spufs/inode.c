@@ -209,6 +209,8 @@ static int spufs_dir_close(struct inode *inode, struct file *file)
 	parent = dir->d_parent->d_inode;
 	ctx = SPUFS_I(dir->d_inode)->i_ctx;
 
+	spu_acquire_saved(ctx);
+
 	mutex_lock(&parent->i_mutex);
 	ret = spufs_rmdir(parent, dir);
 	mutex_unlock(&parent->i_mutex);
@@ -339,6 +341,7 @@ static int spufs_create_context(struct inode *inode,
 	if (ret < 0) {
 		WARN_ON(spufs_rmdir(inode, dentry));
 		mutex_unlock(&inode->i_mutex);
+		spu_acquire_saved(SPUFS_I(dentry->d_inode)->i_ctx);
 		spu_forget(SPUFS_I(dentry->d_inode)->i_ctx);
 		goto out;
 	}

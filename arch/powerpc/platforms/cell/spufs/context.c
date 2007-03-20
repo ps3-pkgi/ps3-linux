@@ -93,7 +93,6 @@ int put_spu_context(struct spu_context *ctx)
 void spu_forget(struct spu_context *ctx)
 {
 	struct mm_struct *mm;
-	spu_acquire_saved(ctx);
 	mm = ctx->owner;
 	ctx->owner = NULL;
 	mmput(mm);
