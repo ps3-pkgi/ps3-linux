@@ -11,8 +11,6 @@
 
 #include "ppc_asm.h"
 
-	.section .stack,"aw",@nobits
-
 	.text
 	/* a procedure descriptor used when booting this as a COFF file */
 _zimage_start_opd:

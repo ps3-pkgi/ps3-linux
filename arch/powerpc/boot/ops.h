@@ -111,7 +111,7 @@ static inline void exit(void)
 }
 
 #define PLATFORM_STACK(size) \
-	char _platform_stack[size] __attribute__((section(".stack"))); \
+	char _platform_stack[size]; \
 	void *_platform_stack_top = _platform_stack + sizeof(_platform_stack);
 
 #endif /* _PPC_BOOT_OPS_H_ */

@@ -43,9 +43,6 @@ SECTIONS
   . = ALIGN(4096);
   _edata  =  .;
 
-  . = ALIGN(16);
-  .stack : { *(.stack) }
-
   . = ALIGN(4096);
   __bss_start = .;
   .bss       :
