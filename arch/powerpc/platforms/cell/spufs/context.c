@@ -41,6 +41,7 @@ struct spu_context *alloc_spu_context(struct spu_gang *gang)
 		goto out_free;
 	}
 	spin_lock_init(&ctx->mmio_lock);
+	spin_lock_init(&ctx->mapping_lock);
 	kref_init(&ctx->kref);
 	mutex_init(&ctx->state_mutex);
 	init_MUTEX(&ctx->run_sema);
@@ -93,6 +94,7 @@ int put_spu_context(struct spu_context *ctx)
 void spu_forget(struct spu_context *ctx)
 {
 	struct mm_struct *mm;
+	spu_acquire_saved(ctx);
 	mm = ctx->owner;
 	ctx->owner = NULL;
 	mmput(mm);
