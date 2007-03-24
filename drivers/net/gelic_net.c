@@ -753,8 +753,8 @@ gelic_net_stop(struct net_device *netdev)
 
 	/* disconnect event port */
 	free_irq(card->netdev->irq, card->netdev);
-	ps3_disconnect_event_irq(&card->dev->did, card->dev->interrupt_id,
-		card->netdev->irq);
+	ps3_sb_event_receive_port_destroy(&card->dev->did,
+		card->dev->interrupt_id, card->netdev->irq);
 	card->netdev->irq = NO_IRQ;
 
 	netif_carrier_off(netdev);
@@ -1339,7 +1339,7 @@ gelic_net_open_device(struct gelic_net_card *card)
 	unsigned long result;
 	int ret;
 
-	result = ps3_connect_event_irq(PS3_BINDING_CPU_ANY,
+	result = ps3_sb_event_receive_port_setup(PS3_BINDING_CPU_ANY,
 		&card->dev->did, card->dev->interrupt_id, &card->netdev->irq);
 
 	if (result) {
@@ -1361,8 +1361,8 @@ gelic_net_open_device(struct gelic_net_card *card)
 	return 0;
 
 fail_request_irq:
-	ps3_disconnect_event_irq(&card->dev->did, card->dev->interrupt_id,
-		card->netdev->irq);
+	ps3_sb_event_receive_port_destroy(&card->dev->did,
+		card->dev->interrupt_id, card->netdev->irq);
 	card->netdev->irq = NO_IRQ;
 fail_alloc_irq:
 	return ret;
