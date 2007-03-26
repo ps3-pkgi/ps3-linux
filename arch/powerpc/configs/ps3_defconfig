@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
-# Linux kernel version: 2.6.21-rc3
-# Tue Mar 13 18:49:13 2007
+# Linux kernel version: 2.6.21-rc5
+# Mon Mar 26 16:27:24 2007
 #
 CONFIG_PPC64=y
 CONFIG_64BIT=y
@@ -158,7 +158,6 @@ CONFIG_PPC_PS3=y
 #
 CONFIG_SPU_FS=y
 CONFIG_SPU_BASE=y
-# CONFIG_CBE_RAS is not set
 
 #
 # PS3 Platform Options
@@ -712,7 +711,60 @@ CONFIG_LOGO_LINUX_CLUT224=y
 #
 # Sound
 #
-# CONFIG_SOUND is not set
+CONFIG_SOUND=y
+
+#
+# Advanced Linux Sound Architecture
+#
+CONFIG_SND=y
+CONFIG_SND_TIMER=y
+CONFIG_SND_PCM=y
+# CONFIG_SND_SEQUENCER is not set
+# CONFIG_SND_MIXER_OSS is not set
+# CONFIG_SND_PCM_OSS is not set
+# CONFIG_SND_DYNAMIC_MINORS is not set
+CONFIG_SND_SUPPORT_OLD_API=y
+CONFIG_SND_VERBOSE_PROCFS=y
+# CONFIG_SND_VERBOSE_PRINTK is not set
+# CONFIG_SND_DEBUG is not set
+
+#
+# Generic devices
+#
+# CONFIG_SND_DUMMY is not set
+# CONFIG_SND_MTPAV is not set
+# CONFIG_SND_SERIAL_U16550 is not set
+# CONFIG_SND_MPU401 is not set
+
+#
+# ALSA PowerMac devices
+#
+
+#
+# ALSA PowerMac requires I2C
+#
+
+#
+# ALSA PowerPC devices
+#
+CONFIG_SND_PS3=y
+CONFIG_SND_PS3_DEFAULT_START_DELAY=2000
+
+#
+# USB devices
+#
+# CONFIG_SND_USB_AUDIO is not set
+# CONFIG_SND_USB_USX2Y is not set
+
+#
+# SoC audio support
+#
+# CONFIG_SND_SOC is not set
+
+#
+# Open Sound System
+#
+# CONFIG_SOUND_PRIME is not set
 
 #
 # HID Devices

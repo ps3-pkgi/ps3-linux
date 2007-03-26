@@ -890,9 +890,8 @@ static int ps3fb_vsync_settings(struct gpu_driver_info *dinfo, void *dev)
 	}
 
 	ps3fb.dev = dev;
-	// use ps3_io_irq_setup() here???
 	error = ps3_irq_plug_setup(PS3_BINDING_CPU_ANY, dinfo->irq.irq_outlet,
-			      &ps3fb.irq_no);
+				   &ps3fb.irq_no);
 	if (error) {
 		printk(KERN_ERR "%s: ps3_alloc_irq failed %d\n", __FUNCTION__,
 		       error);

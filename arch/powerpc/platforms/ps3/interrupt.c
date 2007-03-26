@@ -348,6 +348,7 @@ int ps3_sb_event_receive_port_setup(enum ps3_cpu_binding cpu,
 
 	return 0;
 }
+EXPORT_SYMBOL(ps3_sb_event_receive_port_setup);
 
 int ps3_sb_event_receive_port_destroy(const struct ps3_device_id *did,
 	unsigned int interrupt_id, unsigned int virq)
@@ -373,6 +374,7 @@ int ps3_sb_event_receive_port_destroy(const struct ps3_device_id *did,
 	pr_debug(" <- %s:%d\n", __func__, __LINE__);
 	return result;
 }
+EXPORT_SYMBOL(ps3_sb_event_receive_port_destroy);
 
 /**
  * ps3_io_irq_setup - Setup a system bus io irq.

@@ -1522,13 +1522,13 @@ static int is_region_accessible(struct ps3_stor_lv1_dev_info * lv1_dev_info,
 	if (error)
 		return 0;
 
-	error = ps3_connect_event_irq(PS3_BINDING_CPU_ANY,
+	error = ps3_sb_event_receive_port_setup(PS3_BINDING_CPU_ANY,
 				      &lv1_dev_info->repo.did,
 				      lv1_dev_info->interrupt_id,
 				      &irq_plug_id);
 	if (error) {
-		printk("%s:%u: ps3_connect_event_irq failed (%d)\n", __func__,
-		       __LINE__, error);
+		printk("%s:%u: ps3_sb_event_receive_port_setup failed (%d)\n",
+		       __func__, __LINE__, error);
 		goto fail_close_device;
 	}
 
@@ -1537,7 +1537,7 @@ static int is_region_accessible(struct ps3_stor_lv1_dev_info * lv1_dev_info,
 	if (error) {
 		printk("%s:%d: request_irq failed (%d)\n", __func__, __LINE__,
 		       error);
-		goto fail_disconnect_event_irq;
+		goto fail_event_receive_port_destroy;
 	}
 
 	dma_region = ps3_allocate_dma_region(&lv1_dev_info->repo.did);
@@ -1580,9 +1580,10 @@ fail_free_dma_region:
 	ps3_free_dma_region(&lv1_dev_info->repo.did, dma_region);
 fail_free_irq:
 	free_irq(irq_plug_id, &info);
-fail_disconnect_event_irq:
-	ps3_disconnect_event_irq(&lv1_dev_info->repo.did,
-				 lv1_dev_info->interrupt_id, irq_plug_id);
+fail_event_receive_port_destroy:
+	ps3_sb_event_receive_port_destroy(&lv1_dev_info->repo.did,
+					  lv1_dev_info->interrupt_id,
+					  irq_plug_id);
 fail_close_device:
 	lv1_close_device(lv1_dev_info->repo.did.bus_id,
 			 lv1_dev_info->repo.did.dev_id);
@@ -2144,13 +2145,13 @@ static int ps3_stor_slave_alloc(struct scsi_device * scsi_dev)
 		goto out;
 	}
 
-	error = ps3_connect_event_irq(PS3_BINDING_CPU_ANY,
-				      &lv1_dev_info->repo.did /* host_info->dev.did */,
-				      lv1_dev_info->interrupt_id,
-				      &lv1_dev_info->irq_plug_id);
+	error = ps3_sb_event_receive_port_setup(PS3_BINDING_CPU_ANY,
+						&lv1_dev_info->repo.did /* host_info->dev.did */,
+						lv1_dev_info->interrupt_id,
+						&lv1_dev_info->irq_plug_id);
 	if (error) {
-		printk("%s:%u: ps3_connect_event_irq failed (%d)\n", __func__,
-		       __LINE__, error);
+		printk("%s:%u: ps3_sb_event_receive_port_setup failed (%d)\n",
+		       __func__, __LINE__, error);
 		error = -EPERM;
 		goto fail_close_device;
 	}
@@ -2163,7 +2164,7 @@ static int ps3_stor_slave_alloc(struct scsi_device * scsi_dev)
 	if (error) {
 		printk("%s:%d: request_irq failed (%d)\n", __func__, __LINE__,
 		       error);
-		goto fail_disconnect_event_irq;
+		goto fail_event_receive_port_destroy;
 	}
 
 	FUNC_STEP_C("3");
@@ -2271,11 +2272,11 @@ skip_per_device_configure:
 fail_free_irq:
 	FUNC_STEP_C("5");
 	free_irq(lv1_dev_info->irq_plug_id, lv1_dev_info);
-fail_disconnect_event_irq:
+fail_event_receive_port_destroy:
 	FUNC_STEP_C("6");
-	ps3_disconnect_event_irq(&lv1_dev_info->repo.did,
-				 lv1_dev_info->interrupt_id,
-				 lv1_dev_info->irq_plug_id);
+	ps3_sb_event_receive_port_destroy(&lv1_dev_info->repo.did,
+					  lv1_dev_info->interrupt_id,
+					  lv1_dev_info->irq_plug_id);
 fail_close_device:
 	FUNC_STEP_C("7");
 	lv1_close_device(lv1_dev_info->repo.did.bus_id, lv1_dev_info->repo.did.dev_id);
@@ -2363,9 +2364,9 @@ static void ps3_stor_slave_destroy(struct scsi_device * scsi_dev)
 
 	free_irq(lv1_dev_info->irq_plug_id, lv1_dev_info);
 
-	ps3_disconnect_event_irq(&lv1_dev_info->repo.did,
-				 lv1_dev_info->interrupt_id,
-				 lv1_dev_info->irq_plug_id);
+	ps3_sb_event_receive_port_destroy(&lv1_dev_info->repo.did,
+					  lv1_dev_info->interrupt_id,
+					  lv1_dev_info->irq_plug_id);
 	if (error)
 		printk(KERN_ERR "%s: disconnect event irq %d\n", __FUNCTION__,
 		       error);
