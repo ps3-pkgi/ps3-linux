@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.21-rc5
-# Mon Mar 26 16:27:24 2007
+# Mon Mar 26 17:06:00 2007
 #
 CONFIG_PPC64=y
 CONFIG_64BIT=y
@@ -396,7 +396,8 @@ CONFIG_PREVENT_FIRMWARE_BUILD=y
 #
 # CONFIG_BLK_DEV_FD is not set
 # CONFIG_BLK_DEV_COW_COMMON is not set
-# CONFIG_BLK_DEV_LOOP is not set
+CONFIG_BLK_DEV_LOOP=y
+# CONFIG_BLK_DEV_CRYPTOLOOP is not set
 # CONFIG_BLK_DEV_NBD is not set
 # CONFIG_BLK_DEV_UB is not set
 CONFIG_BLK_DEV_RAM=y
