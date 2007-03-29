@@ -67,6 +67,7 @@ static void ps3_power_save(void)
 	 * flags: 0 = wake on DEC interrupt, 1 = ignore DEC interrupt.
 	 */
 
+	local_irq_enable();
 	lv1_pause(0);
 }
 

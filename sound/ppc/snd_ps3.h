@@ -114,8 +114,7 @@ struct snd_ps3_card_info {
 		int running;
 	/* dma_lock end */
 
-	void * null_buffer_start_vaddr;
-	size_t null_buffer_size;
+	unsigned long null_buffer_start_vaddr;
 
 	rwlock_t start_delay_lock;
 	/* start_delay_lock start */
