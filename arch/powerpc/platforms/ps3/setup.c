@@ -61,7 +61,7 @@ EXPORT_SYMBOL_GPL(ps3_get_firmware_version);
 
 static void ps3_power_save(void)
 {
-	u64 lv1_version;
+	u64 tmp;
 
 	/*
 	 * lv1_pause() puts the PPE thread into inactive state until an
@@ -69,12 +69,13 @@ static void ps3_power_save(void)
 	 * flags: 0 = wake on DEC interrupt, 1 = ignore DEC interrupt.
 	 */
 	lv1_pause(0);
+
 	/*
-	 * Hypervisor seems to forget to tell the GOS about pending interrupts.
-	 * As a side effect of this hypervisor call, the hypervisor delivers
-	 * pending IRQs to the GOS after MSR[EE] is set to 1.
+	 * FIXME: The HV seems to forget to tell the guest about pending
+	 * interrupts on return from lv1_pause().  lv1_get_version_info()
+	 * has the side effect of causing pending interrupts to be delivered.
 	 */
-	lv1_get_version_info(&lv1_version);
+	lv1_get_version_info(&tmp);
 }
 
 static void ps3_restart(char *cmd)

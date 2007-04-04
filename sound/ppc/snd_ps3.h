@@ -1,8 +1,8 @@
 /*
  * Audio support for PS3
  * Copyright (C) 2006 Sony Computer Entertainment Inc.
- * Copyright 2006, 2007 Sony Corporation
  * All rights reserved.
+ * Copyright 2006, 2007 Sony Corporation
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License
@@ -136,7 +136,8 @@ static int snd_ps3_pcm_close(struct snd_pcm_substream * substream);
 static int snd_ps3_pcm_prepare(struct snd_pcm_substream * substream);
 static int snd_ps3_pcm_trigger(struct snd_pcm_substream * substream,
 				 int cmd);
-static snd_pcm_uframes_t snd_ps3_pcm_pointer(struct snd_pcm_substream * substream);
+static snd_pcm_uframes_t snd_ps3_pcm_pointer(struct snd_pcm_substream *
+					     substream);
 static int snd_ps3_pcm_hw_params(struct snd_pcm_substream * substream,
 				 struct snd_pcm_hw_params * hw_params);
 static int snd_ps3_pcm_hw_free(struct snd_pcm_substream * substream);
@@ -168,7 +169,8 @@ static int snd_ps3_change_avsetting(struct snd_ps3_card_info * card);
 /* initialize avsetting and take it effect */
 static int snd_ps3_init_avsetting(struct snd_ps3_card_info * card);
 /* setup dma */
-static int snd_ps3_program_dma(struct snd_ps3_card_info * card, enum snd_ps3_dma_filltype filltype);
+static int snd_ps3_program_dma(struct snd_ps3_card_info * card,
+			       enum snd_ps3_dma_filltype filltype);
 static int snd_ps3_kick_dma(struct snd_ps3_card_info * card);
 static void snd_ps3_wait_for_dma_stop(struct snd_ps3_card_info * card);
 
@@ -176,16 +178,23 @@ static uint64_t p_to_dma(uint64_t paddr);
 /* mute control */
 static int snd_ps3_mute(struct snd_pcm_substream * substream, int mute_on);
 
-static ssize_t snd_ps3_get_start_delay(struct device *dev, struct device_attribute *attr, char *buf);
+static ssize_t snd_ps3_get_start_delay(struct device *dev,
+				       struct device_attribute *attr,
+				       char *buf);
 static ssize_t snd_ps3_set_start_delay(struct device *dev,
-				       struct device_attribute *attr, const char *buf, size_t count);
+				       struct device_attribute *attr,
+				       const char *buf, size_t count);
 
 
-static int snd_ps3_info_vol_control(struct snd_kcontrol * kcontrol, struct snd_ctl_elem_info * uinfo);
-static int snd_ps3_get_vol_control(struct snd_kcontrol * kcontrol, struct snd_ctl_elem_value * ucontrol);
-static int snd_ps3_put_vol_control(struct snd_kcontrol * kcontrol, struct snd_ctl_elem_value * ucontrol);
+static int snd_ps3_info_vol_control(struct snd_kcontrol * kcontrol,
+				    struct snd_ctl_elem_info * uinfo);
+static int snd_ps3_get_vol_control(struct snd_kcontrol * kcontrol,
+				   struct snd_ctl_elem_value * ucontrol);
+static int snd_ps3_put_vol_control(struct snd_kcontrol * kcontrol,
+				   struct snd_ctl_elem_value * ucontrol);
 
-static int snd_ps3_soft_attenuate(struct snd_ps3_card_info * card, void * start_l, void * star_r, int bytes);
+static int snd_ps3_soft_attenuate(struct snd_ps3_card_info * card,
+				  void * start_l, void * star_r, int bytes);
 /*
  * iopte management
  */
@@ -203,14 +212,16 @@ struct ioif_map_info {
 /* how many stages the fifo have */
 #define PS3_AUDIO_FIFO_STAGE_COUNT (8)
 /* fifo size 128 bytes * 8 stages * stereo (2ch) */
-#define PS3_AUDIO_FIFO_SIZE        (PS3_AUDIO_FIFO_STAGE_SIZE * PS3_AUDIO_FIFO_STAGE_COUNT)
+#define PS3_AUDIO_FIFO_SIZE \
+	(PS3_AUDIO_FIFO_STAGE_SIZE * PS3_AUDIO_FIFO_STAGE_COUNT)
 
 /* PS3 audio DMAC max block count in one dma shot = 128 (0x80) blocks*/
 #define PS3_AUDIO_DMAC_MAX_BLOCKS  (PS3_AUDIO_DMASIZE_BLOCKS_MASK + 1)
 
 #define PS3_AUDIO_NORMAL_DMA_START_CH (0)
 #define PS3_AUDIO_NORMAL_DMA_COUNT    (8)
-#define PS3_AUDIO_NULL_DMA_START_CH   (PS3_AUDIO_NORMAL_DMA_START_CH + PS3_AUDIO_NORMAL_DMA_COUNT)
+#define PS3_AUDIO_NULL_DMA_START_CH \
+	(PS3_AUDIO_NORMAL_DMA_START_CH + PS3_AUDIO_NORMAL_DMA_COUNT)
 #define PS3_AUDIO_NULL_DMA_COUNT      (2)
 
 #define SND_PS3_MAX_VOL (0x0F)

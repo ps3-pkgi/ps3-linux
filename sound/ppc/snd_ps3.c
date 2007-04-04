@@ -1,8 +1,8 @@
 /*
  * Audio support for PS3
  * Copyright (C) 2006 Sony Computer Entertainment Inc.
- * Copyright 2006, 2007 Sony Corporation
  * All rights reserved.
+ * Copyright 2006, 2007 Sony Corporation
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License
@@ -63,7 +63,8 @@ static DEVICE_ATTR(start_delay,
 		   snd_ps3_set_start_delay);
 
 /* system memory info */
-extern unsigned long ps3_rm_limit, ps3_2nd_mem_base, ps3_2nd_mem_size, ps3_mem_total;
+extern unsigned long ps3_rm_limit, ps3_2nd_mem_base;
+extern unsigned long ps3_2nd_mem_size, ps3_mem_total;
 
 /*
  * global
@@ -110,7 +111,8 @@ const static struct snd_pcm_hardware snd_ps3_pcm_hw = {
 
         .buffer_bytes_max = PS3_AUDIO_FIFO_SIZE * 64,
 
-        .period_bytes_min = PS3_AUDIO_FIFO_STAGE_SIZE * 4, /* interrupt by four stages */
+	/* interrupt by four stages */
+        .period_bytes_min = PS3_AUDIO_FIFO_STAGE_SIZE * 4,
         .period_bytes_max = PS3_AUDIO_FIFO_STAGE_SIZE * 4,
 
         .periods_min = 16,
@@ -149,7 +151,8 @@ static struct snd_kcontrol_new snd_ps3_vol_control =
 static int snd_ps3_pcm_open(struct snd_pcm_substream * substream)
 {
 	struct snd_pcm_runtime * runtime = substream->runtime;
-	struct snd_ps3_card_info * card = (struct snd_ps3_card_info *) snd_pcm_substream_chip(substream);
+	struct snd_ps3_card_info * card =
+		(struct snd_ps3_card_info *) snd_pcm_substream_chip(substream);
 	int pcm_index;
 
 	_SF;
@@ -181,16 +184,19 @@ static int snd_ps3_pcm_hw_params(struct snd_pcm_substream * substream,
 	return 0;
 };
 
-static int snd_ps3_delay_to_bytes(struct snd_pcm_substream * substream, unsigned int delay_ms)
+static int snd_ps3_delay_to_bytes(struct snd_pcm_substream * substream,
+				  unsigned int delay_ms)
 {
 	int ret;
 	int rate ;
 
 	rate = substream->runtime->rate;
-	ret = snd_pcm_format_size(substream->runtime->format, rate * delay_ms / 1000)
+	ret = snd_pcm_format_size(substream->runtime->format,
+				  rate * delay_ms / 1000)
 		* substream->runtime->channels;
 #if defined(_SND_PS3_DEBUG)
-	printk(KERN_ERR "%s: time=%d rate=%d bytes=%ld, frames=%d, ret=%d\n", __FUNCTION__,
+	printk(KERN_ERR "%s: time=%d rate=%d bytes=%ld, frames=%d, ret=%d\n",
+	       __FUNCTION__,
 	       delay_ms,
 	       rate,
 	       snd_pcm_format_size(substream->runtime->format, rate),
@@ -203,7 +209,8 @@ static int snd_ps3_delay_to_bytes(struct snd_pcm_substream * substream, unsigned
 static int snd_ps3_pcm_prepare(struct snd_pcm_substream * substream)
 {
 	struct snd_pcm_runtime * runtime = substream->runtime;
-	struct snd_ps3_card_info * card = (struct snd_ps3_card_info *) snd_pcm_substream_chip(substream);
+	struct snd_ps3_card_info * card =
+		(struct snd_ps3_card_info *) snd_pcm_substream_chip(substream);
 	unsigned long irqsave;
 	_SF;
 
@@ -216,7 +223,9 @@ static int snd_ps3_pcm_prepare(struct snd_pcm_substream * substream)
 		 * start with some silence
 		 */
 		read_lock(&card->start_delay_lock);
-		card->silent = snd_ps3_delay_to_bytes(substream, card->start_delay) / (PS3_AUDIO_FIFO_STAGE_SIZE * 4); /* every 4 times */
+		card->silent = snd_ps3_delay_to_bytes(substream,
+						      card->start_delay) /
+			(PS3_AUDIO_FIFO_STAGE_SIZE * 4); /* every 4 times */
 		read_unlock(&card->start_delay_lock);
 	}
 
@@ -231,7 +240,8 @@ static int snd_ps3_pcm_prepare(struct snd_pcm_substream * substream)
 
 		card->dma_last_transfer_vaddr[SND_PS3_CH_R] =
 			card->dma_next_transfer_vaddr[SND_PS3_CH_R] =
-			card->dma_start_vaddr[SND_PS3_CH_R] = runtime->dma_area + (runtime->dma_bytes / 2);
+			card->dma_start_vaddr[SND_PS3_CH_R] =
+			runtime->dma_area + (runtime->dma_bytes / 2);
 	}
 	write_unlock_irqrestore(&card->dma_lock, irqsave);
 
@@ -247,7 +257,8 @@ static int snd_ps3_pcm_prepare(struct snd_pcm_substream * substream)
 static int snd_ps3_pcm_trigger(struct snd_pcm_substream * substream,
 			       int cmd)
 {
-	struct snd_ps3_card_info * card = (struct snd_ps3_card_info *) snd_pcm_substream_chip(substream);
+	struct snd_ps3_card_info * card =
+		(struct snd_ps3_card_info *) snd_pcm_substream_chip(substream);
 	int ret = 0;
 	unsigned long irqsave;
 
@@ -264,9 +275,11 @@ static int snd_ps3_pcm_trigger(struct snd_pcm_substream * substream,
 		}
 		write_unlock_irqrestore(&card->dma_lock, irqsave);
 
-		snd_ps3_program_dma(card, SND_PS3_DMA_FILLTYPE_SILENT_FIRSTFILL);
+		snd_ps3_program_dma(card,
+				    SND_PS3_DMA_FILLTYPE_SILENT_FIRSTFILL);
 		snd_ps3_kick_dma(card);
-		while (AUDIOREG(card, PS3_AUDIO_KICK(7)) & PS3_AUDIO_KICK_STATUS_MASK) {
+		while (AUDIOREG(card, PS3_AUDIO_KICK(7)) &
+		       PS3_AUDIO_KICK_STATUS_MASK) {
 			udelay(1);
 		}
 		snd_ps3_program_dma(card, SND_PS3_DMA_FILLTYPE_SILENT_RUNNING);
@@ -293,9 +306,11 @@ static int snd_ps3_pcm_trigger(struct snd_pcm_substream * substream,
 /*
  * report current pointer
  */
-static snd_pcm_uframes_t snd_ps3_pcm_pointer(struct snd_pcm_substream * substream)
+static snd_pcm_uframes_t snd_ps3_pcm_pointer(
+	struct snd_pcm_substream * substream)
 {
-	struct snd_ps3_card_info * card = (struct snd_ps3_card_info *) snd_pcm_substream_chip(substream);
+	struct snd_ps3_card_info * card =
+		(struct snd_ps3_card_info *) snd_pcm_substream_chip(substream);
 	unsigned long irqsave;
 	size_t bytes;
 	snd_pcm_uframes_t ret;
@@ -304,7 +319,8 @@ static snd_pcm_uframes_t snd_ps3_pcm_pointer(struct snd_pcm_substream * substrea
 
  	read_lock_irqsave(&card->dma_lock, irqsave);
 	{
-		bytes = (size_t)(card->dma_last_transfer_vaddr[SND_PS3_CH_L] - card->dma_start_vaddr[SND_PS3_CH_L]);
+		bytes = (size_t)(card->dma_last_transfer_vaddr[SND_PS3_CH_L] -
+				 card->dma_start_vaddr[SND_PS3_CH_L]);
 	}
  	read_unlock_irqrestore(&card->dma_lock, irqsave);
 
@@ -342,13 +358,16 @@ static void snd_ps3_audio_fixup(struct snd_ps3_card_info * card)
 	AUDIOREG(card, PS3_AUDIO_INTR_EN_0) = 0;
 
 	/* use every 4 buffer empty interrupt */
-	AUDIOREG(card, PS3_AUDIO_AX_IC) = ((AUDIOREG(card, PS3_AUDIO_AX_IC) & PS3_AUDIO_AX_IC_AASOIMD_MASK) |
-					     PS3_AUDIO_AX_IC_AASOIMD_EVERY4);
+	AUDIOREG(card, PS3_AUDIO_AX_IC) = ((AUDIOREG(card, PS3_AUDIO_AX_IC) &
+					    PS3_AUDIO_AX_IC_AASOIMD_MASK) |
+					   PS3_AUDIO_AX_IC_AASOIMD_EVERY4);
 
 	/* enable 3wire clocks */
-	AUDIOREG(card, PS3_AUDIO_AO_3WMCTRL) &= ~(PS3_AUDIO_AO_3WMCTRL_ASOBCLKD_DISABLED |
-						    PS3_AUDIO_AO_3WMCTRL_ASOLRCKD_DISABLED);
-	AUDIOREG(card, PS3_AUDIO_AO_3WMCTRL) |= PS3_AUDIO_AO_3WMCTRL_ASOPLRCK_DEFAULT;
+	AUDIOREG(card, PS3_AUDIO_AO_3WMCTRL) &=
+		~(PS3_AUDIO_AO_3WMCTRL_ASOBCLKD_DISABLED |
+		  PS3_AUDIO_AO_3WMCTRL_ASOLRCKD_DISABLED);
+	AUDIOREG(card, PS3_AUDIO_AO_3WMCTRL) |=
+		PS3_AUDIO_AO_3WMCTRL_ASOPLRCK_DEFAULT;
 }
 
 /*
@@ -370,24 +389,27 @@ static int snd_ps3_change_avsetting(struct snd_ps3_card_info * card)
 	 */
 
 	/* disable all 3wire buffers */
-	AUDIOREG(card, PS3_AUDIO_AO_3WMCTRL) &= ~(PS3_AUDIO_AO_3WMCTRL_ASOEN(0) |
-						  PS3_AUDIO_AO_3WMCTRL_ASOEN(1) |
-						  PS3_AUDIO_AO_3WMCTRL_ASOEN(2) |
-						  PS3_AUDIO_AO_3WMCTRL_ASOEN(3));
+	AUDIOREG(card, PS3_AUDIO_AO_3WMCTRL) &=
+		~(PS3_AUDIO_AO_3WMCTRL_ASOEN(0) |
+		  PS3_AUDIO_AO_3WMCTRL_ASOEN(1) |
+		  PS3_AUDIO_AO_3WMCTRL_ASOEN(2) |
+		  PS3_AUDIO_AO_3WMCTRL_ASOEN(3));
 	mb();
 	/* wait for actually stopped */
 	retries = 1000;
-	while ((AUDIOREG(card, PS3_AUDIO_AO_3WMCTRL) & (PS3_AUDIO_AO_3WMCTRL_ASORUN(0) |
-							PS3_AUDIO_AO_3WMCTRL_ASORUN(1) |
-							PS3_AUDIO_AO_3WMCTRL_ASORUN(2) |
-							PS3_AUDIO_AO_3WMCTRL_ASORUN(3))) &&
+	while ((AUDIOREG(card, PS3_AUDIO_AO_3WMCTRL) &
+		(PS3_AUDIO_AO_3WMCTRL_ASORUN(0) |
+		 PS3_AUDIO_AO_3WMCTRL_ASORUN(1) |
+		 PS3_AUDIO_AO_3WMCTRL_ASORUN(2) |
+		 PS3_AUDIO_AO_3WMCTRL_ASORUN(3))) &&
 	       --retries) {
 		udelay(1);
 	}
 	mb();
 	/* reset buffer pointer */
 	for (i = 0; i < 4; i++) {
-		AUDIOREG(card, PS3_AUDIO_AO_3WCTRL(i)) |= PS3_AUDIO_AO_3WCTRL_ASOBRST_RESET;
+		AUDIOREG(card, PS3_AUDIO_AO_3WCTRL(i)) |=
+			PS3_AUDIO_AO_3WCTRL_ASOBRST_RESET;
 		udelay(10);
 	}
 	mb();
@@ -396,11 +418,15 @@ static int snd_ps3_change_avsetting(struct snd_ps3_card_info * card)
 	AUDIOREG(card, PS3_AUDIO_AO_3WMCTRL) |= PS3_AUDIO_AO_3WMCTRL_ASOEN(0);
 	mb();
 
-	/* In 24bit mode, ALSA inserts a zero byte at first byte of per sample */
-	AUDIOREG(card, PS3_AUDIO_AO_3WCTRL(0)) = ((AUDIOREG(card, PS3_AUDIO_AO_3WCTRL(0)) & ~PS3_AUDIO_AO_3WCTRL_ASODF) |
-						  PS3_AUDIO_AO_3WCTRL_ASODF_LSB);
-	AUDIOREG(card, PS3_AUDIO_AO_SPDCTRL(0)) = ((AUDIOREG(card, PS3_AUDIO_AO_SPDCTRL(0)) & ~PS3_AUDIO_AO_SPDCTRL_SPODF) |
-						   PS3_AUDIO_AO_SPDCTRL_SPODF_LSB);
+	/* In 24bit mode,ALSA inserts a zero byte at first byte of per sample */
+	AUDIOREG(card, PS3_AUDIO_AO_3WCTRL(0)) =
+		((AUDIOREG(card, PS3_AUDIO_AO_3WCTRL(0)) &
+		  ~PS3_AUDIO_AO_3WCTRL_ASODF) |
+		 PS3_AUDIO_AO_3WCTRL_ASODF_LSB);
+	AUDIOREG(card, PS3_AUDIO_AO_SPDCTRL(0)) =
+		((AUDIOREG(card, PS3_AUDIO_AO_SPDCTRL(0)) &
+		  ~PS3_AUDIO_AO_SPDCTRL_SPODF) |
+		 PS3_AUDIO_AO_SPDCTRL_SPODF_LSB);
 	mb();
 	/* avsetting driver altered AX_IE, caller must reset it if you want */
 	_EF;
@@ -434,14 +460,16 @@ static int snd_ps3_init_avsetting(struct snd_ps3_card_info * card)
  */
 static int snd_ps3_set_avsetting(struct snd_pcm_substream * substream)
 {
-	struct snd_ps3_card_info * card = (struct snd_ps3_card_info *) snd_pcm_substream_chip(substream);
+	struct snd_ps3_card_info * card =
+		(struct snd_ps3_card_info *) snd_pcm_substream_chip(substream);
 	struct snd_ps3_avsetting_info avs;
 
 	avs = card->avs;
 
 #if defined(_SND_PS3_DEBUG)
 	printk(KERN_ERR "%s: called freq=%d width=%d\n", __FUNCTION__,
-	       substream->runtime->rate, snd_pcm_format_width(substream->runtime->format));
+	       substream->runtime->rate,
+	       snd_pcm_format_width(substream->runtime->format));
 
 	printk(KERN_ERR "%s: before freq=%d width=%d\n", __FUNCTION__,
 	       card->avs.avs_audio_rate, card->avs.avs_audio_width);
@@ -518,7 +546,8 @@ static int snd_ps3_kick_dma(struct snd_ps3_card_info * card)
 	return 0;
 }
 
-static int snd_ps3_verify_dma_stop(struct snd_ps3_card_info * card, int count, int force_stop)
+static int snd_ps3_verify_dma_stop(struct snd_ps3_card_info * card,
+				   int count, int force_stop)
 {
 	int dma_ch, done, retries, stop_forced = 0;
 	uint32_t status;
@@ -526,7 +555,8 @@ static int snd_ps3_verify_dma_stop(struct snd_ps3_card_info * card, int count, i
 	for (dma_ch = 0; dma_ch < 8; dma_ch ++) {
 		retries = count;
 		do {
-			status = AUDIOREG(card, PS3_AUDIO_KICK(dma_ch)) & PS3_AUDIO_KICK_STATUS_MASK;
+			status = AUDIOREG(card, PS3_AUDIO_KICK(dma_ch)) &
+				PS3_AUDIO_KICK_STATUS_MASK;
 			switch (status) {
 			case PS3_AUDIO_KICK_STATUS_DONE:
 			case PS3_AUDIO_KICK_STATUS_NOTIFY:
@@ -540,9 +570,13 @@ static int snd_ps3_verify_dma_stop(struct snd_ps3_card_info * card, int count, i
 			}
 		} while (!done && --retries);
 		if (!retries && force_stop) {
-			printk(KERN_ERR "%s: DMA ch %d is not stopped. Force stop\n", __FUNCTION__, dma_ch);
-			/* last resort. force to stop dma. NOTE: this cause DMA done interrupts */
-			AUDIOREG(card, PS3_AUDIO_CONFIG) |= PS3_AUDIO_CONFIG_CLEAR;
+			printk(KERN_ERR "%s: DMA ch %d is not stopped.",
+			       __FUNCTION__, dma_ch);
+			/* last resort. force to stop dma.
+			 *  NOTE: this cause DMA done interrupts
+			 */
+			AUDIOREG(card, PS3_AUDIO_CONFIG) |=
+				PS3_AUDIO_CONFIG_CLEAR;
 			stop_forced = 1;
 		}
 	}
@@ -576,7 +610,9 @@ static void snd_ps3_wait_for_dma_stop(struct snd_ps3_card_info * card)
 	AUDIOREG(card, PS3_AUDIO_INTR_0) = -1;
 	AUDIOREG(card, PS3_AUDIO_AX_IS) = -1;
 
-	/* revert CLEAR bit since it will not reset automatically after DMA stop */
+	/*
+	 *revert CLEAR bit since it will not reset automatically after DMA stop
+	 */
 	if (stop_forced) {
 		AUDIOREG(card, PS3_AUDIO_CONFIG) &= ~PS3_AUDIO_CONFIG_CLEAR;
 	}
@@ -588,12 +624,16 @@ static void snd_ps3_wait_for_dma_stop(struct snd_ps3_card_info * card)
  * increment ring buffer pointer.
  * NOTE: caller must hold write spinlock
  */
-static void snd_ps3_bump_buffer(struct snd_ps3_card_info * card, enum snd_ps3_ch ch, size_t byte_count, int stage)
+static void snd_ps3_bump_buffer(struct snd_ps3_card_info * card,
+				enum snd_ps3_ch ch, size_t byte_count,
+				int stage)
 {
 	if (!stage)
-		card->dma_last_transfer_vaddr[ch] = card->dma_next_transfer_vaddr[ch];
+		card->dma_last_transfer_vaddr[ch] =
+			card->dma_next_transfer_vaddr[ch];
 	card->dma_next_transfer_vaddr[ch] += byte_count;
-	if ((card->dma_start_vaddr[ch] + (card->dma_buffer_size / 2)) <= card->dma_next_transfer_vaddr[ch]) {
+	if ((card->dma_start_vaddr[ch] + (card->dma_buffer_size / 2)) <=
+	    card->dma_next_transfer_vaddr[ch]) {
 		card->dma_next_transfer_vaddr[ch] = card->dma_start_vaddr[ch];
 	}
 }
@@ -601,10 +641,10 @@ static void snd_ps3_bump_buffer(struct snd_ps3_card_info * card, enum snd_ps3_ch
 /*
  * setup dmac to send data to audio and attenuate samples on the ring buffer
  */
-static int snd_ps3_program_dma(struct snd_ps3_card_info * card, enum snd_ps3_dma_filltype filltype)
+static int snd_ps3_program_dma(struct snd_ps3_card_info * card,
+			       enum snd_ps3_dma_filltype filltype)
 {
 	uint32_t dma_addr;
-	uint64_t dma_addr2;
 	int fill_stages, dma_ch, stage;
 	enum snd_ps3_ch ch;
 	uint32_t ch0_kick_event = 0; /* initialize to mute gcc */
@@ -631,59 +671,60 @@ static int snd_ps3_program_dma(struct snd_ps3_card_info * card, enum snd_ps3_dma
 	snd_ps3_verify_dma_stop(card, 700, 0);
 	fill_stages = 4;
  	write_lock_irqsave(&card->dma_lock, irqsave);
-	{
-		if (likely(!silent))
-			snd_ps3_soft_attenuate(card,
-					       card->dma_next_transfer_vaddr[0],
-					       card->dma_next_transfer_vaddr[1],
-					       PS3_AUDIO_DMAC_BLOCK_SIZE * 4);
-		for (ch = 0; ch < 2; ch++) {
-			start_vaddr = card->dma_next_transfer_vaddr[0];
-			for (stage = 0; stage < fill_stages; stage ++) {
-				//dma_ch = fill_stages * ch + stage;
-				dma_ch = stage * 2 + ch;
-				/* src */
-				if (silent) {
-					dma_addr2 = p_to_dma(__pa(card->null_buffer_start_vaddr));
-				}
-				else {
-					dma_addr2 = p_to_dma(__pa(card->dma_next_transfer_vaddr[ch]));
+	if (likely(!silent))
+		snd_ps3_soft_attenuate(card,
+				       card->dma_next_transfer_vaddr[0],
+				       card->dma_next_transfer_vaddr[1],
+				       PS3_AUDIO_DMAC_BLOCK_SIZE * 4);
+	for (ch = 0; ch < 2; ch++) {
+		start_vaddr = card->dma_next_transfer_vaddr[0];
+		for (stage = 0; stage < fill_stages; stage ++) {
+			//dma_ch = fill_stages * ch + stage;
+			dma_ch = stage * 2 + ch;
+			if (silent) {
+				dma_addr =
+				p_to_dma(__pa(card->null_buffer_start_vaddr));
+			}
+			else {
+				dma_addr =
+				p_to_dma(__pa(card->dma_next_transfer_vaddr[ch]));
+			}
 
-				}
+			AUDIOREG(card, PS3_AUDIO_SOURCE(dma_ch)) =
+				(PS3_AUDIO_SOURCE_TARGET_SYSTEM_MEMORY |
+				 dma_addr);
 
-				dma_addr = dma_addr2 & 0x00000000ffffffffUL;
-				/* check ioif addr overflow */
-				if (dma_addr2 != dma_addr)
-					printk("Dma pa=%lx, addr=%x addr2=%lx\n",
-					       __pa(card->dma_next_transfer_vaddr[ch]), dma_addr, dma_addr2);
+			/* dst: fixed to 3wire#0 */
+			if (ch == 0)
+				AUDIOREG(card, PS3_AUDIO_DEST(dma_ch)) =
+					(PS3_AUDIO_DEST_TARGET_AUDIOFIFO |
+					 PS3_AUDIO_AO_3W_LDATA(0));
+			else
+				AUDIOREG(card, PS3_AUDIO_DEST(dma_ch)) =
+					(PS3_AUDIO_DEST_TARGET_AUDIOFIFO |
+					 PS3_AUDIO_AO_3W_RDATA(0));
 
-				AUDIOREG(card, PS3_AUDIO_SOURCE(dma_ch)) = (PS3_AUDIO_SOURCE_TARGET_SYSTEM_MEMORY | dma_addr);
+			/* count always 1 DMA block (1/2 stage = 128 bytes) */
+			AUDIOREG(card, PS3_AUDIO_DMASIZE(dma_ch)) = 0;
+			/* bump pointer if needed */
+			if (!silent)
+				snd_ps3_bump_buffer(card, ch,
+						    PS3_AUDIO_DMAC_BLOCK_SIZE,
+						    stage);
 
-				/* dst: fixed to 3wire#0 */
-				if (ch == 0)
-					AUDIOREG(card, PS3_AUDIO_DEST(dma_ch)) = (PS3_AUDIO_DEST_TARGET_AUDIOFIFO |
-										  PS3_AUDIO_AO_3W_LDATA(0));
-				else
-					AUDIOREG(card, PS3_AUDIO_DEST(dma_ch)) = (PS3_AUDIO_DEST_TARGET_AUDIOFIFO |
-										  PS3_AUDIO_AO_3W_RDATA(0));
-
-				/* count always 1 DMA block (1/2 stage = 128 bytes) */
-				AUDIOREG(card, PS3_AUDIO_DMASIZE(dma_ch)) = 0;
-				/* bump pointer if needed */
-				if (!silent)
-					snd_ps3_bump_buffer(card, ch, PS3_AUDIO_DMAC_BLOCK_SIZE * 1, stage);
-
-				/* kick event  */
-				if (dma_ch == 0) {
-					AUDIOREG(card, PS3_AUDIO_KICK(dma_ch)) = ch0_kick_event;
-				} else {
-					AUDIOREG(card, PS3_AUDIO_KICK(dma_ch)) = (PS3_AUDIO_KICK_EVENT_AUDIO_DMA(dma_ch - 1) |
-										  PS3_AUDIO_KICK_REQUEST);
-				}
+			/* kick event  */
+			if (dma_ch == 0) {
+				AUDIOREG(card, PS3_AUDIO_KICK(dma_ch)) =
+					ch0_kick_event;
+			} else {
+				AUDIOREG(card, PS3_AUDIO_KICK(dma_ch)) =
+					(PS3_AUDIO_KICK_EVENT_AUDIO_DMA(dma_ch -
+									1) |
+					 PS3_AUDIO_KICK_REQUEST);
 			}
 		}
-		mb();
 	}
+	mb();
 	write_unlock_irqrestore(&card->dma_lock, irqsave);
 
 	mb();
@@ -704,7 +745,8 @@ static int __init snd_ps3_driver_probe(struct platform_device * device)
 	rwlock_init(&the_card.dma_lock);
 	rwlock_init(&the_card.start_delay_lock);
 
-	the_card.start_delay = snd_ps3_start_delay; /* CONFIG_SND_PS3_DEFAULT_START_DELAY */
+	/* CONFIG_SND_PS3_DEFAULT_START_DELAY */
+	the_card.start_delay = snd_ps3_start_delay;
 	the_card.platform_device = device;
 
 	/* map audio register, etc */
@@ -741,12 +783,12 @@ static int __init snd_ps3_driver_probe(struct platform_device * device)
 	the_card.pcm->info_flags = SNDRV_PCM_INFO_NONINTERLEAVED;
 	/* pre-alloc buffer */
 	ret = snd_pcm_lib_preallocate_pages_for_all(the_card.pcm,
-						    SNDRV_DMA_TYPE_CONTINUOUS,
-						    snd_dma_continuous_data(GFP_KERNEL),
-						    PS3_AUDIO_DMAC_BLOCK_SIZE *
-						    PS3_AUDIO_DMAC_MAX_BLOCKS * 4,
-						    PS3_AUDIO_DMAC_BLOCK_SIZE *
-						    PS3_AUDIO_DMAC_MAX_BLOCKS * 4);
+					SNDRV_DMA_TYPE_CONTINUOUS,
+					snd_dma_continuous_data(GFP_KERNEL),
+					PS3_AUDIO_DMAC_BLOCK_SIZE *
+					PS3_AUDIO_DMAC_MAX_BLOCKS * 4,
+					PS3_AUDIO_DMAC_BLOCK_SIZE *
+					PS3_AUDIO_DMAC_MAX_BLOCKS * 4);
 
 	if (ret < 0) {
 		printk(KERN_ERR "%s: prealloc failed\n", __FUNCTION__);
@@ -854,13 +896,16 @@ static int __init snd_ps3_init(void)
 	if (ret < 0)
 		return ret;
 
-	the_platform_device = platform_device_register_simple(SND_PS3_DRIVER_NAME, 0, NULL, 0);
+	the_platform_device =
+		platform_device_register_simple(SND_PS3_DRIVER_NAME,
+						0, NULL, 0);
 	if (IS_ERR(the_platform_device)) {
 		ret = PTR_ERR(the_platform_device);
 		goto error0;
 	}
 
-	ret = device_create_file(&(the_platform_device->dev), &dev_attr_start_delay);
+	ret = device_create_file(&(the_platform_device->dev),
+				 &dev_attr_start_delay);
 
 	return ret;
  error0:
@@ -900,7 +945,8 @@ static int snd_ps3_init_audio(void)
 		goto cleanup;
 	}
 
-	the_card.mapped_vaddr = ioremap(the_card.audio_lpar_addr, the_card.audio_lpar_size);
+	the_card.mapped_vaddr = ioremap(the_card.audio_lpar_addr,
+					the_card.audio_lpar_size);
 
 	if (!the_card.mapped_vaddr) {
 		printk(KERN_ERR "%s: ioremap 1 failed \n", __FUNCTION__);
@@ -925,7 +971,8 @@ static int snd_ps3_init_audio(void)
 		goto cleanup;
 	}
 
-	the_card.mapped_vaddr = ioremap(the_card.audio_lpar_addr, the_card.audio_lpar_size);
+	the_card.mapped_vaddr = ioremap(the_card.audio_lpar_addr,
+					the_card.audio_lpar_size);
 
 	if (!the_card.mapped_vaddr) {
 		printk(KERN_ERR "%s: ioremap 0 failed \n", __FUNCTION__);
@@ -935,7 +982,7 @@ static int snd_ps3_init_audio(void)
 
 	/* irq */
 	ret = ps3_irq_plug_setup(PS3_BINDING_CPU_ANY, the_card.audio_irq_outlet,
-			    &the_card.irq_no);
+				 &the_card.irq_no);
 	if (ret) {
 		printk("%s:%u: ps3_alloc_irq failed (%d)\n", __FUNCTION__,
 		       __LINE__, ret);
@@ -950,7 +997,10 @@ static int snd_ps3_init_audio(void)
 		goto cleanup_3;
 	}
 
-	/* OK, PPU side setup done, tell io address for DMA to audio controller */
+	/*
+	 * OK, PPU side setup done,
+	 * tell io address for DMA to audio controller
+	 */
 	snd_ps3_audio_set_base_addr(ioif_map_info_array[0].ioif_addr);
 
 	_EF;
@@ -1093,7 +1143,9 @@ static int snd_ps3_create_iopt(void)
 	 */
 	ioif_map_info_count = (ps3_mem_total >> IO_SEGMENTSIZE_SHIFT) + 1;
 
-	if (!(ioif_map_info_array = kzalloc(sizeof(struct ioif_map_info) * ioif_map_info_count, GFP_KERNEL))) {
+	if (!(ioif_map_info_array =
+	      kzalloc(sizeof(struct ioif_map_info) * ioif_map_info_count,
+		      GFP_KERNEL))) {
 		printk(KERN_ERR "%s: no memory\n", __FUNCTION__);
 		return -ENOMEM;
 	}
@@ -1101,16 +1153,20 @@ static int snd_ps3_create_iopt(void)
 	pages_remain = ps3_mem_total >> IO_PAGESIZE_SHIFT;
 	/* physical address start from 0 */
 	current_paddr = 0;
-	for (current_segment = 0; current_segment < ioif_map_info_count; current_segment++) {
+	for (current_segment = 0;
+	     current_segment < ioif_map_info_count;
+	     current_segment++) {
 
-		ioif_map_info_array[current_segment].start_paddr = current_paddr;
-		ioif_map_info_array[current_segment].start_lpar_addr = ps3_mm_phys_to_lpar(current_paddr);
+		ioif_map_info_array[current_segment].start_paddr =
+			current_paddr;
+		ioif_map_info_array[current_segment].start_lpar_addr =
+			ps3_mm_phys_to_lpar(current_paddr);
 		ioif_map_info_array[current_segment].area_size = IO_SEGMENTSIZE;
 
-		ret = lv1_allocate_io_segment(0,           /* io space */
-					      IO_SEGMENTSIZE, /* segment size */
-					      IO_PAGESIZE_SHIFT, /* io page size */
-					      &(ioif_map_info_array[current_segment].ioif_addr));
+		ret = lv1_allocate_io_segment(0, /* io space */
+			IO_SEGMENTSIZE, /* segment size */
+			IO_PAGESIZE_SHIFT, /* io page size */
+			&(ioif_map_info_array[current_segment].ioif_addr));
 
 		if (ret) {
 			printk(KERN_ERR "%s: alloc_io_seg %d failed %d\n",
@@ -1119,28 +1175,38 @@ static int snd_ps3_create_iopt(void)
 		}
 
 		if (ioif_map_info_array[current_segment].ioif_addr >> 32) {
-			printk(KERN_CRIT "%s: io addr is allocated above 4G! %lx\n", __FUNCTION__,
+			printk(KERN_CRIT "%s: io addr is alloc above 4G! %lx\n",
+			       __FUNCTION__,
 			       ioif_map_info_array[current_segment].ioif_addr);
 			panic("!");
 		}
 		/* create iopte for this segment */
 		for (current_page = 0;
-		     current_page < (IO_SEGMENTSIZE / IO_PAGESIZE) && pages_remain;
-		     current_page ++, current_paddr = inc_paddr(current_paddr, IO_PAGESIZE)) {
+		     current_page < (IO_SEGMENTSIZE / IO_PAGESIZE) &&
+			     pages_remain;
+		     current_page ++, current_paddr =
+			     inc_paddr(current_paddr, IO_PAGESIZE)) {
 			ret = lv1_put_iopte(0, /* io address space id */
-					    ioif_map_info_array[current_segment].ioif_addr + current_page * IO_PAGESIZE, /* ioif addr */
-					    ps3_mm_phys_to_lpar(current_paddr), /* lpar addr */
-					    PS3_AUDIO_IOID,
-					    IOPTE_READONLY | IOPTE_COHERENT | IOPTE_STRICT_ORDER);
+				ioif_map_info_array[current_segment].ioif_addr +
+				current_page * IO_PAGESIZE, /* ioif addr */
+				ps3_mm_phys_to_lpar(current_paddr),
+				PS3_AUDIO_IOID,
+				IOPTE_READONLY | IOPTE_COHERENT |
+					    IOPTE_STRICT_ORDER);
 			if (ret) {
-				printk(KERN_ERR "%s: put_iopte failed (%d) for seg=%d paddr=%#lx lpar=%#lx page=%d\n",
+				printk(KERN_ERR "%s: put_iopte failed (%d) " \
+				       "seg=%d paddr=%#lx lpar=%#lx page=%d\n",
 				       __FUNCTION__, ret, current_segment,
 				       current_paddr,
 				       ps3_mm_phys_to_lpar(current_paddr),
 				       current_page);
-				printk(KERN_ERR "%s: rm_limit=%#lx 2nd_base=%#lx 2nd_size=%#lx total=%#lx\n", __FUNCTION__,
-				       ps3_rm_limit, ps3_2nd_mem_base, ps3_2nd_mem_size, ps3_mem_total);
-				current_segment ++; /* release current segment also */
+				printk(KERN_ERR "%s: rm_limit=%#lx " \
+				       "2nd_base=%#lx 2nd_size=%#lx "\
+				       "total=%#lx\n",
+				       __FUNCTION__,
+				       ps3_rm_limit, ps3_2nd_mem_base,
+				       ps3_2nd_mem_size, ps3_mem_total);
+				current_segment ++;
 				goto cleanup0;
 			}
 			pages_remain --;
@@ -1176,30 +1242,39 @@ static void snd_ps3_destruct_iopt_helper(void)
 	/*
 	 * invalidate iopte first , then release io segment
 	 */
-	for (current_segment = 0; current_segment < ioif_map_info_count; current_segment++) {
+	for (current_segment = 0;
+	     current_segment < ioif_map_info_count; current_segment++) {
 		/* create iopte for this segment */
 		for (current_page = 0;
-		     current_page < (IO_SEGMENTSIZE / IO_PAGESIZE) && pages_remain;
-		     current_page ++, current_paddr = inc_paddr(current_paddr,IO_PAGESIZE)) {
+		     current_page < (IO_SEGMENTSIZE / IO_PAGESIZE) &&
+			     pages_remain;
+		     current_page ++, current_paddr =
+			     inc_paddr(current_paddr,IO_PAGESIZE)) {
 			ret = lv1_put_iopte(0, /* io address space id */
-					    ioif_map_info_array[current_segment].ioif_addr + current_page * IO_PAGESIZE, /* ioif addr */
-					    ps3_mm_phys_to_lpar(current_paddr), /* lpar addr */
-					    PS3_AUDIO_IOID, IOPTE_INVALID);
+				ioif_map_info_array[current_segment].ioif_addr +
+					    current_page *
+					    IO_PAGESIZE, /* ioif addr */
+				ps3_mm_phys_to_lpar(current_paddr),
+				PS3_AUDIO_IOID, IOPTE_INVALID);
 			if (ret) {
-				printk(KERN_ERR "%s: put_iopte failed (%d) for seg=%d paddr=%#lx lpar=%#lx page=%d\n",
+				printk(KERN_ERR "%s: put_iopte failed (%d) "\
+				       "seg=%d paddr=%#lx lpar=%#lx page=%d\n",
 				       __FUNCTION__, ret, current_segment,
 				       current_paddr,
 				       ps3_mm_phys_to_lpar(current_paddr),
 				       current_page);
-				printk(KERN_ERR "%s: rm_limit=%#lx 2nd_base=%#lx 2nd_size=%#lx total=%#lx\n", __FUNCTION__,
-				       ps3_rm_limit, ps3_2nd_mem_base, ps3_2nd_mem_size, ps3_mem_total);
-				current_segment ++; /* release current segment also */
+				printk(KERN_ERR "%s: rm_limit=%#lx "\
+				       "2nd_base=%#lx 2nd_size=%#lx "\
+				       "total=%#lx\n", __FUNCTION__,
+				       ps3_rm_limit, ps3_2nd_mem_base,
+				       ps3_2nd_mem_size, ps3_mem_total);
+				current_segment ++;
 			}
 			pages_remain --;
 		}
 
 		ret = lv1_release_io_segment(0, /* io space */
-					     ioif_map_info_array[current_segment].ioif_addr);
+			     ioif_map_info_array[current_segment].ioif_addr);
 
 		if (ret)
 			printk(KERN_ERR "%s: release_io_seg %d failed %d\n",
@@ -1235,7 +1310,10 @@ static irqreturn_t snd_ps3_interrupt(int irq, void * dev_id)
 	}
 
 	port_intr = AUDIOREG(card, PS3_AUDIO_AX_IS);
-	/* serial buffer empty detected (every 4 times), program next dma and kick it */
+	/*
+	 *serial buffer empty detected (every 4 times),
+	 *program next dma and kick it
+	 */
 	if (port_intr & PS3_AUDIO_AX_IE_ASOBEIE(0)) {
 		AUDIOREG(card, PS3_AUDIO_AX_IS) = PS3_AUDIO_AX_IE_ASOBEIE(0);
 		if (port_intr & PS3_AUDIO_AX_IE_ASOBUIE(0)) {
@@ -1245,14 +1323,16 @@ static irqreturn_t snd_ps3_interrupt(int irq, void * dev_id)
 		if (card->silent) {
 			/* we are still in silent time */
 			snd_ps3_program_dma(card,
-					    (underflow_occured) ? SND_PS3_DMA_FILLTYPE_SILENT_FIRSTFILL :
-					    SND_PS3_DMA_FILLTYPE_SILENT_RUNNING);
+				(underflow_occured) ?
+				SND_PS3_DMA_FILLTYPE_SILENT_FIRSTFILL :
+				SND_PS3_DMA_FILLTYPE_SILENT_RUNNING);
 			snd_ps3_kick_dma(card);
 			card->silent --;
 		} else {
 			snd_ps3_program_dma(card,
-					    (underflow_occured) ? SND_PS3_DMA_FILLTYPE_FIRSTFILL :
-					    SND_PS3_DMA_FILLTYPE_RUNNING);
+				(underflow_occured) ?
+				SND_PS3_DMA_FILLTYPE_FIRSTFILL :
+				SND_PS3_DMA_FILLTYPE_RUNNING);
 			snd_ps3_kick_dma(card);
 			snd_pcm_period_elapsed(card->substream);
 		}
@@ -1261,14 +1341,17 @@ static irqreturn_t snd_ps3_interrupt(int irq, void * dev_id)
                 /*
 		 * serial out underflow, but buffer empty not detected.
 		 * in this case, fill fifo with 0 to recover.  After
-		 * filling dummy data, serial automatically start to consume them
-		 * and then will generate normal buffer empty interrupts.
+		 * filling dummy data, serial automatically start to
+		 * consume them and then will generate normal buffer
+		 * empty interrupts.
 		 * If both buffer underflow and buffer empty are occured,
 		 * it is better to do nomal data transfer than empty one
 		 */
-		snd_ps3_program_dma(card, SND_PS3_DMA_FILLTYPE_SILENT_FIRSTFILL);
+		snd_ps3_program_dma(card,
+				    SND_PS3_DMA_FILLTYPE_SILENT_FIRSTFILL);
 		snd_ps3_kick_dma(card);
-		snd_ps3_program_dma(card, SND_PS3_DMA_FILLTYPE_SILENT_FIRSTFILL);
+		snd_ps3_program_dma(card,
+				    SND_PS3_DMA_FILLTYPE_SILENT_FIRSTFILL);
 		snd_ps3_kick_dma(card);
 	}
 	/* clear interrupt cause */
@@ -1278,9 +1361,11 @@ static irqreturn_t snd_ps3_interrupt(int irq, void * dev_id)
 /*
  * sysfs
  */
-static ssize_t snd_ps3_get_start_delay(struct device *dev, struct device_attribute *attr, char *buf)
+static ssize_t snd_ps3_get_start_delay(struct device *dev,
+				       struct device_attribute *attr, char *buf)
 {
-	struct platform_device * plat_dev = container_of(dev, struct platform_device, dev);
+	struct platform_device * plat_dev =
+		container_of(dev, struct platform_device, dev);
 	struct snd_ps3_card_info * card = platform_get_drvdata(plat_dev);
 	ssize_t ret;
 
@@ -1296,7 +1381,8 @@ static ssize_t snd_ps3_set_start_delay(struct device *dev,
 				       size_t count)
 {
 	unsigned int start_delay;
-	struct platform_device * plat_dev = container_of(dev, struct platform_device, dev);
+	struct platform_device * plat_dev =
+		container_of(dev, struct platform_device, dev);
 	struct snd_ps3_card_info * card = platform_get_drvdata(plat_dev);
 
 	if (sscanf(buf, "%u", &start_delay) > 0) {
@@ -1309,7 +1395,8 @@ static ssize_t snd_ps3_set_start_delay(struct device *dev,
 }
 
 
-static int snd_ps3_info_vol_control(struct snd_kcontrol * kcontrol, struct snd_ctl_elem_info * uinfo)
+static int snd_ps3_info_vol_control(struct snd_kcontrol * kcontrol,
+				    struct snd_ctl_elem_info * uinfo)
 {
 	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
 	uinfo->count = SND_PS3_CH_MAX; /* stereo */
@@ -1318,16 +1405,19 @@ static int snd_ps3_info_vol_control(struct snd_kcontrol * kcontrol, struct snd_c
 	return 0;
 };
 
-static int snd_ps3_get_vol_control(struct snd_kcontrol * kcontrol, struct snd_ctl_elem_value * ucontrol)
+static int snd_ps3_get_vol_control(struct snd_kcontrol * kcontrol,
+				   struct snd_ctl_elem_value * ucontrol)
 {
 	struct snd_ps3_card_info * card = snd_kcontrol_chip(kcontrol);
 	int i;
 	for (i = 0; i < SND_PS3_CH_MAX; i++)
-		ucontrol->value.integer.value[i] = SND_PS3_MAX_VOL - card->attenuater[i];
+		ucontrol->value.integer.value[i] =
+			SND_PS3_MAX_VOL - card->attenuater[i];
 	return 0;
 };
 
-static int snd_ps3_put_vol_control(struct snd_kcontrol * kcontrol, struct snd_ctl_elem_value * ucontrol)
+static int snd_ps3_put_vol_control(struct snd_kcontrol * kcontrol,
+				   struct snd_ctl_elem_value * ucontrol)
 {
 	struct snd_ps3_card_info * card = snd_kcontrol_chip(kcontrol);
 	int i;
@@ -1339,8 +1429,10 @@ static int snd_ps3_put_vol_control(struct snd_kcontrol * kcontrol, struct snd_ct
 			return -EINVAL;
 
 	for (i = 0; i < SND_PS3_CH_MAX; i++)
-		if ((SND_PS3_MAX_VOL - card->attenuater[i]) != ucontrol->value.integer.value[i]) {
-			card->attenuater[i] = SND_PS3_MAX_VOL - ucontrol->value.integer.value[i];
+		if ((SND_PS3_MAX_VOL - card->attenuater[i]) !=
+		    ucontrol->value.integer.value[i]) {
+			card->attenuater[i] = SND_PS3_MAX_VOL -
+				ucontrol->value.integer.value[i];
 			changed = 1;
 		}
 	return changed;
@@ -1352,7 +1444,8 @@ typedef struct
 	unsigned char denominator;
 } attenuater_divisor;
 
-static const attenuater_divisor attenuater_divisor_array[SND_PS3_MAX_VOL - SND_PS3_MIN_VOL + 1] =
+static const attenuater_divisor
+attenuater_divisor_array[SND_PS3_MAX_VOL - SND_PS3_MIN_VOL + 1] =
 {
 	[ 0] = {   1,   1}, /* 0db; not used */
 	[ 1] = { 177, 250}, /*  -1.5 db 0.708 */
@@ -1375,7 +1468,8 @@ static const attenuater_divisor attenuater_divisor_array[SND_PS3_MAX_VOL - SND_P
 /*
  * software volume control
  */
-static void snd_ps3_do_attenuate_16(int attenuate, signed short int * start, int samples)
+static void snd_ps3_do_attenuate_16(int attenuate, signed short int * start,
+				    int samples)
 {
 	int i;
 
@@ -1388,12 +1482,13 @@ static void snd_ps3_do_attenuate_16(int attenuate, signed short int * start, int
 		for (i = 0; i < samples; i++) {
 			start[i] = start[i] *
 				attenuater_divisor_array[attenuate].numerator /
-				attenuater_divisor_array[attenuate].denominator ;
+				attenuater_divisor_array[attenuate].denominator;
 		}
 	}
 }
 
-static void snd_ps3_do_attenuate_24(int attenuate, uint32_t * start, int samples)
+static void snd_ps3_do_attenuate_24(int attenuate, uint32_t * start,
+				    int samples)
 {
 	int i;
 	int32_t temp, temp2;
@@ -1410,17 +1505,18 @@ static void snd_ps3_do_attenuate_24(int attenuate, uint32_t * start, int samples
 			/* shift alithmetic */
 			temp2 = temp >> 8;
 			/*
-			 * Since upper 8 bits will be disposed of by the hardware,
-			 * leave it untouched.
+			 * Since upper 8 bits will be disposed of by the
+			 * hardware, leave it untouched.
 			 */
 			start[i] = temp2 *
 				attenuater_divisor_array[attenuate].numerator /
-				attenuater_divisor_array[attenuate].denominator ;
+				attenuater_divisor_array[attenuate].denominator;
 		}
 	}
 }
 
-static int snd_ps3_soft_attenuate(struct snd_ps3_card_info *card, void * start_l, void * start_r, int bytes)
+static int snd_ps3_soft_attenuate(struct snd_ps3_card_info *card,
+				  void * start_l, void * start_r, int bytes)
 {
 
 	switch(snd_pcm_format_width(card->substream->runtime->format)) {
