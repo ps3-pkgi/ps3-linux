@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.21-rc5
-# Mon Mar 26 17:06:00 2007
+# Wed Apr  4 17:00:24 2007
 #
 CONFIG_PPC64=y
 CONFIG_64BIT=y
@@ -1176,8 +1176,7 @@ CONFIG_LOG_BUF_SHIFT=17
 CONFIG_DETECT_SOFTLOCKUP=y
 # CONFIG_SCHEDSTATS is not set
 # CONFIG_TIMER_STATS is not set
-CONFIG_DEBUG_SLAB=y
-# CONFIG_DEBUG_SLAB_LEAK is not set
+# CONFIG_DEBUG_SLAB is not set
 # CONFIG_DEBUG_RT_MUTEXES is not set
 # CONFIG_RT_MUTEX_TESTER is not set
 CONFIG_DEBUG_SPINLOCK=y

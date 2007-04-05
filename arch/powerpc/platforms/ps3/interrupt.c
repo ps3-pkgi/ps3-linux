@@ -564,7 +564,7 @@ static void __attribute__ ((unused)) _dump_mask(struct ps3_private* pd,
 static void dump_bmp(struct ps3_private* pd) {};
 #endif /* defined(DEBUG) */
 
-static void ps3_chip_mask_ack(unsigned int virq)
+static void ps3_chip_mask(unsigned int virq)
 {
 	struct ps3_private *pd = get_irq_chip_data(virq);
 	u64 bit = 0x8000000000000000UL >> virq;
@@ -609,14 +609,20 @@ static void ps3_chip_unmask(unsigned int virq)
 		     : "cc" );
 
 	lv1_did_update_interrupt_mask(pd->node, pd->cpu);
-	lv1_end_of_interrupt_ext(pd->node, pd->cpu, virq);
 	local_irq_restore(flags);
+}
+
+static void ps3_chip_eoi(unsigned int virq)
+{
+	const struct ps3_private *pd = get_irq_chip_data(virq);
+	lv1_end_of_interrupt_ext(pd->node, pd->cpu, virq);
 }
 
 static struct irq_chip irq_chip = {
 	.typename = "ps3",
-	.mask_ack = ps3_chip_mask_ack,
+	.mask = ps3_chip_mask,
 	.unmask = ps3_chip_unmask,
+	.eoi = ps3_chip_eoi,
 };
 
 static void ps3_host_unmap(struct irq_host *h, unsigned int virq)
@@ -630,7 +636,7 @@ static int ps3_host_map(struct irq_host *h, unsigned int virq,
 	pr_debug("%s:%d: hwirq %lu, virq %u\n", __func__, __LINE__, hwirq,
 		virq);
 
-	set_irq_chip_and_handler(virq, &irq_chip, handle_level_irq);
+	set_irq_chip_and_handler(virq, &irq_chip, handle_fasteoi_irq);
 
 	return 0;
 }
