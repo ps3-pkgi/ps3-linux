@@ -61,21 +61,13 @@ EXPORT_SYMBOL_GPL(ps3_get_firmware_version);
 
 static void ps3_power_save(void)
 {
-	u64 tmp;
-
 	/*
 	 * lv1_pause() puts the PPE thread into inactive state until an
 	 * irq on an unmasked plug exists. MSR[EE] has no effect.
 	 * flags: 0 = wake on DEC interrupt, 1 = ignore DEC interrupt.
 	 */
-	lv1_pause(0);
 
-	/*
-	 * FIXME: The HV seems to forget to tell the guest about pending
-	 * interrupts on return from lv1_pause().  lv1_get_version_info()
-	 * has the side effect of causing pending interrupts to be delivered.
-	 */
-	lv1_get_version_info(&tmp);
+	lv1_pause(0);
 }
 
 static void ps3_restart(char *cmd)
