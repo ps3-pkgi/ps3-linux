@@ -75,11 +75,7 @@ _stext:
 _GLOBAL(__start)
 	/* NOP this out unconditionally */
 BEGIN_FTR_SECTION
-#if defined(CONFIG_PPC_PS3)
-	b	.__start_ps3_kexec
-#else
 	b	.__start_initialization_multiplatform
-#endif
 END_FTR_SECTION(0, 1)
 
 	/* Catch branch to 0 in real mode */
@@ -1640,19 +1636,6 @@ _STATIC(__start_initialization_iSeries)
 	b	.start_here_common
 #endif /* CONFIG_PPC_ISERIES */
 
-#if defined(CONFIG_PPC_PS3)
-_STATIC(__start_ps3_kexec)
-#if 1 /* override DT passed from bootloader */
-	LOAD_REG_IMMEDIATE(r3, dt_blob_start)
-	clrldi	r3, r3, 2 /* convert to physical */
-#endif
-	mfspr	r2, SPRN_CTRLF
-	cntlzw.	r2, r2
-	beq	1f
-	li	r3, 0 /* set as a secondary processor */
-1:
-	b .__start_initialization_multiplatform
-#endif
 
 _STATIC(__mmu_off)
 	mfmsr	r3
