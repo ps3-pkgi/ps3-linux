@@ -214,6 +214,6 @@ pmaccoff)
 ps3)
     # The ps3's loader supports gziped binary images.
     ${CROSS}objcopy -O binary "$ofile" "$ofile.rom"
-    gzip -f -9 -c "$ofile.rom" > "$ofile.rom.gz"
+    gzip -f -9 -c "$ofile.rom" > "otheros.bld"
     ;;
 esac
