@@ -163,11 +163,27 @@ static int ps3_system_bus_remove(struct device *_dev)
 	return 0;
 }
 
+static int ps3_system_bus_uevent(struct device *_dev, char **envp,
+				 int num_envp, char *buffer, int buffer_size)
+{
+	struct ps3_system_bus_device *dev = to_ps3_system_bus_device(_dev);
+	int i=0, length = 0;
+
+	if (add_uevent_var(envp, num_envp, &i, buffer, buffer_size,
+			   &length, "MODALIAS=ps3:%d",
+			   dev->match_id))
+		return -ENOMEM;
+
+	envp[i] = NULL;
+	return 0;
+}
+
 struct bus_type ps3_system_bus_type = {
 	.name = "ps3_system_bus",
 	.match = ps3_system_bus_match,
 	.probe = ps3_system_bus_probe,
 	.remove = ps3_system_bus_remove,
+	.uevent = ps3_system_bus_uevent,
 };
 
 int __init ps3_system_bus_init(void)

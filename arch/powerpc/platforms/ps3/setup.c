@@ -245,6 +245,11 @@ static void ps3_machine_kexec(struct kimage *image)
 }
 #endif
 
+static int ps3_check_legacy_ioport(unsigned int baseport)
+{
+        return -ENODEV;
+}
+
 define_machine(ps3) {
 	.name				= "PS3",
 	.probe				= ps3_probe,
@@ -256,6 +261,7 @@ define_machine(ps3) {
 	.get_rtc_time			= ps3_get_rtc_time,
 	.set_dabr			= ps3_set_dabr,
 	.calibrate_decr			= ps3_calibrate_decr,
+	.check_legacy_ioport		= ps3_check_legacy_ioport,
 	.progress			= ps3_progress,
 	.restart			= ps3_restart,
 	.power_off			= ps3_power_off,
