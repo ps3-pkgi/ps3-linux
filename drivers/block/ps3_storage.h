@@ -47,14 +47,17 @@ struct lv1_atapi_cmnd_block {
 };
 
 enum lv1_atapi_proto {
+	NA_PROTO = -1,
 	NON_DATA_PROTO     = 0,
 	PIO_DATA_IN_PROTO  = 1,
-	PIO_DATA_OUT_PROTO = 2
+	PIO_DATA_OUT_PROTO = 2,
+	DMA_PROTO = 3
 };
 
 enum lv1_atapi_in_out {
-	DIR_MEMORY_TO_ATAPI = 0,
-	DIR_ATAPI_TO_MEMORY = 1
+	DIR_NA = -1,
+	DIR_WRITE = 0, /* memory -> device */
+	DIR_READ = 1 /* device -> memory */
 };
 
 /*
@@ -65,16 +68,19 @@ struct ps3_stor_dev_info;
 struct scsi_command_handler_info {
 	int buflen;
 	int proto;
+	int in_out;
 	int (*cmnd_handler)(struct ps3_stor_dev_info *, struct scsi_cmnd *);
 };
 
 /*
  * to position parameter
  */
-
-#define NOT_AVAIL    (-1)
-#define USE_SRB_10   (-2)
-#define USE_SRB_6    (-3)
+enum {
+	NOT_AVAIL          = -1,
+	USE_SRB_10         = -2,
+	USE_SRB_6          = -3,
+	USE_CDDA_FRAME_RAW = -4
+};
 /*
  * for LV1 maintainance
  */

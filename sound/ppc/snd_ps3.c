@@ -151,8 +151,7 @@ static struct snd_kcontrol_new snd_ps3_vol_control =
 static int snd_ps3_pcm_open(struct snd_pcm_substream * substream)
 {
 	struct snd_pcm_runtime * runtime = substream->runtime;
-	struct snd_ps3_card_info * card =
-		(struct snd_ps3_card_info *) snd_pcm_substream_chip(substream);
+	struct snd_ps3_card_info * card = snd_pcm_substream_chip(substream);
 	int pcm_index;
 
 	_SF;
@@ -209,8 +208,7 @@ static int snd_ps3_delay_to_bytes(struct snd_pcm_substream * substream,
 static int snd_ps3_pcm_prepare(struct snd_pcm_substream * substream)
 {
 	struct snd_pcm_runtime * runtime = substream->runtime;
-	struct snd_ps3_card_info * card =
-		(struct snd_ps3_card_info *) snd_pcm_substream_chip(substream);
+	struct snd_ps3_card_info * card = snd_pcm_substream_chip(substream);
 	unsigned long irqsave;
 	_SF;
 
@@ -257,8 +255,7 @@ static int snd_ps3_pcm_prepare(struct snd_pcm_substream * substream)
 static int snd_ps3_pcm_trigger(struct snd_pcm_substream * substream,
 			       int cmd)
 {
-	struct snd_ps3_card_info * card =
-		(struct snd_ps3_card_info *) snd_pcm_substream_chip(substream);
+	struct snd_ps3_card_info * card = snd_pcm_substream_chip(substream);
 	int ret = 0;
 	unsigned long irqsave;
 
@@ -309,8 +306,7 @@ static int snd_ps3_pcm_trigger(struct snd_pcm_substream * substream,
 static snd_pcm_uframes_t snd_ps3_pcm_pointer(
 	struct snd_pcm_substream * substream)
 {
-	struct snd_ps3_card_info * card =
-		(struct snd_ps3_card_info *) snd_pcm_substream_chip(substream);
+	struct snd_ps3_card_info * card = snd_pcm_substream_chip(substream);
 	unsigned long irqsave;
 	size_t bytes;
 	snd_pcm_uframes_t ret;
@@ -460,8 +456,7 @@ static int snd_ps3_init_avsetting(struct snd_ps3_card_info * card)
  */
 static int snd_ps3_set_avsetting(struct snd_pcm_substream * substream)
 {
-	struct snd_ps3_card_info * card =
-		(struct snd_ps3_card_info *) snd_pcm_substream_chip(substream);
+	struct snd_ps3_card_info * card = snd_pcm_substream_chip(substream);
 	struct snd_ps3_avsetting_info avs;
 
 	avs = card->avs;
@@ -1299,7 +1294,7 @@ static irqreturn_t snd_ps3_interrupt(int irq, void * dev_id)
 
 	uint32_t port_intr;
 	int underflow_occured = 0;
-	struct snd_ps3_card_info * card = (struct snd_ps3_card_info * )dev_id;
+	struct snd_ps3_card_info * card = dev_id;
 
 
 

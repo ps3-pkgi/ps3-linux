@@ -411,19 +411,39 @@ static int issue_atapi_by_srb(struct ps3_stor_dev_info * dev_info,
 		bounce_len = handler_info->buflen;
 	}
 
-	if (bounce_len)
+	switch (handler_info->buflen) {
+	case USE_SRB_6:
+		bounce_len = cmnd[4];
+		break;
+	case USE_SRB_10:
+ 		bounce_len = (cmnd[7] << 8) | cmnd[8];
+		break;
+	case USE_CDDA_FRAME_RAW:
+		bounce_len = ((cmnd[6] << 16) |
+		       (cmnd[7] <<  8) |
+		       (cmnd[8] <<  0)) * CD_FRAMESIZE_RAW;
+		break;
+	default:
+		bounce_len = handler_info->buflen;
+	}
+	if (bounce_len) {
 		bounce_buf = kmalloc(bounce_len, GFP_NOIO);
-
+		if (!bounce_buf) {
+			printk(KERN_ERR "%s: kmalloc failed\n", __FUNCTION__);
+			dev_info->srb->result = DID_ERROR << 16;
+			return -1;
+		}
+	}
 
 	memset(&atapi_cmnd, 0, sizeof(struct lv1_atapi_cmnd_block));
 	memcpy(&(atapi_cmnd.pkt), cmnd, 12);
 	atapi_cmnd.pktlen = 12;
 	atapi_cmnd.proto = handler_info->proto;
-	if (atapi_cmnd.proto == PIO_DATA_OUT_PROTO) {
-		atapi_cmnd.in_out = DIR_MEMORY_TO_ATAPI;
+	if (handler_info->in_out != DIR_NA)
+		atapi_cmnd.in_out = handler_info->in_out;
+
+	if (atapi_cmnd.in_out == DIR_WRITE)
 		fetch_to_dev_buffer(dev_info->srb, bounce_buf, bounce_len);
-	} else
-		atapi_cmnd.in_out = DIR_ATAPI_TO_MEMORY;
 
 	atapi_cmnd.block_size = 1; /* transfer size is block_size * blocks */
 
@@ -437,7 +457,7 @@ static int issue_atapi_by_srb(struct ps3_stor_dev_info * dev_info,
 						ps3_mm_phys_to_lpar(__pa(&atapi_cmnd)), /* no need special convert */
 						sizeof(struct lv1_atapi_cmnd_block),
 						atapi_cmnd.buffer,
-						atapi_cmnd.blocks,
+						atapi_cmnd.arglen,
 						&lv1_dev_info->current_tag);
 	if (error) {
 		printk(KERN_ERR "%s: send_device failed lv1dev=%u ret=%d\n",
@@ -454,7 +474,7 @@ static int issue_atapi_by_srb(struct ps3_stor_dev_info * dev_info,
 	/* check error */
 	if (!dev_info->lv1_status) {
 		/* OK, completed */
-		if (atapi_cmnd.proto == PIO_DATA_IN_PROTO)
+		if (atapi_cmnd.in_out == DIR_READ)
 			fill_from_dev_buffer(dev_info->srb, bounce_buf, bounce_len);
 		dev_info->srb->result = DID_OK << 16;
 		if (bounce_buf)
@@ -491,8 +511,8 @@ static int issue_atapi_by_srb(struct ps3_stor_dev_info * dev_info,
 		atapi_cmnd.pktlen = 12;
 		atapi_cmnd.arglen = atapi_cmnd.blocks = atapi_cmnd.pkt[4];
 		atapi_cmnd.block_size = 1;
-		atapi_cmnd.proto = PIO_DATA_IN_PROTO;
-		atapi_cmnd.in_out = DIR_ATAPI_TO_MEMORY;
+		atapi_cmnd.proto = DMA_PROTO;
+		atapi_cmnd.in_out = DIR_READ;
 		atapi_cmnd.buffer = ps3_mm_phys_to_lpar(__pa(bounce_buf));
 
 		/* issue REQUEST_SENSE command */
@@ -502,12 +522,14 @@ static int issue_atapi_by_srb(struct ps3_stor_dev_info * dev_info,
 							ps3_mm_phys_to_lpar(__pa(&atapi_cmnd)),
 							sizeof(struct lv1_atapi_cmnd_block),
 							atapi_cmnd.buffer,
-							atapi_cmnd.blocks,
+							atapi_cmnd.arglen,
 							&lv1_dev_info->current_tag);
 		if (error) {
 			printk(KERN_ERR "%s: send_device for request sense failed lv1dev=%u ret=%d\n", __FUNCTION__,
 			       lv1_dev_info->repo.did.dev_id, error);
 			dev_info->srb->result = DID_ERROR << 16; /* FIXME: is better other error code ? */
+			if (bounce_buf)
+				kfree(bounce_buf);
 			return -1;
 		}
 
@@ -1997,48 +2019,84 @@ static int ps3_stor_wait_device_ready(void)
 
 static const struct scsi_command_handler_info scsi_cmnd_info_table_hdd[256] =
 {
-	[INQUIRY]                 = { NOT_AVAIL, NOT_AVAIL, ps3_stor_hdd_handle_inquiry},
-	[REQUEST_SENSE]           = { NOT_AVAIL, NOT_AVAIL, ps3_stor_hdd_handle_request_sense},
-	[TEST_UNIT_READY]         = { NOT_AVAIL, NOT_AVAIL, ps3_stor_hdd_handle_just_ok},
-	[READ_CAPACITY]           = { NOT_AVAIL, NOT_AVAIL, ps3_stor_hdd_handle_read_capacity},
-	[MODE_SENSE_10]           = { NOT_AVAIL, NOT_AVAIL, ps3_stor_hdd_handle_mode_sense},
-	[SYNCHRONIZE_CACHE]       = { NOT_AVAIL, NOT_AVAIL, ps3_stor_hdd_handle_sync_cache},
-	[READ_10]                 = { NOT_AVAIL, NOT_AVAIL, ps3_stor_common_handle_read},
-	[READ_6]                  = { NOT_AVAIL, NOT_AVAIL, ps3_stor_common_handle_read},
-	[WRITE_10]                = { NOT_AVAIL, NOT_AVAIL, ps3_stor_common_handle_write},
-	[WRITE_6]                 = { NOT_AVAIL, NOT_AVAIL, ps3_stor_common_handle_write}
+	[INQUIRY]                 = {NOT_AVAIL, NA_PROTO, DIR_NA,
+				     ps3_stor_hdd_handle_inquiry},
+	[REQUEST_SENSE]           = {NOT_AVAIL, NA_PROTO, DIR_NA,
+				     ps3_stor_hdd_handle_request_sense},
+	[TEST_UNIT_READY]         = {NOT_AVAIL, NA_PROTO, DIR_NA,
+				     ps3_stor_hdd_handle_just_ok},
+	[READ_CAPACITY]           = {NOT_AVAIL, NA_PROTO, DIR_NA,
+				     ps3_stor_hdd_handle_read_capacity},
+	[MODE_SENSE_10]           = {NOT_AVAIL, NA_PROTO, DIR_NA,
+				     ps3_stor_hdd_handle_mode_sense},
+	[SYNCHRONIZE_CACHE]       = {NOT_AVAIL, NA_PROTO, DIR_NA,
+				     ps3_stor_hdd_handle_sync_cache},
+	[READ_10]                 = {NOT_AVAIL, NA_PROTO, DIR_NA,
+				     ps3_stor_common_handle_read},
+	[READ_6]                  = {NOT_AVAIL, NA_PROTO, DIR_NA,
+				     ps3_stor_common_handle_read},
+	[WRITE_10]                = {NOT_AVAIL, NA_PROTO, DIR_NA,
+				     ps3_stor_common_handle_write},
+	[WRITE_6]                 = {NOT_AVAIL, NA_PROTO, DIR_NA,
+				     ps3_stor_common_handle_write}
 };
 
 static const struct scsi_command_handler_info scsi_cmnd_info_table_flash[256] =
 {
-	[INQUIRY]                 = { NOT_AVAIL, NOT_AVAIL, ps3_stor_hdd_handle_inquiry},
-	[REQUEST_SENSE]           = { NOT_AVAIL, NOT_AVAIL, ps3_stor_hdd_handle_request_sense},
-	[TEST_UNIT_READY]         = { NOT_AVAIL, NOT_AVAIL, ps3_stor_hdd_handle_just_ok},
-	[READ_CAPACITY]           = { NOT_AVAIL, NOT_AVAIL, ps3_stor_hdd_handle_read_capacity},
-	[MODE_SENSE_10]           = { NOT_AVAIL, NOT_AVAIL, ps3_stor_hdd_handle_mode_sense},
-	[SYNCHRONIZE_CACHE]       = { NOT_AVAIL, NOT_AVAIL, ps3_stor_hdd_handle_sync_cache},
-	[READ_10]                 = { NOT_AVAIL, NOT_AVAIL, ps3_stor_common_handle_read},
-	[READ_6]                  = { NOT_AVAIL, NOT_AVAIL, ps3_stor_common_handle_read},
-	[WRITE_10]                = { NOT_AVAIL, NOT_AVAIL, ps3_stor_handle_write_flash},
-	[WRITE_6]                 = { NOT_AVAIL, NOT_AVAIL, ps3_stor_handle_write_flash}
+	[INQUIRY]                 = {NOT_AVAIL, NA_PROTO, DIR_NA,
+				     ps3_stor_hdd_handle_inquiry},
+	[REQUEST_SENSE]           = {NOT_AVAIL, NA_PROTO, DIR_NA,
+				     ps3_stor_hdd_handle_request_sense},
+	[TEST_UNIT_READY]         = {NOT_AVAIL, NA_PROTO, DIR_NA,
+				     ps3_stor_hdd_handle_just_ok},
+	[READ_CAPACITY]           = {NOT_AVAIL, NA_PROTO, DIR_NA,
+				     ps3_stor_hdd_handle_read_capacity},
+	[MODE_SENSE_10]           = {NOT_AVAIL, NA_PROTO, DIR_NA,
+				     ps3_stor_hdd_handle_mode_sense},
+	[SYNCHRONIZE_CACHE]       = {NOT_AVAIL, NA_PROTO, DIR_NA,
+				     ps3_stor_hdd_handle_sync_cache},
+	[READ_10]                 = {NOT_AVAIL, NA_PROTO, DIR_NA,
+				     ps3_stor_common_handle_read},
+	[READ_6]                  = {NOT_AVAIL, NA_PROTO, DIR_NA,
+				     ps3_stor_common_handle_read},
+	[WRITE_10]                = {NOT_AVAIL, NA_PROTO, DIR_NA,
+				     ps3_stor_handle_write_flash},
+	[WRITE_6]                 = {NOT_AVAIL, NA_PROTO, DIR_NA,
+				     ps3_stor_handle_write_flash}
 };
 
 static const struct scsi_command_handler_info scsi_cmnd_info_table_atapi[256] =
 {
-	[INQUIRY]                 = {  USE_SRB_6, PIO_DATA_IN_PROTO, ps3_stor_atapi_handle_simple},
-	[REQUEST_SENSE]           = {  USE_SRB_6, PIO_DATA_IN_PROTO, ps3_stor_atapi_handle_request_sense},
-	[START_STOP]              = {          0,    NON_DATA_PROTO, ps3_stor_atapi_handle_simple},
-	[ALLOW_MEDIUM_REMOVAL]    = {          0,    NON_DATA_PROTO, ps3_stor_atapi_handle_simple},
-	[TEST_UNIT_READY]         = {          0,    NON_DATA_PROTO, ps3_stor_atapi_handle_simple},
-	[READ_CAPACITY]           = {          8, PIO_DATA_IN_PROTO, ps3_stor_atapi_handle_simple},
-	[MODE_SENSE_10]           = { USE_SRB_10, PIO_DATA_IN_PROTO, ps3_stor_atapi_handle_simple},
-	[READ_TOC]                = { USE_SRB_10, PIO_DATA_IN_PROTO, ps3_stor_atapi_handle_simple},
-	[GPCMD_GET_CONFIGURATION] = { USE_SRB_10, PIO_DATA_IN_PROTO, ps3_stor_atapi_handle_simple},
-	[GPCMD_READ_DISC_INFO]    = { USE_SRB_10, PIO_DATA_IN_PROTO, ps3_stor_atapi_handle_simple},
-	[READ_10]                 = {  NOT_AVAIL,         NOT_AVAIL, ps3_stor_common_handle_read},
-	[READ_6]                  = {  NOT_AVAIL,         NOT_AVAIL, ps3_stor_common_handle_read},
-	[WRITE_10]                = {  NOT_AVAIL,         NOT_AVAIL, ps3_stor_common_handle_write},
-	[WRITE_6]                 = {  NOT_AVAIL,         NOT_AVAIL, ps3_stor_common_handle_write}
+	[INQUIRY]                 = {USE_SRB_6, PIO_DATA_IN_PROTO, DIR_READ,
+				     ps3_stor_atapi_handle_simple},
+	[REQUEST_SENSE]           = {USE_SRB_6, PIO_DATA_IN_PROTO, DIR_READ,
+				     ps3_stor_atapi_handle_request_sense},
+	[START_STOP]              = {0, NON_DATA_PROTO, DIR_NA,
+				     ps3_stor_atapi_handle_simple},
+	[ALLOW_MEDIUM_REMOVAL]    = {0, NON_DATA_PROTO, DIR_NA,
+				     ps3_stor_atapi_handle_simple},
+	[TEST_UNIT_READY]         = {0, NON_DATA_PROTO, DIR_NA,
+				     ps3_stor_atapi_handle_simple},
+	[READ_CAPACITY]           = {8, PIO_DATA_IN_PROTO,  DIR_READ,
+				     ps3_stor_atapi_handle_simple},
+	[MODE_SENSE_10]           = {USE_SRB_10, PIO_DATA_IN_PROTO, DIR_READ,
+				     ps3_stor_atapi_handle_simple},
+	[READ_TOC]                = {USE_SRB_10, PIO_DATA_IN_PROTO, DIR_READ,
+				     ps3_stor_atapi_handle_simple},
+	[GPCMD_GET_CONFIGURATION] = {USE_SRB_10, PIO_DATA_IN_PROTO, DIR_READ,
+				     ps3_stor_atapi_handle_simple},
+	[GPCMD_READ_DISC_INFO]    = {USE_SRB_10, PIO_DATA_IN_PROTO, DIR_READ,
+				     ps3_stor_atapi_handle_simple},
+	[READ_10]                 = {NOT_AVAIL, NA_PROTO, DIR_NA,
+				     ps3_stor_common_handle_read},
+	[READ_6]                  = {NOT_AVAIL, NA_PROTO, DIR_NA,
+				     ps3_stor_common_handle_read},
+	[WRITE_10]                = {NOT_AVAIL, NA_PROTO, DIR_NA,
+				     ps3_stor_common_handle_write},
+	[WRITE_6]                 = {NOT_AVAIL, NA_PROTO, DIR_NA,
+				     ps3_stor_common_handle_write},
+	[GPCMD_READ_CD]           = {USE_CDDA_FRAME_RAW, DMA_PROTO, DIR_READ,
+				     ps3_stor_atapi_handle_simple}
 };
 
 
