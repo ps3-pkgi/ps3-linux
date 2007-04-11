@@ -92,6 +92,8 @@ static int ps3_stor_lv1_devnum ; /* number of configured(used) lv1 devices */
 static LIST_HEAD(ps3_stor_host_list);
 static DEFINE_SPINLOCK(ps3_stor_host_list_lock);
 
+static u64 ps3_stor_virtual_to_lpar(struct ps3_stor_dev_info *dev_info,
+				    void *va);
 
 /*
  * fill buf with MODE SENSE page 8 (caching parameter)
@@ -396,21 +398,12 @@ static int issue_atapi_by_srb(struct ps3_stor_dev_info * dev_info,
 	const struct scsi_command_handler_info * handler_info;
 	unsigned char * cmnd = dev_info->srb->cmnd;
 	int bounce_len = 0;
-	unsigned char * bounce_buf = NULL;
 	int error;
 	unsigned char keys[4];
 
 	handler_info = &(dev_info->handler_info[cmnd[0]]);
 
-	/* alloc bounce buffer if needed */
-        if (handler_info->buflen == USE_SRB_6) {
-		bounce_len = cmnd[4];
-	} else if (handler_info->buflen == USE_SRB_10) {
-		bounce_len = (cmnd[7] << 8) | cmnd[8];
-	} else {
-		bounce_len = handler_info->buflen;
-	}
-
+	/* check buffer size */
 	switch (handler_info->buflen) {
 	case USE_SRB_6:
 		bounce_len = cmnd[4];
@@ -426,13 +419,19 @@ static int issue_atapi_by_srb(struct ps3_stor_dev_info * dev_info,
 	default:
 		bounce_len = handler_info->buflen;
 	}
-	if (bounce_len) {
-		bounce_buf = kmalloc(bounce_len, GFP_NOIO);
-		if (!bounce_buf) {
-			printk(KERN_ERR "%s: kmalloc failed\n", __FUNCTION__);
-			dev_info->srb->result = DID_ERROR << 16;
-			return -1;
-		}
+
+	if (dev_info->dedicated_bounce_size < bounce_len ) {
+		static int printed;
+		if (!printed++)
+			printk(KERN_ERR "%s: data size too large %#x<%#x\n",
+			       __FUNCTION__,
+			       dev_info->dedicated_bounce_size,
+			       bounce_len);
+		dev_info->srb->result = DID_ERROR << 16;
+		memset(dev_info->srb->sense_buffer, 0, SCSI_SENSE_BUFFERSIZE);
+		dev_info->srb->sense_buffer[0] = 0x70;
+		dev_info->srb->sense_buffer[2] = ILLEGAL_REQUEST;
+		return -1;
 	}
 
 	memset(&atapi_cmnd, 0, sizeof(struct lv1_atapi_cmnd_block));
@@ -443,18 +442,18 @@ static int issue_atapi_by_srb(struct ps3_stor_dev_info * dev_info,
 		atapi_cmnd.in_out = handler_info->in_out;
 
 	if (atapi_cmnd.in_out == DIR_WRITE)
-		fetch_to_dev_buffer(dev_info->srb, bounce_buf, bounce_len);
+		fetch_to_dev_buffer(dev_info->srb, dev_info->bounce_buf, bounce_len);
 
 	atapi_cmnd.block_size = 1; /* transfer size is block_size * blocks */
 
 	atapi_cmnd.blocks = atapi_cmnd.arglen = bounce_len;
-	atapi_cmnd.buffer = ps3_mm_phys_to_lpar(__pa(bounce_buf)); /* no need special convert */
+	atapi_cmnd.buffer = ps3_stor_virtual_to_lpar(dev_info, dev_info->bounce_buf);
 
 	/* issue command */
 	init_completion(&(dev_info->irq_done));
 	error = lv1_storage_send_device_command(lv1_dev_info->repo.did.dev_id,
 						LV1_STORAGE_SEND_ATAPI_COMMAND,
-						ps3_mm_phys_to_lpar(__pa(&atapi_cmnd)), /* no need special convert */
+						ps3_mm_phys_to_lpar(__pa(&atapi_cmnd)),
 						sizeof(struct lv1_atapi_cmnd_block),
 						atapi_cmnd.buffer,
 						atapi_cmnd.arglen,
@@ -463,8 +462,6 @@ static int issue_atapi_by_srb(struct ps3_stor_dev_info * dev_info,
 		printk(KERN_ERR "%s: send_device failed lv1dev=%u ret=%d\n",
 		       __FUNCTION__, lv1_dev_info->repo.did.dev_id, error);
 		dev_info->srb->result = DID_ERROR << 16; /* FIXME: is better other error code ? */
-		if (bounce_buf)
-			kfree(bounce_buf);
 		return -1;
 	}
 
@@ -475,17 +472,11 @@ static int issue_atapi_by_srb(struct ps3_stor_dev_info * dev_info,
 	if (!dev_info->lv1_status) {
 		/* OK, completed */
 		if (atapi_cmnd.in_out == DIR_READ)
-			fill_from_dev_buffer(dev_info->srb, bounce_buf, bounce_len);
+			fill_from_dev_buffer(dev_info->srb, dev_info->bounce_buf, bounce_len);
 		dev_info->srb->result = DID_OK << 16;
-		if (bounce_buf)
-			kfree(bounce_buf);
 		return 0;
 	}
 
-	if (bounce_buf) {
-		kfree(bounce_buf);
-		bounce_buf = NULL;
-	}
 	/* error */
 	if (!auto_sense) {
 		dev_info->srb->result = (DID_ERROR << 16) | (CHECK_CONDITION << 1);
@@ -504,7 +495,6 @@ static int issue_atapi_by_srb(struct ps3_stor_dev_info * dev_info,
 		dev_info->srb->result = SAM_STAT_CHECK_CONDITION;
 	} else {
 		/* do auto sense by our selves*/
-		bounce_buf = kzalloc(18, GFP_NOIO);
 		memset(&atapi_cmnd, 0, sizeof(struct lv1_atapi_cmnd_block));
 		atapi_cmnd.pkt[0] = REQUEST_SENSE;
 		atapi_cmnd.pkt[4] = 18;
@@ -513,7 +503,7 @@ static int issue_atapi_by_srb(struct ps3_stor_dev_info * dev_info,
 		atapi_cmnd.block_size = 1;
 		atapi_cmnd.proto = DMA_PROTO;
 		atapi_cmnd.in_out = DIR_READ;
-		atapi_cmnd.buffer = ps3_mm_phys_to_lpar(__pa(bounce_buf));
+		atapi_cmnd.buffer = ps3_stor_virtual_to_lpar(dev_info,dev_info->bounce_buf);
 
 		/* issue REQUEST_SENSE command */
 		init_completion(&(dev_info->irq_done));
@@ -528,8 +518,6 @@ static int issue_atapi_by_srb(struct ps3_stor_dev_info * dev_info,
 			printk(KERN_ERR "%s: send_device for request sense failed lv1dev=%u ret=%d\n", __FUNCTION__,
 			       lv1_dev_info->repo.did.dev_id, error);
 			dev_info->srb->result = DID_ERROR << 16; /* FIXME: is better other error code ? */
-			if (bounce_buf)
-				kfree(bounce_buf);
 			return -1;
 		}
 
@@ -544,9 +532,8 @@ static int issue_atapi_by_srb(struct ps3_stor_dev_info * dev_info,
 			       keys[0], keys[1], keys[2]);
 		}
 
-		memcpy(dev_info->srb->sense_buffer, bounce_buf, min((int)atapi_cmnd.pkt[4], SCSI_SENSE_BUFFERSIZE));
-		if (bounce_buf)
-			kfree(bounce_buf);
+		memcpy(dev_info->srb->sense_buffer, dev_info->bounce_buf,
+		       min((int)atapi_cmnd.pkt[4], SCSI_SENSE_BUFFERSIZE));
 		dev_info->srb->result = SAM_STAT_CHECK_CONDITION;
 	}
 
