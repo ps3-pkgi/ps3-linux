@@ -1,5 +1,5 @@
 /*
- *  zImage exception vector entry.
+ *  PS3 zImage exception vector entry.
  *
  *  Copyright (C) 2007 Sony Computer Entertainment Inc.
  *  Copyright 2007 Sony Corp.
@@ -21,7 +21,7 @@
 #include "ppc_asm.h"
 
 /*
- * __system_reset_entry - For platforms entering at the reset vector.
+ * __system_reset_entry - PS3 first stage entry.
  */
 
 	.section .vectors,"ax"
@@ -35,7 +35,13 @@ __system_reset_entry:
 	mtmsrd	r9
 	nop
 
-	li	r3, 0
+	/* Get thread number in r3 and branch. */
+
+	mfspr	r3, 0x88
+	cntlzw.	r3, r3
 	li	r4, 0
 	li	r5, 0
+	beq	1f
+	b	smp_secondary_hold
+1:
 	b	_zimage_start

@@ -1706,9 +1706,10 @@ __mmu_off_return:
 1:
 
 	/* The primary cpu waits here for all the expected secondary cpus to
- 	 * enter the kernel, after which time it is safe to reclaim the
+	 * enter the kernel, after which time it is safe to reclaim the
 	 * memory use by the bootwrapper.
-	 * How to know what to wait for???  Use r6???
+	 * How to know what to wait for???
+	 * !!! need to use the kexec entry mechanism here!!!!
 	*/
 1:	LOAD_REG_IMMEDIATE(r4, __secondary_hold_acknowledge)
 	cmpwi	r4, 0
