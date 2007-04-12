@@ -969,22 +969,10 @@ static void __init early_reserve_mem(void)
 
 void __init early_init_devtree(void *params)
 {
-	char kexec_cmd_line[COMMAND_LINE_SIZE] = "";
-
 	DBG(" -> early_init_devtree(%p)\n", params);
 
 	/* Setup flat device-tree pointer */
 	initial_boot_params = params;
-
-#if defined(CONFIG_PPC_PS3)
-	if (of_flat_dt_is_compatible(of_get_flat_dt_root(), "PS3")) {
-		extern char dt_blob_start[];
-		DBG("%s:%d: got PS3 DT\n", __func__, __LINE__);
-		of_scan_flat_dt(early_init_dt_scan_chosen, NULL);
-		strlcpy(kexec_cmd_line, cmd_line, COMMAND_LINE_SIZE);
-		initial_boot_params = (void*)dt_blob_start;
-	}
-#endif
 
 #ifdef CONFIG_PPC_RTAS
 	/* Some machines might need RTAS info for debugging, grab it now. */
@@ -997,16 +985,13 @@ void __init early_init_devtree(void *params)
 	 */
 	of_scan_flat_dt(early_init_dt_scan_chosen, NULL);
 
-	if (*kexec_cmd_line) {
-		printk("%s: replace '%s'\n", __func__, cmd_line);
-		printk("%s: with    '%s'\n", __func__, kexec_cmd_line);
-		strlcpy(cmd_line, kexec_cmd_line, COMMAND_LINE_SIZE);
-	}
-
 	/* Scan memory nodes and rebuild LMBs */
 	lmb_init();
 	of_scan_flat_dt(early_init_dt_scan_root, NULL);
-	of_scan_flat_dt(early_init_dt_scan_memory, NULL);
+#if defined(CONFIG_PPC_PS3)
+	if (!of_flat_dt_is_compatible(of_get_flat_dt_root(), "PS3"))
+		of_scan_flat_dt(early_init_dt_scan_memory, NULL);
+#endif
 
 	/* Save command line for /proc/cmdline and then parse parameters */
 	strlcpy(boot_command_line, cmd_line, COMMAND_LINE_SIZE);
