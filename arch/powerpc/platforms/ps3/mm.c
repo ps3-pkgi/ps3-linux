@@ -820,8 +820,7 @@ void __init ps3_mm_init(void)
 	BUG_ON(map.rm.base);
 	BUG_ON(!map.rm.size);
 
-	lmb_add(map.rm.base, map.rm.size);
-	lmb_analyze();
+#warning FIXME - need to check if map.rm.size is same as value in DT.
 
 	/* arrange to do this in ps3_mm_add_memory */
 	ps3_mm_region_create(&map.r1, map.total - map.rm.size);

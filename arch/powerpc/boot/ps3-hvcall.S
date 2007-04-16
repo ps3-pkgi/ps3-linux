@@ -104,12 +104,16 @@
 	LOAD_64_STACK r10,32
 .endm
 
-.macro load_regs_6
+.macro load_regs_5
 	LOAD_R3
 	LOAD_R4
 	LOAD_R5
 	LOAD_R6
 	LOAD_R7
+.endm
+
+.macro load_regs_6
+	LOAD_REGS_5
 	LOAD_R8
 .endm
 
@@ -117,6 +121,18 @@
 	LOAD_REGS_6
 	LOAD_R9
 	LOAD_R10
+.endm
+
+.macro store_regs_0_1
+	lwz r11, 8(r1)
+	std r4, 0(r11)
+.endm
+
+.macro store_regs_5_2
+	lwz r11, 16(r1)
+	std r4, 0(r11)
+	lwz r11, 24(r1)
+	std r5, 0(r11)
 .endm
 
 .macro store_regs_6_1
@@ -142,8 +158,33 @@ GLOBAL _##API_NAME;				\
 #define LV1_6_IN_0_OUT LV1_N_IN_0_OUT
 #define LV1_7_IN_0_OUT LV1_N_IN_0_OUT
 
+.macro save_r5
+	stw r5, 8(r1)
+.endm
+
+.macro save_r6
+	stw r6, 12(r1)
+.endm
+
+.macro save_1
+	SAVE_R5
+	SAVE_R6
+.endm
+
 #define LV1_0_IN_1_OUT(API_NAME, API_NUMBER)	\
-	NO_SUPPORT _##API_NAME
+GLOBAL _##API_NAME;				\
+	SAVE_LR;				\
+	stwu r1,-16(r1);			\
+	stw r3, 8(r1);				\
+	li      r11, API_NUMBER;		\
+	HVCALL;					\
+	lwz r11, 8(r1);				\
+	std r4, 0(r11);				\
+	mr r4, r3;				\
+	li r3, 0;				\
+	addi r1,r1,16;				\
+	LOAD_LR;				\
+	blr
 
 #define LV1_0_IN_2_OUT(API_NAME, API_NUMBER)	\
 	NO_SUPPORT _##API_NAME
@@ -212,7 +253,14 @@ GLOBAL _##API_NAME;				\
 	NO_SUPPORT _##API_NAME
 
 #define LV1_5_IN_2_OUT(API_NAME, API_NUMBER)	\
-	NO_SUPPORT _##API_NAME
+GLOBAL _##API_NAME;				\
+	SAVE_LR;				\
+	LOAD_REGS_5;				\
+	li      r11, API_NUMBER;		\
+	HVCALL;					\
+	STORE_REGS_5_2;				\
+	LOAD_LR;				\
+	blr
 
 #define LV1_5_IN_3_OUT(API_NAME, API_NUMBER)	\
 	NO_SUPPORT _##API_NAME

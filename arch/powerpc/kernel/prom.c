@@ -906,6 +906,12 @@ static int __init early_init_dt_scan_memory(unsigned long node,
 				size = 0x80000000ul - base;
 		}
 #endif
+#if defined(CONFIG_PPC_PS3)
+	/* temporary hack for the legacy bootloader */
+	if (of_flat_dt_is_compatible(of_get_flat_dt_root(), "PS3PF")) {
+		size = 0x8000000;
+	}
+#endif
 		lmb_add(base, size);
 	}
 	return 0;
@@ -988,10 +994,7 @@ void __init early_init_devtree(void *params)
 	/* Scan memory nodes and rebuild LMBs */
 	lmb_init();
 	of_scan_flat_dt(early_init_dt_scan_root, NULL);
-#if defined(CONFIG_PPC_PS3)
-	if (!of_flat_dt_is_compatible(of_get_flat_dt_root(), "PS3"))
-		of_scan_flat_dt(early_init_dt_scan_memory, NULL);
-#endif
+	of_scan_flat_dt(early_init_dt_scan_memory, NULL);
 
 	/* Save command line for /proc/cmdline and then parse parameters */
 	strlcpy(boot_command_line, cmd_line, COMMAND_LINE_SIZE);

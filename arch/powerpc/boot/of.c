@@ -212,10 +212,9 @@ static void *of_vmlinux_alloc(unsigned long size)
 {
 	void *p = malloc(size);
 
-	if (!p) {
-		printf("Can't allocate memory for kernel image!\n\r");
-		exit();
-	}
+	if (!p)
+		fatal("Can't allocate memory for kernel image!\n\r");
+
 	return p;
 }
 
@@ -283,6 +282,8 @@ void platform_init(unsigned long a1, unsigned long a2, void *promptr)
 
 	prom = (int (*)(void *))promptr;
 	loader_info.promptr = promptr;
-	loader_info.initrd_addr = a1;
-	loader_info.initrd_size = a2;
+	if (a1 && a2 && a2 != 0xdeadbeef) {
+		loader_info.initrd_addr = a1;
+		loader_info.initrd_size = a2;
+	}
 }

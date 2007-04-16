@@ -17,8 +17,7 @@
 #include "ops.h"
 #include "gunzip_util.h"
 #include "flatdevtree.h"
-
-extern void flush_cache(void *, unsigned long);
+#include "reg.h"
 
 extern char _start[];
 extern char __bss_start[];
@@ -37,73 +36,7 @@ struct addr_range {
 	unsigned long size;
 };
 
-struct elf_info {
-	unsigned long loadsize;
-	unsigned long memsize;
-	unsigned long elfoffset;
-};
-
 #undef DEBUG
-
-static int parse_elf64(void *hdr, struct elf_info *info)
-{
-	Elf64_Ehdr *elf64 = hdr;
-	Elf64_Phdr *elf64ph;
-	unsigned int i;
-
-	if (!(elf64->e_ident[EI_MAG0]  == ELFMAG0	&&
-	      elf64->e_ident[EI_MAG1]  == ELFMAG1	&&
-	      elf64->e_ident[EI_MAG2]  == ELFMAG2	&&
-	      elf64->e_ident[EI_MAG3]  == ELFMAG3	&&
-	      elf64->e_ident[EI_CLASS] == ELFCLASS64	&&
-	      elf64->e_ident[EI_DATA]  == ELFDATA2MSB	&&
-	      elf64->e_type            == ET_EXEC	&&
-	      elf64->e_machine         == EM_PPC64))
-		return 0;
-
-	elf64ph = (Elf64_Phdr *)((unsigned long)elf64 +
-				 (unsigned long)elf64->e_phoff);
-	for (i = 0; i < (unsigned int)elf64->e_phnum; i++, elf64ph++)
-		if (elf64ph->p_type == PT_LOAD)
-			break;
-	if (i >= (unsigned int)elf64->e_phnum)
-		return 0;
-
-	info->loadsize = (unsigned long)elf64ph->p_filesz;
-	info->memsize = (unsigned long)elf64ph->p_memsz;
-	info->elfoffset = (unsigned long)elf64ph->p_offset;
-
-	return 1;
-}
-
-static int parse_elf32(void *hdr, struct elf_info *info)
-{
-	Elf32_Ehdr *elf32 = hdr;
-	Elf32_Phdr *elf32ph;
-	unsigned int i;
-
-	if (!(elf32->e_ident[EI_MAG0]  == ELFMAG0	&&
-	      elf32->e_ident[EI_MAG1]  == ELFMAG1	&&
-	      elf32->e_ident[EI_MAG2]  == ELFMAG2	&&
-	      elf32->e_ident[EI_MAG3]  == ELFMAG3	&&
-	      elf32->e_ident[EI_CLASS] == ELFCLASS32	&&
-	      elf32->e_ident[EI_DATA]  == ELFDATA2MSB	&&
-	      elf32->e_type            == ET_EXEC	&&
-	      elf32->e_machine         == EM_PPC))
-		return 0;
-
-	elf32ph = (Elf32_Phdr *) ((unsigned long)elf32 + elf32->e_phoff);
-	for (i = 0; i < elf32->e_phnum; i++, elf32ph++)
-		if (elf32ph->p_type == PT_LOAD)
-			break;
-	if (i >= elf32->e_phnum)
-		return 0;
-
-	info->loadsize = elf32ph->p_filesz;
-	info->memsize = elf32ph->p_memsz;
-	info->elfoffset = elf32ph->p_offset;
-	return 1;
-}
 
 static struct addr_range prep_kernel(void)
 {
@@ -118,10 +51,9 @@ static struct addr_range prep_kernel(void)
 	gunzip_start(&gzstate, vmlinuz_addr, vmlinuz_size);
 	gunzip_exactly(&gzstate, elfheader, sizeof(elfheader));
 
-	if (!parse_elf64(elfheader, &ei) && !parse_elf32(elfheader, &ei)) {
-		printf("Error: not a valid PPC32 or PPC64 ELF file!\n\r");
-		exit();
-	}
+	if (!parse_elf64(elfheader, &ei) && !parse_elf32(elfheader, &ei))
+		fatal("Error: not a valid PPC32 or PPC64 ELF file!\n\r");
+
 	if (platform_ops.image_hdr)
 		platform_ops.image_hdr(elfheader);
 
@@ -135,11 +67,9 @@ static struct addr_range prep_kernel(void)
 	if (platform_ops.vmlinux_alloc) {
 		addr = platform_ops.vmlinux_alloc(ei.memsize);
 	} else {
-		if ((unsigned long)_start < ei.memsize) {
-			printf("Insufficient memory for kernel at address 0!"
-			       " (_start=%lx)\n\r", _start);
-			exit();
-		}
+		if ((unsigned long)_start < ei.memsize)
+			fatal("Insufficient memory for kernel at address 0!"
+			       " (_start=%p)\n\r", _start);
 	}
 
 	/* Finally, gunzip the kernel */
@@ -147,21 +77,21 @@ static struct addr_range prep_kernel(void)
 	       vmlinuz_addr, vmlinuz_addr+vmlinuz_size);
 	/* discard up to the actual load data */
 	gunzip_discard(&gzstate, ei.elfoffset - sizeof(elfheader));
-	len = gunzip_finish(&gzstate, addr, ei.memsize);
-	printf("done 0x%lx bytes\n\r", len);
+	len = gunzip_finish(&gzstate, addr, ei.loadsize);
+	if (len != ei.loadsize)
+		fatal("ran out of data!  only got 0x%x of 0x%lx bytes.\n\r",
+				len, ei.loadsize);
+	printf("done 0x%x bytes\n\r", len);
 
 	flush_cache(addr, ei.loadsize);
 
 	return (struct addr_range){addr, ei.memsize};
 }
 
-static struct addr_range prep_initrd(struct addr_range vmlinux,
+static struct addr_range prep_initrd(struct addr_range vmlinux, void *chosen,
 				     unsigned long initrd_addr,
 				     unsigned long initrd_size)
 {
-	void *devp;
-	u32 initrd_start, initrd_end;
-
 	/* If we have an image attached to us, it overrides anything
 	 * supplied by the loader. */
 	if (_initrd_end > _initrd_start) {
@@ -189,12 +119,10 @@ static struct addr_range prep_initrd(struct addr_range vmlinux,
 		printf("Allocating 0x%lx bytes for initrd ...\n\r",
 		       initrd_size);
 		initrd_addr = (unsigned long)malloc(initrd_size);
-		if (! initrd_addr) {
-			printf("Can't allocate memory for initial "
+		if (! initrd_addr)
+			fatal("Can't allocate memory for initial "
 			       "ramdisk !\n\r");
-			exit();
-		}
-		printf("Relocating initrd 0x%p <- 0x%p (0x%lx bytes)\n\r",
+		printf("Relocating initrd 0x%lx <- 0x%p (0x%lx bytes)\n\r",
 		       initrd_addr, old_addr, initrd_size);
 		memmove((void *)initrd_addr, old_addr, initrd_size);
 	}
@@ -202,18 +130,8 @@ static struct addr_range prep_initrd(struct addr_range vmlinux,
 	printf("initrd head: 0x%lx\n\r", *((unsigned long *)initrd_addr));
 
 	/* Tell the kernel initrd address via device tree */
-	devp = finddevice("/chosen");
-	if (! devp) {
-		printf("Device tree has no chosen node!\n\r");
-		exit();
-	}
-
-	initrd_start = (u32)initrd_addr;
-	initrd_end = (u32)initrd_addr + initrd_size;
-
-	setprop(devp, "linux,initrd-start", &initrd_start,
-		sizeof(initrd_start));
-	setprop(devp, "linux,initrd-end", &initrd_end, sizeof(initrd_end));
+	setprop_val(chosen, "linux,initrd-start", (u32)(initrd_addr));
+	setprop_val(chosen, "linux,initrd-end", (u32)(initrd_addr+initrd_size));
 
 	return (struct addr_range){(void *)initrd_addr, initrd_size};
 }
@@ -222,31 +140,22 @@ static struct addr_range prep_initrd(struct addr_range vmlinux,
  * edit the command line passed to vmlinux (by setting /chosen/bootargs).
  * The buffer is put in it's own section so that tools may locate it easier.
  */
-static char builtin_cmdline[COMMAND_LINE_SIZE]
+static char cmdline[COMMAND_LINE_SIZE]
 	__attribute__((__section__("__builtin_cmdline")));
 
-static void get_cmdline(char *buf, int size)
+static void prep_cmdline(void *chosen)
 {
-	void *devp;
-	int len = strlen(builtin_cmdline);
+	if (cmdline[0] == '\0')
+		getprop(chosen, "bootargs", cmdline, COMMAND_LINE_SIZE-1);
 
-	buf[0] = '\0';
+	printf("\n\rLinux/PowerPC load: %s", cmdline);
+	/* If possible, edit the command line */
+	if (console_ops.edit_cmdline)
+		console_ops.edit_cmdline(cmdline, COMMAND_LINE_SIZE);
+	printf("\n\r");
 
-	if (len > 0) { /* builtin_cmdline overrides dt's /chosen/bootargs */
-		len = min(len, size-1);
-		strncpy(buf, builtin_cmdline, len);
-		buf[len] = '\0';
-	}
-	else if ((devp = finddevice("/chosen")))
-		getprop(devp, "bootargs", buf, size);
-}
-
-static void set_cmdline(char *buf)
-{
-	void *devp;
-
-	if ((devp = finddevice("/chosen")))
-		setprop(devp, "bootargs", buf, strlen(buf) + 1);
+	/* Put the command line back into the devtree for the kernel */
+	setprop_str(chosen, "bootargs", cmdline);
 }
 
 struct platform_ops platform_ops;
@@ -254,12 +163,19 @@ struct dt_ops dt_ops;
 struct console_ops console_ops;
 struct loader_info loader_info;
 
-void start(void *sp)
+void start(void)
 {
 	struct addr_range vmlinux, initrd;
 	kernel_entry_t kentry;
-	char cmdline[COMMAND_LINE_SIZE];
 	unsigned long ft_addr = 0;
+	void *chosen;
+
+	/* Do this first, because malloc() could clobber the loader's
+	 * command line.  Only use the loader command line if a
+	 * built-in command line wasn't set by an external tool */
+	if ((loader_info.cmdline_len > 0) && (cmdline[0] == '\0'))
+		memmove(cmdline, loader_info.cmdline,
+			min(loader_info.cmdline_len, COMMAND_LINE_SIZE-1));
 
 	if (console_ops.open && (console_ops.open() < 0))
 		exit();
@@ -267,23 +183,17 @@ void start(void *sp)
 		platform_ops.fixups();
 
 	printf("\n\rzImage starting: loaded at 0x%p (sp: 0x%p)\n\r",
-	       _start, sp);
+	       _start, get_sp());
+
+	/* Ensure that the device tree has a /chosen node */
+	chosen = finddevice("/chosen");
+	if (!chosen)
+		chosen = create_node(NULL, "chosen");
 
 	vmlinux = prep_kernel();
-	initrd = prep_initrd(vmlinux, loader_info.initrd_addr,
-			     loader_info.initrd_size);
-
-	/* If cmdline came from zimage wrapper or if we can edit the one
-	 * in the dt, print it out and edit it, if possible.
-	 */
-	if ((strlen(builtin_cmdline) > 0) || console_ops.edit_cmdline) {
-		get_cmdline(cmdline, COMMAND_LINE_SIZE);
-		printf("\n\rLinux/PowerPC load: %s", cmdline);
-		if (console_ops.edit_cmdline)
-			console_ops.edit_cmdline(cmdline, COMMAND_LINE_SIZE);
-		printf("\n\r");
-		set_cmdline(cmdline);
-	}
+	initrd = prep_initrd(vmlinux, chosen,
+			     loader_info.initrd_addr, loader_info.initrd_size);
+	prep_cmdline(chosen);
 
 	printf("Finalizing device tree...");
 	if (dt_ops.finalize)
@@ -307,7 +217,6 @@ void start(void *sp)
 		kentry((unsigned long)initrd.addr, initrd.size,
 		       loader_info.promptr);
 
-	/* console closed so printf below may not work */
-	printf("Error: Linux kernel returned to zImage boot wrapper!\n\r");
-	exit();
+	/* console closed so printf in fatal below may not work */
+	fatal("Error: Linux kernel returned to zImage boot wrapper!\n\r");
 }
