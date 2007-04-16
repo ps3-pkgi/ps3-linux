@@ -1503,16 +1503,16 @@ gelic_net_nway_reset(struct net_device *netdev)
 static uint32_t
 gelic_net_get_tx_csum(struct net_device *netdev)
 {
-	return (netdev->features & NETIF_F_HW_CSUM) != 0;
+	return (netdev->features & NETIF_F_IP_CSUM) != 0;
 }
 
 static int
 gelic_net_set_tx_csum(struct net_device *netdev, uint32_t data)
 {
 	if (data)
-		netdev->features |= NETIF_F_HW_CSUM;
+		netdev->features |= NETIF_F_IP_CSUM;
 	else
-		netdev->features &= ~NETIF_F_HW_CSUM;
+		netdev->features &= ~NETIF_F_IP_CSUM;
 
 	return 0;
 }
@@ -1691,7 +1691,7 @@ gelic_net_setup_netdev(struct gelic_net_card *card)
 
 	gelic_net_setup_netdev_ops(netdev);
 
-	netdev->features = NETIF_F_HW_CSUM;
+	netdev->features = NETIF_F_IP_CSUM;
 
 	status = lv1_net_control(card->dev->did.bus_id, card->dev->did.dev_id,
 				GELIC_NET_GET_MAC_ADDRESS,
