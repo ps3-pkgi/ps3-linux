@@ -32,6 +32,10 @@
 
 #include "platform.h"
 
+static struct device ps3_system_bus = {
+        .bus_id         = "ps3_system",
+};
+
 #define dump_mmio_region(_a) _dump_mmio_region(_a, __func__, __LINE__)
 static void _dump_mmio_region(const struct ps3_mmio_region* r,
 	const char* func, int line)
@@ -178,12 +182,27 @@ static int ps3_system_bus_uevent(struct device *_dev, char **envp,
 	return 0;
 }
 
+static ssize_t modalias_show(struct device *_dev, struct device_attribute *a,
+			     char *buf)
+{
+	struct ps3_system_bus_device *dev = to_ps3_system_bus_device(_dev);
+        int len = snprintf(buf, PAGE_SIZE, "ps3:%d\n", dev->match_id);
+
+        return (len >= PAGE_SIZE) ? (PAGE_SIZE - 1) : len;
+}
+
+static struct device_attribute ps3_system_bus_dev_attrs[] = {
+        __ATTR_RO(modalias),
+        __ATTR_NULL,
+};
+
 struct bus_type ps3_system_bus_type = {
 	.name = "ps3_system_bus",
 	.match = ps3_system_bus_match,
 	.probe = ps3_system_bus_probe,
 	.remove = ps3_system_bus_remove,
 	.uevent = ps3_system_bus_uevent,
+	.dev_attrs = ps3_system_bus_dev_attrs,
 };
 
 int __init ps3_system_bus_init(void)
@@ -192,7 +211,8 @@ int __init ps3_system_bus_init(void)
 
 	if (!firmware_has_feature(FW_FEATURE_PS3_LV1))
 		return -ENODEV;
-
+	result = device_register(&ps3_system_bus);
+	BUG_ON(result);
 	result = bus_register(&ps3_system_bus_type);
 	BUG_ON(result);
 	return result;
@@ -371,6 +391,9 @@ int ps3_system_bus_device_register(struct ps3_system_bus_device *dev)
 	dev->core.archdata.of_node = NULL;
 	dev->core.archdata.dma_ops = &ps3_dma_ops;
 	dev->core.archdata.numa_node = 0;
+
+	if (!dev->core.parent)
+		dev->core.parent = &ps3_system_bus;
 
 	snprintf(dev->core.bus_id, sizeof(dev->core.bus_id), "sb_%02x",
 		dev_count++);
