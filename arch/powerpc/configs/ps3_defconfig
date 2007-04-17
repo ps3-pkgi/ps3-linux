@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
-# Linux kernel version: 2.6.21-rc5
-# Wed Apr  4 17:00:24 2007
+# Linux kernel version: 2.6.21-rc7
+# Tue Apr 17 10:05:38 2007
 #
 CONFIG_PPC64=y
 CONFIG_64BIT=y
@@ -981,7 +981,9 @@ CONFIG_USB_MON=y
 #
 # File systems
 #
-# CONFIG_EXT2_FS is not set
+CONFIG_EXT2_FS=m
+# CONFIG_EXT2_FS_XATTR is not set
+# CONFIG_EXT2_FS_XIP is not set
 CONFIG_EXT3_FS=y
 CONFIG_EXT3_FS_XATTR=y
 # CONFIG_EXT3_FS_POSIX_ACL is not set
