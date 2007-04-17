@@ -1170,16 +1170,14 @@ itd_urb_transaction (
 					 struct ehci_itd, itd_list);
 #if defined(CONFIG_PPC_PS3)
 			/* Fix for Cell SCC ISO transfer (PS3 Bluetooth). */
-			if (firmware_has_feature(FW_FEATURE_PS3_LV1)) {
-				u32 tmp = (ehci_readl(ehci,
-						&ehci->regs->frame_index) >> 3)
-						% ehci->periodic_size;
-				if (itd->frame == tmp)
-					itd = NULL;
-				else {
-					list_del (&itd->itd_list);
-					itd_dma = itd->itd_dma;
-				}
+			if (firmware_has_feature(FW_FEATURE_PS3_LV1)
+				&& itd->frame == ((ehci_readl(ehci,
+				&ehci->regs->frame_index) >> 3)
+				% ehci->periodic_size))
+				itd = NULL;
+			else {
+				list_del (&itd->itd_list);
+				itd_dma = itd->itd_dma;
 			}
 #else
                        list_del (&itd->itd_list);
@@ -1801,16 +1799,14 @@ sitd_urb_transaction (
 					 struct ehci_sitd, sitd_list);
 #if defined(CONFIG_PPC_PS3)
 			/* Fix for Cell SCC ISO transfer (PS3 Bluetooth). */
-			if (firmware_has_feature(FW_FEATURE_PS3_LV1)) {
-				u32 tmp = (ehci_readl(ehci,
-					&ehci->regs->frame_index) >> 3)
-					% ehci->periodic_size;
-				if (sitd->frame == tmp)
-					sitd = NULL;
-				else {
-					list_del (&sitd->sitd_list);
-					sitd_dma = sitd->sitd_dma;
-				}
+			if (firmware_has_feature(FW_FEATURE_PS3_LV1)
+				&& sitd->frame == ((ehci_readl(ehci,
+				&ehci->regs->frame_index) >> 3)
+				% ehci->periodic_size))
+				sitd = NULL;
+			else {
+				list_del (&sitd->sitd_list);
+				sitd_dma = sitd->sitd_dma;
 			}
 #else
                        list_del (&sitd->sitd_list);
