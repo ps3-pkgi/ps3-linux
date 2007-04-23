@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.21-rc7
-# Tue Apr 17 10:05:38 2007
+# Sat Apr 21 11:22:07 2007
 #
 CONFIG_PPC64=y
 CONFIG_64BIT=y
@@ -356,6 +356,7 @@ CONFIG_BT_HCIUSB_SCO=y
 # CONFIG_BT_HCIBFUSB is not set
 # CONFIG_BT_HCIVHCI is not set
 # CONFIG_IEEE80211 is not set
+CONFIG_WIRELESS_EXT=y
 
 #
 # Device Drivers
@@ -526,7 +527,15 @@ CONFIG_GELIC_NET=y
 #
 # Wireless LAN (non-hamradio)
 #
-# CONFIG_NET_RADIO is not set
+CONFIG_NET_RADIO=y
+# CONFIG_NET_WIRELESS_RTNETLINK is not set
+
+#
+# Obsolete Wireless cards support (pre-802.11)
+#
+# CONFIG_STRIP is not set
+# CONFIG_USB_ZD1201 is not set
+# CONFIG_HOSTAP is not set
 
 #
 # Wan interfaces
