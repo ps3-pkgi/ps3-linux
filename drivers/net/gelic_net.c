@@ -838,9 +838,9 @@ gelic_net_set_txdescr_cmdstat(struct gelic_net_descr *descr,
 		/* is packet ip?
 		 * if yes: tcp? udp? */
 		if (skb->protocol == htons(ETH_P_IP)) {
-			if (skb->nh.iph->protocol == IPPROTO_TCP) {
+			if (ip_hdr(skb)->protocol == IPPROTO_TCP) {
 				descr->dmac_cmd_status = tcpcs;
-			} else if (skb->nh.iph->protocol == IPPROTO_UDP) {
+			} else if (ip_hdr(skb)->protocol == IPPROTO_UDP) {
 				descr->dmac_cmd_status = udpcs;
 			} else { /* the stack should checksum non-tcp and non-udp
 				    packets on his own: NETIF_F_IP_CSUM */

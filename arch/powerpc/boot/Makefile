@@ -47,7 +47,7 @@ $(addprefix $(obj)/,$(zlib) main.o): $(addprefix $(obj)/,$(zliblinuxheader)) \
 src-wlib := string.S crt0.S stdio.c main.c flatdevtree.c flatdevtree_misc.c \
 		ns16550.c serial.c simple_alloc.c div64.S util.S \
 		gunzip_util.c elf_util.c $(zlib) devtree.c
-src-plat := of.c $(src-plat-y)
+src-plat := of.c cuboot-83xx.c cuboot-85xx.c $(src-plat-y)
 src-boot := $(src-wlib) $(src-plat) empty.c
 
 src-boot := $(addprefix $(obj)/, $(src-boot))
@@ -137,7 +137,7 @@ image-$(CONFIG_PPC_CELLEB)		+= zImage.pseries
 image-$(CONFIG_PPC_CHRP)		+= zImage.chrp
 image-$(CONFIG_PPC_EFIKA)		+= zImage.chrp
 image-$(CONFIG_PPC_PMAC)		+= zImage.pmac
-image-$(CONFIG_DEFAULT_UIMAGE)		+= uImage
+image-$(CONFIG_DEFAULT_UIMAGE)		+= uImage cuImage
 
 # For 32-bit powermacs, build the COFF and miboot images
 # as well as the ELF images.
@@ -171,16 +171,27 @@ $(obj)/zImage.initrd.ps3: vmlinux  $(wrapper) $(wrapperbits)
 $(obj)/uImage: vmlinux $(wrapperbits)
 	$(call if_changed,wrap,uboot)
 
+cuboot-plat-$(CONFIG_83xx) += 83xx
+cuboot-plat-$(CONFIG_85xx) += 85xx
+cuboot-plat-y += unknown-platform
+
+dts = $(if $(shell echo $(CONFIG_DEVICE_TREE) | grep '^/'),\
+       ,$(srctree)/$(src)/dts/)$(CONFIG_DEVICE_TREE)
+
+$(obj)/cuImage: vmlinux $(wrapperbits)
+	$(call if_changed,wrap,cuboot-$(word 1,$(cuboot-plat-y)),$(dts))
+
 $(obj)/zImage:		$(addprefix $(obj)/, $(image-y))
 	@rm -f $@; ln $< $@
 $(obj)/zImage.initrd:	$(addprefix $(obj)/, $(initrd-y))
 	@rm -f $@; ln $< $@
 
-install: $(CONFIGURE) $(image-y)
+install: $(CONFIGURE) $(addprefix $(obj)/, $(image-y))
 	sh -x $(srctree)/$(src)/install.sh "$(KERNELRELEASE)" vmlinux System.map "$(INSTALL_PATH)" $<
 
 # anything not in $(targets)
-clean-files += $(image-) $(initrd-) zImage zImage.initrd
+clean-files += $(image-) $(initrd-) zImage zImage.initrd \
+               cuImage.elf cuImage.bin.gz
 
 # clean up files cached by wrapper
 clean-kernel := vmlinux.strip vmlinux.bin

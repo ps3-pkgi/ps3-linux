@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
-# Linux kernel version: 2.6.21-rc7
-# Sat Apr 21 11:22:07 2007
+# Linux kernel version: 2.6.21
+# Mon Apr 30 12:03:35 2007
 #
 CONFIG_PPC64=y
 CONFIG_64BIT=y
@@ -137,27 +137,8 @@ CONFIG_PPC_MULTIPLATFORM=y
 # CONFIG_PPC_PMAC is not set
 # CONFIG_PPC_MAPLE is not set
 # CONFIG_PPC_PASEMI is not set
-CONFIG_PPC_CELL=y
-# CONFIG_PPC_CELL_NATIVE is not set
-# CONFIG_PPC_IBM_CELL_BLADE is not set
-CONFIG_PPC_PS3=y
 # CONFIG_PPC_CELLEB is not set
-# CONFIG_U3_DART is not set
-# CONFIG_PPC_RTAS is not set
-# CONFIG_MMIO_NVRAM is not set
-# CONFIG_PPC_MPC106 is not set
-# CONFIG_PPC_970_NAP is not set
-# CONFIG_PPC_INDIRECT_IO is not set
-# CONFIG_GENERIC_IOMAP is not set
-# CONFIG_CPU_FREQ is not set
-# CONFIG_WANT_EARLY_SERIAL is not set
-# CONFIG_MPIC is not set
-
-#
-# Cell Broadband Engine options
-#
-CONFIG_SPU_FS=y
-CONFIG_SPU_BASE=y
+CONFIG_PPC_PS3=y
 
 #
 # PS3 Platform Options
@@ -169,6 +150,28 @@ CONFIG_PS3_USE_LPAR_ADDR=y
 CONFIG_PS3_VUART=y
 CONFIG_PS3_PS3AV=y
 CONFIG_PS3_SYS_MANAGER=y
+CONFIG_PPC_CELL=y
+# CONFIG_PPC_CELL_NATIVE is not set
+# CONFIG_PPC_IBM_CELL_BLADE is not set
+
+#
+# Cell Broadband Engine options
+#
+CONFIG_SPU_FS=y
+CONFIG_SPU_BASE=y
+# CONFIG_PQ2ADS is not set
+# CONFIG_MPIC is not set
+# CONFIG_MPIC_WEIRD is not set
+# CONFIG_PPC_I8259 is not set
+# CONFIG_U3_DART is not set
+# CONFIG_PPC_RTAS is not set
+# CONFIG_MMIO_NVRAM is not set
+# CONFIG_PPC_MPC106 is not set
+# CONFIG_PPC_970_NAP is not set
+# CONFIG_PPC_INDIRECT_IO is not set
+# CONFIG_GENERIC_IOMAP is not set
+# CONFIG_CPU_FREQ is not set
+# CONFIG_CPM2 is not set
 
 #
 # Kernel options
@@ -213,10 +216,10 @@ CONFIG_ARCH_MEMORY_PROBE=y
 # CONFIG_PPC_64K_PAGES is not set
 # CONFIG_SCHED_SMT is not set
 CONFIG_PROC_DEVICETREE=y
-CONFIG_CMDLINE_BOOL=y
-CONFIG_CMDLINE="root=/dev/sda1 ip=dhcp"
+# CONFIG_CMDLINE_BOOL is not set
 # CONFIG_PM is not set
 # CONFIG_SECCOMP is not set
+# CONFIG_WANT_DEVICE_TREE is not set
 CONFIG_ISA_DMA_API=y
 
 #
@@ -224,8 +227,6 @@ CONFIG_ISA_DMA_API=y
 #
 CONFIG_ZONE_DMA=y
 CONFIG_GENERIC_ISA_DMA=y
-# CONFIG_MPIC_WEIRD is not set
-# CONFIG_PPC_I8259 is not set
 # CONFIG_PCI is not set
 # CONFIG_PCI_DOMAINS is not set
 
@@ -247,7 +248,6 @@ CONFIG_NET=y
 #
 # Networking options
 #
-# CONFIG_NETDEBUG is not set
 CONFIG_PACKET=y
 CONFIG_PACKET_MMAP=y
 CONFIG_UNIX=y
@@ -284,6 +284,7 @@ CONFIG_DEFAULT_TCP_CONG="cubic"
 CONFIG_IPV6=y
 # CONFIG_IPV6_PRIVACY is not set
 # CONFIG_IPV6_ROUTER_PREF is not set
+# CONFIG_IPV6_OPTIMISTIC_DAD is not set
 # CONFIG_INET6_AH is not set
 # CONFIG_INET6_ESP is not set
 # CONFIG_INET6_IPCOMP is not set
@@ -355,8 +356,14 @@ CONFIG_BT_HCIUSB_SCO=y
 # CONFIG_BT_HCIBPA10X is not set
 # CONFIG_BT_HCIBFUSB is not set
 # CONFIG_BT_HCIVHCI is not set
-# CONFIG_IEEE80211 is not set
+# CONFIG_AF_RXRPC is not set
+
+#
+# Wireless
+#
+# CONFIG_CFG80211 is not set
 CONFIG_WIRELESS_EXT=y
+# CONFIG_IEEE80211 is not set
 
 #
 # Device Drivers
@@ -376,10 +383,6 @@ CONFIG_PREVENT_FIRMWARE_BUILD=y
 # Connector - unified userspace <-> kernelspace linker
 #
 # CONFIG_CONNECTOR is not set
-
-#
-# Memory Technology Devices (MTD)
-#
 # CONFIG_MTD is not set
 
 #
@@ -462,6 +465,7 @@ CONFIG_CHR_DEV_SG=m
 #
 # CONFIG_ISCSI_TCP is not set
 # CONFIG_SCSI_DEBUG is not set
+# CONFIG_SCSI_ESP_CORE is not set
 
 #
 # Serial ATA (prod) and Parallel ATA (experimental) drivers
@@ -525,17 +529,10 @@ CONFIG_GELIC_NET=y
 #
 
 #
-# Wireless LAN (non-hamradio)
+# Wireless LAN
 #
-CONFIG_NET_RADIO=y
-# CONFIG_NET_WIRELESS_RTNETLINK is not set
-
-#
-# Obsolete Wireless cards support (pre-802.11)
-#
-# CONFIG_STRIP is not set
-# CONFIG_USB_ZD1201 is not set
-# CONFIG_HOSTAP is not set
+# CONFIG_WLAN_PRE80211 is not set
+# CONFIG_WLAN_80211 is not set
 
 #
 # Wan interfaces
@@ -689,7 +686,7 @@ CONFIG_FB_CFB_IMAGEBLIT=y
 # CONFIG_FB_TILEBLITTING is not set
 
 #
-# Frambuffer hardware drivers
+# Frame buffer hardware drivers
 #
 # CONFIG_FB_OF is not set
 # CONFIG_FB_VGA16 is not set
@@ -795,6 +792,7 @@ CONFIG_USB=y
 # Miscellaneous USB options
 #
 CONFIG_USB_DEVICEFS=y
+# CONFIG_USB_DEVICE_CLASS is not set
 # CONFIG_USB_DYNAMIC_MINORS is not set
 # CONFIG_USB_OTG is not set
 
@@ -1153,6 +1151,8 @@ CONFIG_NLS_ISO8859_1=y
 # Distributed Lock Manager
 #
 # CONFIG_DLM is not set
+# CONFIG_UCC_SLOW is not set
+# CONFIG_UCC_FAST is not set
 
 #
 # Library routines
@@ -1204,6 +1204,7 @@ CONFIG_FORCED_INLINING=y
 # CONFIG_FAULT_INJECTION is not set
 CONFIG_DEBUG_STACKOVERFLOW=y
 # CONFIG_DEBUG_STACK_USAGE is not set
+# CONFIG_DEBUG_PAGEALLOC is not set
 # CONFIG_DEBUGGER is not set
 CONFIG_IRQSTACKS=y
 # CONFIG_BOOTX_TEXT is not set

@@ -41,7 +41,7 @@ struct spu_gang;
 
 /* ctx->sched_flags */
 enum {
-	SPU_SCHED_WAKE = 0, /* currently unused */
+	SPU_SCHED_EXITING = 0,
 };
 
 struct spu_context {
@@ -60,7 +60,7 @@ struct spu_context {
 
 	enum { SPU_STATE_RUNNABLE, SPU_STATE_SAVED } state;
 	struct mutex state_mutex;
-	struct semaphore run_sema;
+	struct mutex run_mutex;
 
 	struct mm_struct *owner;
 
@@ -142,6 +142,7 @@ struct spu_context_ops {
 			       struct spu_dma_info * info);
 	void (*proxydma_info_read) (struct spu_context * ctx,
 				    struct spu_proxydma_info * info);
+	void (*restart_dma)(struct spu_context *ctx);
 };
 
 extern struct spu_context_ops spu_hw_ops;
@@ -173,6 +174,9 @@ int put_spu_gang(struct spu_gang *gang);
 void spu_gang_remove_ctx(struct spu_gang *gang, struct spu_context *ctx);
 void spu_gang_add_ctx(struct spu_gang *gang, struct spu_context *ctx);
 
+/* fault handling */
+int spufs_handle_class1(struct spu_context *ctx);
+
 /* context management */
 static inline void spu_acquire(struct spu_context *ctx)
 {
@@ -193,7 +197,6 @@ void spu_unmap_mappings(struct spu_context *ctx);
 void spu_forget(struct spu_context *ctx);
 int spu_acquire_runnable(struct spu_context *ctx, unsigned long flags);
 void spu_acquire_saved(struct spu_context *ctx);
-int spu_acquire_exclusive(struct spu_context *ctx);
 
 int spu_activate(struct spu_context *ctx, unsigned long flags);
 void spu_deactivate(struct spu_context *ctx);
@@ -221,14 +224,13 @@ extern char *isolated_loader;
 		prepare_to_wait(&(wq), &__wait, TASK_INTERRUPTIBLE);	\
 		if (condition)						\
 			break;						\
-		if (!signal_pending(current)) {				\
-			spu_release(ctx);				\
-			schedule();					\
-			spu_acquire(ctx);				\
-			continue;					\
+		if (signal_pending(current)) {				\
+			__ret = -ERESTARTSYS;				\
+			break;						\
 		}							\
-		__ret = -ERESTARTSYS;					\
-		break;							\
+		spu_release(ctx);					\
+		schedule();						\
+		spu_acquire(ctx);					\
 	}								\
 	finish_wait(&(wq), &__wait);					\
 	__ret;								\
