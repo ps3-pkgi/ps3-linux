@@ -74,7 +74,7 @@ ps3_register_gelic (void)
 		+ sizeof(struct ps3_system_bus_device));
 
 	ps3_dma_region_init(dev->d_region, &dev->did, PS3_DMA_64K,
-		PS3_DMA_OTHER);
+		PS3_DMA_OTHER, NULL, 0);
 
 	result = ps3_system_bus_device_register(dev);
 
@@ -149,7 +149,7 @@ ps3_register_ohci_0 (void)
 	BUG_ON(len != 0x10000);
 
 	ps3_dma_region_init(p->dev.d_region, &p->dev.did, PS3_DMA_64K,
-		PS3_DMA_INTERNAL);
+		PS3_DMA_INTERNAL, NULL, 0);
 
 	ps3_mmio_region_init(p->dev.m_region, &p->dev.did, bus_addr,
 		len, PS3_MMIO_4K);
@@ -233,7 +233,7 @@ ps3_register_ohci_1 (void)
 	BUG_ON(len != 0x10000);
 
 	ps3_dma_region_init(p->dev.d_region, &p->dev.did, PS3_DMA_64K,
-		PS3_DMA_INTERNAL);
+		PS3_DMA_INTERNAL, NULL, 0);
 
 	ps3_mmio_region_init(p->dev.m_region, &p->dev.did, bus_addr,
 		len, PS3_MMIO_4K);
@@ -308,7 +308,7 @@ ps3_register_ehci_0 (void)
 	BUG_ON(len != 0x10000);
 
 	ps3_dma_region_init(p->dev.d_region, &p->dev.did, PS3_DMA_64K,
-		PS3_DMA_INTERNAL);
+		PS3_DMA_INTERNAL, NULL, 0);
 
 	ps3_mmio_region_init(p->dev.m_region, &p->dev.did, bus_addr,
 		len, PS3_MMIO_4K);
@@ -392,7 +392,7 @@ ps3_register_ehci_1 (void)
 	BUG_ON(len != 0x10000);
 
 	ps3_dma_region_init(p->dev.d_region, &p->dev.did, PS3_DMA_64K,
-		PS3_DMA_INTERNAL);
+		PS3_DMA_INTERNAL, NULL, 0);
 
 	ps3_mmio_region_init(p->dev.m_region, &p->dev.did, bus_addr,
 		len, PS3_MMIO_4K);

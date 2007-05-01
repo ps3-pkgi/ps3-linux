@@ -81,6 +81,7 @@ enum ps3_dma_region_type {
  * @region_type: The HV region type.
  * @bus_addr: The 'translated' bus address of the region.
  * @len: The length in bytes of the region.
+ * @offset: The offset from the start of memory of the region.
  * @chunk_list: Opaque variable used by the ioc page manager.
  */
 
@@ -90,6 +91,7 @@ struct ps3_dma_region {
 	enum ps3_dma_region_type region_type;
 	unsigned long bus_addr;
 	unsigned long len;
+	unsigned long offset;
 	struct {
 		spinlock_t lock;
 		struct list_head head;
@@ -103,14 +105,9 @@ struct ps3_dma_region {
  * ps3_system_bus_device_register.
  */
 
-static inline void ps3_dma_region_init(struct ps3_dma_region *r,
-	const struct ps3_device_id* did, enum ps3_dma_page_size page_size,
-	enum ps3_dma_region_type region_type)
-{
-	r->did = *did;
-	r->page_size = page_size;
-	r->region_type = region_type;
-}
+void ps3_dma_region_init(struct ps3_dma_region *r,
+	const struct ps3_device_id *did, enum ps3_dma_page_size page_size,
+	enum ps3_dma_region_type region_type, void *addr, unsigned long len);
 int ps3_dma_region_create(struct ps3_dma_region *r);
 int ps3_dma_region_free(struct ps3_dma_region *r);
 int ps3_dma_map(struct ps3_dma_region *r, unsigned long virt_addr,
