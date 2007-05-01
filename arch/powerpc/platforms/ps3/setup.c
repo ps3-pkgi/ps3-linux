@@ -137,16 +137,18 @@ early_param("ps3fb", early_parse_ps3fb);
 #define prealloc_ps3fb_videomemory()	do { } while (0)
 #endif
 
-#if defined(CONFIG_PS3_STORAGE) || defined(CONFIG_PS3_STORAGE_MODULE)
-struct ps3_prealloc ps3_stor_bounce_buffer = {
+#if defined(CONFIG_PS3_STORAGE) || defined(CONFIG_PS3_STORAGE_MODULE) || \
+    defined(CONFIG_PS3_STORAGE_FLASH) || \
+    defined(CONFIG_PS3_STORAGE_FLASH_MODULE)
+struct ps3_prealloc ps3flash_bounce_buffer = {
 	.name = "ps3_stor bounce buffer",
 	.size = 256*1024,
 	.align = 256*1024
 };
-EXPORT_SYMBOL_GPL(ps3_stor_bounce_buffer);
-#define prealloc_ps3_stor_bounce_buffer()	prealloc(&ps3_stor_bounce_buffer)
+EXPORT_SYMBOL_GPL(ps3flash_bounce_buffer);
+#define prealloc_ps3flash_bounce_buffer()	prealloc(&ps3flash_bounce_buffer)
 #else
-#define prealloc_ps3_stor_bounce_buffer()	do { } while (0)
+#define prealloc_ps3flash_bounce_buffer()	do { } while (0)
 #endif
 
 static int ps3_set_dabr(u64 dabr)
@@ -178,7 +180,7 @@ static void __init ps3_setup_arch(void)
 #endif
 
 	prealloc_ps3fb_videomemory();
-	prealloc_ps3_stor_bounce_buffer();
+	prealloc_ps3flash_bounce_buffer();
 
 	ppc_md.power_save = ps3_power_save;
 

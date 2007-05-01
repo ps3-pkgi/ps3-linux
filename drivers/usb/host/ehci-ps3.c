@@ -168,8 +168,12 @@ static int ps3_ehci_sb_remove(struct ps3_system_bus_device *dev)
 	struct usb_hcd *hcd =
 		(struct usb_hcd *)ps3_system_bus_get_driver_data(dev);
 
-	usb_put_hcd(hcd);
 	ps3_system_bus_set_driver_data(dev, NULL);
+	if (hcd->regs)
+		iounmap(hcd->regs);
+	usb_put_hcd(hcd);
+	//ps3_io_irq_destroy(virq);		//FIXME how to get virq???
+	ps3_free_mmio_region(dev->m_region);
 
 	return 0;
 }

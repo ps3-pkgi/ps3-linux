@@ -1851,7 +1851,8 @@ static int __init
 ps3_gelic_driver_init (void)
 {
 	return firmware_has_feature(FW_FEATURE_PS3_LV1)
-		? ps3_system_bus_driver_register(&ps3_gelic_driver)
+		? ps3_system_bus_driver_register(&ps3_gelic_driver,
+						 PS3_IOBUS_SB)
 		: -ENODEV;
 }
 

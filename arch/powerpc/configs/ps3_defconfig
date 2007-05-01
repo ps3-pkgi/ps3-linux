@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.21
-# Mon Apr 30 12:03:35 2007
+# Tue May  1 14:46:47 2007
 #
 CONFIG_PPC64=y
 CONFIG_64BIT=y
@@ -150,6 +150,10 @@ CONFIG_PS3_USE_LPAR_ADDR=y
 CONFIG_PS3_VUART=y
 CONFIG_PS3_PS3AV=y
 CONFIG_PS3_SYS_MANAGER=y
+CONFIG_PS3_STORAGE_BUS=y
+CONFIG_PS3_STORAGE_DISK=y
+CONFIG_PS3_STORAGE_ROM=y
+CONFIG_PS3_STORAGE_FLASH=y
 CONFIG_PPC_CELL=y
 # CONFIG_PPC_CELL_NATIVE is not set
 # CONFIG_PPC_IBM_CELL_BLADE is not set
@@ -780,6 +784,20 @@ CONFIG_HID=y
 # CONFIG_HID_DEBUG is not set
 
 #
+# USB Input Devices
+#
+CONFIG_USB_HID=m
+# CONFIG_USB_HIDINPUT_POWERBOOK is not set
+# CONFIG_HID_FF is not set
+# CONFIG_USB_HIDDEV is not set
+
+#
+# USB HID Boot Protocol drivers
+#
+# CONFIG_USB_KBD is not set
+# CONFIG_USB_MOUSE is not set
+
+#
 # USB support
 #
 CONFIG_USB_ARCH_HAS_HCD=y
@@ -841,16 +859,6 @@ CONFIG_USB_STORAGE=m
 #
 # USB Input Devices
 #
-CONFIG_USB_HID=m
-# CONFIG_USB_HIDINPUT_POWERBOOK is not set
-# CONFIG_HID_FF is not set
-# CONFIG_USB_HIDDEV is not set
-
-#
-# USB HID Boot Protocol drivers
-#
-# CONFIG_USB_KBD is not set
-# CONFIG_USB_MOUSE is not set
 # CONFIG_USB_AIPTEK is not set
 # CONFIG_USB_WACOM is not set
 # CONFIG_USB_ACECAD is not set

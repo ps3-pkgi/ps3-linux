@@ -47,7 +47,7 @@ static void _dump_mmio_region(const struct ps3_mmio_region* r,
 	pr_debug("%s:%d: lpar_addr %lxh\n", func, line, r->lpar_addr);
 }
 
-int ps3_mmio_region_create(struct ps3_mmio_region *r)
+static int ps3_sb_mmio_region_create(struct ps3_mmio_region *r)
 {
 	int result;
 
@@ -63,9 +63,20 @@ int ps3_mmio_region_create(struct ps3_mmio_region *r)
 	dump_mmio_region(r);
 	return result;
 }
+
+static int ps3_ioc0_mmio_region_create(struct ps3_mmio_region *r)
+{
+	/* device specific; do nothing currently */
+	return 0;
+}
+
+int ps3_mmio_region_create(struct ps3_mmio_region *r)
+{
+	return r->mmio_ops->create(r);
+}
 EXPORT_SYMBOL_GPL(ps3_mmio_region_create);
 
-int ps3_free_mmio_region(struct ps3_mmio_region *r)
+static int ps3_sb_free_mmio_region(struct ps3_mmio_region *r)
 {
 	int result;
 
@@ -79,7 +90,52 @@ int ps3_free_mmio_region(struct ps3_mmio_region *r)
 	r->lpar_addr = 0;
 	return result;
 }
+
+static int ps3_ioc0_free_mmio_region(struct ps3_mmio_region *r)
+{
+	/* device specific; do nothing currently */
+	return 0;
+}
+
+
+int ps3_free_mmio_region(struct ps3_mmio_region *r)
+{
+	return r->mmio_ops->free(r);
+}
+
 EXPORT_SYMBOL_GPL(ps3_free_mmio_region);
+
+static const struct ps3_mmio_region_ops ps3_mmio_sb_region_ops = {
+	.create = ps3_sb_mmio_region_create,
+	.free = ps3_sb_free_mmio_region
+};
+
+static const struct ps3_mmio_region_ops ps3_mmio_ioc0_region_ops = {
+	.create = ps3_ioc0_mmio_region_create,
+	.free = ps3_ioc0_free_mmio_region
+};
+
+void ps3_mmio_region_init(struct ps3_mmio_region *r,
+	const struct ps3_device_id* did, unsigned long bus_addr,
+	unsigned long len, enum ps3_mmio_page_size page_size,
+	enum ps3_iobus_type iobus_type)
+{
+	r->did = *did;
+	r->bus_addr = bus_addr;
+	r->len = len;
+	r->page_size = page_size;
+	switch (iobus_type) {
+	case PS3_IOBUS_SB:
+		r->mmio_ops = &ps3_mmio_sb_region_ops;
+		break;
+	case PS3_IOBUS_IOC0:
+		r->mmio_ops = &ps3_mmio_ioc0_region_ops;
+		break;
+	default:
+		BUG();
+	}
+}
+EXPORT_SYMBOL_GPL(ps3_mmio_region_init);
 
 static int ps3_system_bus_match(struct device *_dev,
 	struct device_driver *_drv)
@@ -98,12 +154,13 @@ static int ps3_system_bus_match(struct device *_dev,
 
 static int ps3_system_bus_probe(struct device *_dev)
 {
-	int result;
+	int result = 0;
 	struct ps3_system_bus_device *dev = to_ps3_system_bus_device(_dev);
 	struct ps3_system_bus_driver *drv =
 		to_ps3_system_bus_driver(_dev->driver);
 
-	result = lv1_open_device(dev->did.bus_id, dev->did.dev_id, 0);
+	if (dev->did.bus_id)
+		result = lv1_open_device(dev->did.bus_id, dev->did.dev_id, 0);
 
 	if (result && (result != LV1_BUSY || (dev->match_id != PS3_MATCH_ID_EHCI
 		&& dev->match_id != PS3_MATCH_ID_OHCI))) {
@@ -113,7 +170,7 @@ static int ps3_system_bus_probe(struct device *_dev)
 		goto clean_none;
 	}
 
-	if (dev->d_region->did.bus_id) {
+	if (dev->d_region && dev->d_region->did.bus_id) {
 		result = ps3_dma_region_create(dev->d_region);
 
 		if (result) {
@@ -141,9 +198,11 @@ static int ps3_system_bus_probe(struct device *_dev)
 	return result;
 
 clean_dma:
-	ps3_dma_region_free(dev->d_region);
+	if (dev->d_region && dev->d_region->did.bus_id)
+		ps3_dma_region_free(dev->d_region);
 clean_device:
-	lv1_close_device(dev->did.bus_id, dev->did.dev_id);
+	if (dev->did.bus_id)
+		lv1_close_device(dev->did.bus_id, dev->did.dev_id);
 clean_none:
 	return result;
 }
@@ -160,9 +219,11 @@ static int ps3_system_bus_remove(struct device *_dev)
 		pr_info("%s:%d: %s no remove method\n", __func__, __LINE__,
 			dev->core.bus_id);
 
-	ps3_dma_region_free(dev->d_region);
-	ps3_free_mmio_region(dev->m_region);
-	lv1_close_device(dev->did.bus_id, dev->did.dev_id);
+	if (dev->d_region && dev->d_region->did.dev_id)
+		ps3_dma_region_free(dev->d_region);
+
+	if (dev->did.bus_id)
+		lv1_close_device(dev->did.bus_id, dev->did.dev_id);
 
 	return 0;
 }
@@ -224,15 +285,12 @@ core_initcall(ps3_system_bus_init);
  * Returns the virtual address of the buffer and sets dma_handle
  * to the dma address (mapping) of the first page.
  */
-
 static void * ps3_alloc_coherent(struct device *_dev, size_t size,
-	dma_addr_t *dma_handle, gfp_t flag)
+				      dma_addr_t *dma_handle, gfp_t flag)
 {
 	int result;
 	struct ps3_system_bus_device *dev = to_ps3_system_bus_device(_dev);
 	unsigned long virt_addr;
-
-	BUG_ON(!dev->d_region->bus_addr);
 
 	flag &= ~(__GFP_DMA | __GFP_HIGHMEM);
 	flag |= __GFP_ZERO;
@@ -244,7 +302,8 @@ static void * ps3_alloc_coherent(struct device *_dev, size_t size,
 		goto clean_none;
 	}
 
-	result = ps3_dma_map(dev->d_region, virt_addr, size, dma_handle);
+	result = ps3_dma_map(dev->d_region, virt_addr, size, dma_handle,
+			     IOPTE_PP_W | IOPTE_PP_R | IOPTE_SO_RW | IOPTE_M);
 
 	if (result) {
 		pr_debug("%s:%d: ps3_dma_map failed (%d)\n",
@@ -278,7 +337,7 @@ static void ps3_free_coherent(struct device *_dev, size_t size, void *vaddr,
  * byte within the page as vaddr.
  */
 
-static dma_addr_t ps3_map_single(struct device *_dev, void *ptr, size_t size,
+static dma_addr_t ps3_sb_map_single(struct device *_dev, void *ptr, size_t size,
 	enum dma_data_direction direction)
 {
 	struct ps3_system_bus_device *dev = to_ps3_system_bus_device(_dev);
@@ -286,13 +345,47 @@ static dma_addr_t ps3_map_single(struct device *_dev, void *ptr, size_t size,
 	unsigned long bus_addr;
 
 	result = ps3_dma_map(dev->d_region, (unsigned long)ptr, size,
-		&bus_addr);
+			     &bus_addr,
+			     IOPTE_PP_R | IOPTE_PP_W | IOPTE_SO_RW | IOPTE_M);
 
 	if (result) {
 		pr_debug("%s:%d: ps3_dma_map failed (%d)\n",
 			__func__, __LINE__, result);
 	}
 
+	return bus_addr;
+}
+
+static dma_addr_t ps3_ioc0_map_single(struct device *_dev, void *ptr, size_t size,
+				      enum dma_data_direction direction)
+{
+	struct ps3_system_bus_device *dev = to_ps3_system_bus_device(_dev);
+	int result;
+	unsigned long bus_addr;
+	u64 iopte_flag;
+
+	iopte_flag = IOPTE_M;
+	switch (direction) {
+	case DMA_BIDIRECTIONAL:
+		iopte_flag |= IOPTE_PP_R | IOPTE_PP_W | IOPTE_SO_RW;
+		break;
+	case DMA_TO_DEVICE:
+		iopte_flag |= IOPTE_PP_R | IOPTE_SO_R;
+		break;
+	case DMA_FROM_DEVICE:
+		iopte_flag |= IOPTE_PP_W | IOPTE_SO_RW;
+		break;
+	default:
+		/* not happned */
+		BUG();
+	};
+	result = ps3_dma_map(dev->d_region, (unsigned long)ptr, size,
+			     &bus_addr, iopte_flag);
+
+	if (result) {
+		pr_debug("%s:%d: ps3_dma_map failed (%d)\n",
+			__func__, __LINE__, result);
+	}
 	return bus_addr;
 }
 
@@ -310,7 +403,7 @@ static void ps3_unmap_single(struct device *_dev, dma_addr_t dma_addr,
 	}
 }
 
-static int ps3_map_sg(struct device *_dev, struct scatterlist *sg, int nents,
+static int ps3_sb_map_sg(struct device *_dev, struct scatterlist *sg, int nents,
 	enum dma_data_direction direction)
 {
 	struct ps3_system_bus_device *dev = to_ps3_system_bus_device(_dev);
@@ -323,7 +416,7 @@ static int ps3_map_sg(struct device *_dev, struct scatterlist *sg, int nents,
 	for (i = 0; i < nents; i++, sg++) {
 		int result = ps3_dma_map(dev->d_region,
 			page_to_phys(sg->page) + sg->offset, sg->length,
-			&sg->dma_address);
+					 &sg->dma_address, 0);
 
 		if (result) {
 			pr_debug("%s:%d: ps3_dma_map failed (%d)\n",
@@ -338,7 +431,14 @@ static int ps3_map_sg(struct device *_dev, struct scatterlist *sg, int nents,
 #endif
 }
 
-static void ps3_unmap_sg(struct device *_dev, struct scatterlist *sg,
+static int ps3_ioc0_map_sg(struct device *_dev, struct scatterlist *sg, int nents,
+			   enum dma_data_direction direction)
+{
+	BUG();
+	return 0;
+}
+
+static void ps3_sb_unmap_sg(struct device *_dev, struct scatterlist *sg,
 	int nents, enum dma_data_direction direction)
 {
 #if defined(CONFIG_PS3_DYNAMIC_DMA)
@@ -346,20 +446,38 @@ static void ps3_unmap_sg(struct device *_dev, struct scatterlist *sg,
 #endif
 }
 
+static void ps3_ioc0_unmap_sg(struct device *_dev, struct scatterlist *sg,
+			    int nents, enum dma_data_direction direction)
+{
+	BUG();
+}
+
 static int ps3_dma_supported(struct device *_dev, u64 mask)
 {
 	return mask >= DMA_32BIT_MASK;
 }
 
-static struct dma_mapping_ops ps3_dma_ops = {
+struct dma_mapping_ops ps3_sb_dma_ops = {
 	.alloc_coherent = ps3_alloc_coherent,
 	.free_coherent = ps3_free_coherent,
-	.map_single = ps3_map_single,
+	.map_single = ps3_sb_map_single,
 	.unmap_single = ps3_unmap_single,
-	.map_sg = ps3_map_sg,
-	.unmap_sg = ps3_unmap_sg,
+	.map_sg = ps3_sb_map_sg,
+	.unmap_sg = ps3_sb_unmap_sg,
 	.dma_supported = ps3_dma_supported
 };
+EXPORT_SYMBOL(ps3_sb_dma_ops);
+
+struct dma_mapping_ops ps3_ioc0_dma_ops = {
+	.alloc_coherent = ps3_alloc_coherent,
+	.free_coherent = ps3_free_coherent,
+	.map_single = ps3_ioc0_map_single,
+	.unmap_single = ps3_unmap_single,
+	.map_sg = ps3_ioc0_map_sg,
+	.unmap_sg = ps3_ioc0_unmap_sg,
+	.dma_supported = ps3_dma_supported
+};
+EXPORT_SYMBOL(ps3_ioc0_dma_ops);
 
 /**
  * ps3_system_bus_release_device - remove a device from the system bus
@@ -379,24 +497,36 @@ static void ps3_system_bus_release_device(struct device *_dev)
  * object and frees the object in ps3_system_bus_release_device().
  */
 
-int ps3_system_bus_device_register(struct ps3_system_bus_device *dev)
+int ps3_system_bus_device_register(struct ps3_system_bus_device *dev,
+	enum ps3_iobus_type iobus_type)
 {
 	int result;
-	static unsigned int dev_count = 1;
-
-	dev->core.parent = NULL;
-	dev->core.bus = &ps3_system_bus_type;
-	dev->core.release = ps3_system_bus_release_device;
-
-	dev->core.archdata.of_node = NULL;
-	dev->core.archdata.dma_ops = &ps3_dma_ops;
-	dev->core.archdata.numa_node = 0;
+	static unsigned int dev_ioc0_count = 1;
+	static unsigned int dev_sb_count = 1;
 
 	if (!dev->core.parent)
 		dev->core.parent = &ps3_system_bus;
+	dev->core.bus = &ps3_system_bus_type;
+	dev->core.release = ps3_system_bus_release_device;
+	switch (iobus_type) {
+	case PS3_IOBUS_SB:
+		dev->core.archdata.dma_ops = &ps3_sb_dma_ops;
+		snprintf(dev->core.bus_id, sizeof(dev->core.bus_id), "sb_%02x",
+			 dev_sb_count++);
 
-	snprintf(dev->core.bus_id, sizeof(dev->core.bus_id), "sb_%02x",
-		dev_count++);
+		break;
+
+	case PS3_IOBUS_IOC0:
+		dev->core.archdata.dma_ops = &ps3_ioc0_dma_ops;
+		snprintf(dev->core.bus_id, sizeof(dev->core.bus_id),
+			"ioc0_%02x", dev_ioc0_count++);
+		break;
+	default:
+		BUG();
+	};
+
+	dev->core.archdata.of_node = NULL;
+	dev->core.archdata.numa_node = 0;
 
 	pr_debug("%s:%d add %s\n", __func__, __LINE__, dev->core.bus_id);
 
@@ -406,7 +536,8 @@ int ps3_system_bus_device_register(struct ps3_system_bus_device *dev)
 
 EXPORT_SYMBOL_GPL(ps3_system_bus_device_register);
 
-int ps3_system_bus_driver_register(struct ps3_system_bus_driver *drv)
+int ps3_system_bus_driver_register(struct ps3_system_bus_driver *drv,
+	enum ps3_iobus_type iobus_type)
 {
 	int result;
 

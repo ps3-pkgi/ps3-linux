@@ -30,3 +30,4 @@ obj-$(CONFIG_BLK_DEV_SX8)	+= sx8.o
 obj-$(CONFIG_BLK_DEV_UB)	+= ub.o
 obj-$(CONFIG_PS3_STORAGE)	+= ps3_storage.o
 
+obj-$(CONFIG_PS3_STORAGE_DISK) += ps3disk.o

@@ -40,7 +40,10 @@ ps3_register_gelic (void)
 	dev = kzalloc(sizeof(struct ps3_system_bus_device)
 		+ sizeof(struct ps3_dma_region), GFP_KERNEL);
 
-	dev->match_id = PS3_MATCH_ID_GELIC;
+	ps3_system_bus_device_init(dev,
+				   PS3_MATCH_ID_GELIC,
+				   NULL,
+				   NULL);
 
 	result = ps3_repository_find_first_device(PS3_BUS_TYPE_SB,
 		PS3_DEV_TYPE_SB_GELIC, &repo);
@@ -74,9 +77,9 @@ ps3_register_gelic (void)
 		+ sizeof(struct ps3_system_bus_device));
 
 	ps3_dma_region_init(dev->d_region, &dev->did, PS3_DMA_64K,
-		PS3_DMA_OTHER, NULL, 0);
+			    PS3_DMA_OTHER, NULL, 0, PS3_IOBUS_SB);
 
-	result = ps3_system_bus_device_register(dev);
+	result = ps3_system_bus_device_register(dev, PS3_IOBUS_SB);
 
 	if (result) {
 		pr_debug("%s:%d ps3_system_bus_device_register failed\n",
@@ -117,9 +120,10 @@ ps3_register_ohci_0 (void)
 
 	p = kzalloc(sizeof(struct ohci_layout), GFP_KERNEL);
 
-	p->dev.d_region = &p->d_region;
-	p->dev.m_region = &p->m_region;
-	p->dev.match_id = PS3_MATCH_ID_OHCI;
+	ps3_system_bus_device_init(&p->dev,
+				   PS3_MATCH_ID_OHCI,
+				   &p->d_region,
+				   &p->m_region);
 
 	result = ps3_repository_find_first_device(PS3_BUS_TYPE_SB,
 		PS3_DEV_TYPE_SB_USB, &repo);
@@ -149,12 +153,12 @@ ps3_register_ohci_0 (void)
 	BUG_ON(len != 0x10000);
 
 	ps3_dma_region_init(p->dev.d_region, &p->dev.did, PS3_DMA_64K,
-		PS3_DMA_INTERNAL, NULL, 0);
+			    PS3_DMA_INTERNAL, NULL, 0, PS3_IOBUS_SB);
 
 	ps3_mmio_region_init(p->dev.m_region, &p->dev.did, bus_addr,
-		len, PS3_MMIO_4K);
+			     len, PS3_MMIO_4K, PS3_IOBUS_SB);
 
-	result = ps3_system_bus_device_register(&p->dev);
+	result = ps3_system_bus_device_register(&p->dev, PS3_IOBUS_SB);
 
 	if (result)
 		pr_debug("%s:%d ps3_system_bus_device_register failed\n",
@@ -192,9 +196,10 @@ ps3_register_ohci_1 (void)
 
 	p = kzalloc(sizeof(struct ohci_layout), GFP_KERNEL);
 
-	p->dev.d_region = &p->d_region;
-	p->dev.m_region = &p->m_region;
-	p->dev.match_id = PS3_MATCH_ID_OHCI;
+	ps3_system_bus_device_init(&p->dev,
+				   PS3_MATCH_ID_OHCI,
+				   &p->d_region,
+				   &p->m_region);
 
 	result = ps3_repository_find_first_device(PS3_BUS_TYPE_SB,
 		PS3_DEV_TYPE_SB_USB, &repo);
@@ -233,12 +238,12 @@ ps3_register_ohci_1 (void)
 	BUG_ON(len != 0x10000);
 
 	ps3_dma_region_init(p->dev.d_region, &p->dev.did, PS3_DMA_64K,
-		PS3_DMA_INTERNAL, NULL, 0);
+			    PS3_DMA_INTERNAL, NULL, 0, PS3_IOBUS_SB);
 
 	ps3_mmio_region_init(p->dev.m_region, &p->dev.did, bus_addr,
-		len, PS3_MMIO_4K);
+			     len, PS3_MMIO_4K, PS3_IOBUS_SB);
 
-	result = ps3_system_bus_device_register(&p->dev);
+	result = ps3_system_bus_device_register(&p->dev, PS3_IOBUS_SB);
 
 	if (result)
 		pr_debug("%s:%d ps3_system_bus_device_register failed\n",
@@ -276,9 +281,10 @@ ps3_register_ehci_0 (void)
 
 	p = kzalloc(sizeof(struct ehci_layout), GFP_KERNEL);
 
-	p->dev.d_region = &p->d_region;
-	p->dev.m_region = &p->m_region;
-	p->dev.match_id = PS3_MATCH_ID_EHCI;
+	ps3_system_bus_device_init(&p->dev,
+				   PS3_MATCH_ID_EHCI,
+				   &p->d_region,
+				   &p->m_region);
 
 	result = ps3_repository_find_first_device(PS3_BUS_TYPE_SB,
 		PS3_DEV_TYPE_SB_USB, &repo);
@@ -308,12 +314,12 @@ ps3_register_ehci_0 (void)
 	BUG_ON(len != 0x10000);
 
 	ps3_dma_region_init(p->dev.d_region, &p->dev.did, PS3_DMA_64K,
-		PS3_DMA_INTERNAL, NULL, 0);
+			    PS3_DMA_INTERNAL, NULL, 0, PS3_IOBUS_SB);
 
 	ps3_mmio_region_init(p->dev.m_region, &p->dev.did, bus_addr,
-		len, PS3_MMIO_4K);
+			     len, PS3_MMIO_4K, PS3_IOBUS_SB);
 
-	result = ps3_system_bus_device_register(&p->dev);
+	result = ps3_system_bus_device_register(&p->dev, PS3_IOBUS_SB);
 
 	if (result)
 		pr_debug("%s:%d ps3_system_bus_device_register failed\n",
@@ -351,9 +357,10 @@ ps3_register_ehci_1 (void)
 
 	p = kzalloc(sizeof(struct ehci_layout), GFP_KERNEL);
 
-	p->dev.d_region = &p->d_region;
-	p->dev.m_region = &p->m_region;
-	p->dev.match_id = PS3_MATCH_ID_EHCI;
+	ps3_system_bus_device_init(&p->dev,
+				   PS3_MATCH_ID_EHCI,
+				   &p->d_region,
+				   &p->m_region);
 
 	result = ps3_repository_find_first_device(PS3_BUS_TYPE_SB,
 		PS3_DEV_TYPE_SB_USB, &repo);
@@ -392,12 +399,12 @@ ps3_register_ehci_1 (void)
 	BUG_ON(len != 0x10000);
 
 	ps3_dma_region_init(p->dev.d_region, &p->dev.did, PS3_DMA_64K,
-		PS3_DMA_INTERNAL, NULL, 0);
+			    PS3_DMA_INTERNAL, NULL, 0, PS3_IOBUS_SB);
 
 	ps3_mmio_region_init(p->dev.m_region, &p->dev.did, bus_addr,
-		len, PS3_MMIO_4K);
+			     len, PS3_MMIO_4K, PS3_IOBUS_SB);
 
-	result = ps3_system_bus_device_register(&p->dev);
+	result = ps3_system_bus_device_register(&p->dev, PS3_IOBUS_SB);
 
 	if (result)
 		pr_debug("%s:%d ps3_system_bus_device_register failed\n",
@@ -412,6 +419,36 @@ fail:
 #endif
 	kfree(p);
 	pr_debug(" <- %s:%d\n", __func__, __LINE__);
+	return result;
+}
+
+static int __devinit ps3_register_sound(void)
+{
+	int result;
+
+	struct snd_ps3_layout {
+		struct ps3_system_bus_device dev;
+		struct ps3_dma_region d_region;
+		struct ps3_mmio_region m_region;
+	} *p;
+
+	p = kzalloc(sizeof(*p), GFP_KERNEL);
+	if (!p)
+		return -ENOMEM;
+
+	ps3_system_bus_device_init(&p->dev, PS3_MATCH_ID_SOUND,
+				   &p->d_region,
+				   &p->m_region);
+
+	/*
+	 * mmio/dma region will be initialized
+	 * in sound driver probe
+	 */
+
+	result = ps3_system_bus_device_register(&p->dev, PS3_IOBUS_IOC0);
+	if (result)
+		kfree(p);
+
 	return result;
 }
 
@@ -451,6 +488,8 @@ ps3_register_known_devices (void)
 	result = ps3_register_ehci_0();
 	result = ps3_register_ohci_1();
 	result = ps3_register_ehci_1();
+	result = ps3_register_sound();
+
 #if defined(CONFIG_PS3_SYS_MANAGER)
 	result = ps3_register_sys_manager();
 #endif
