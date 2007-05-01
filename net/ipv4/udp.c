@@ -203,6 +203,13 @@ int __udp_lib_get_port(struct sock *sk, unsigned short snum,
 				result = sysctl_local_port_range[0]
 					+ ((result - sysctl_local_port_range[0]) &
 					   (UDP_HTABLE_SIZE - 1));
+			hash = hash_port_and_addr(result, 0);
+			if (__udp_lib_port_inuse(hash, result,
+						 0, udptable))
+				continue;
+			if (!inet_sk(sk)->rcv_saddr)
+				break;
+
 			hash = hash_port_and_addr(result,
 					inet_sk(sk)->rcv_saddr);
 			if (! __udp_lib_port_inuse(hash, result,
@@ -214,18 +221,36 @@ int __udp_lib_get_port(struct sock *sk, unsigned short snum,
 gotit:
 		*port_rover = snum = result;
 	} else {
-		hash = hash_port_and_addr(snum, inet_sk(sk)->rcv_saddr);
+		hash = hash_port_and_addr(snum, 0);
 		head = &udptable[hash & (UDP_HTABLE_SIZE - 1)];
 
 		sk_for_each(sk2, node, head)
-			if (sk2->sk_hash == hash                             &&
-			    sk2 != sk                                        &&
-			    inet_sk(sk2)->num == snum	                     &&
-			    (!sk2->sk_reuse        || !sk->sk_reuse)         &&
-			    (!sk2->sk_bound_dev_if || !sk->sk_bound_dev_if
-			     || sk2->sk_bound_dev_if == sk->sk_bound_dev_if) &&
-			    (*saddr_comp)(sk, sk2)                             )
+			if (sk2->sk_hash == hash &&
+			    sk2 != sk &&
+			    inet_sk(sk2)->num == snum &&
+			    (!sk2->sk_reuse || !sk->sk_reuse) &&
+			    (!sk2->sk_bound_dev_if || !sk->sk_bound_dev_if ||
+			     sk2->sk_bound_dev_if == sk->sk_bound_dev_if) &&
+			    (*saddr_comp)(sk, sk2))
 				goto fail;
+
+		if (inet_sk(sk)->rcv_saddr) {
+			hash = hash_port_and_addr(snum,
+						  inet_sk(sk)->rcv_saddr);
+			head = &udptable[hash & (UDP_HTABLE_SIZE - 1)];
+
+			sk_for_each(sk2, node, head)
+				if (sk2->sk_hash == hash &&
+				    sk2 != sk &&
+				    inet_sk(sk2)->num == snum &&
+				    (!sk2->sk_reuse || !sk->sk_reuse) &&
+				    (!sk2->sk_bound_dev_if ||
+				     !sk->sk_bound_dev_if ||
+				     sk2->sk_bound_dev_if ==
+				     sk->sk_bound_dev_if) &&
+				    (*saddr_comp)(sk, sk2))
+					goto fail;
+		}
 	}
 	inet_sk(sk)->num = snum;
 	sk->sk_hash = hash;
@@ -270,10 +295,10 @@ static struct sock *__udp4_lib_lookup(__be32 saddr, __be16 sport,
 	struct sock *sk, *result = NULL;
 	struct hlist_node *node;
 	unsigned int hash, hashwild;
-	int score, best = -1;
+	int score, best = -1, hport = ntohs(dport);
 
-	hash = hash_port_and_addr(ntohs(dport), daddr);
-	hashwild = hash_port_and_addr(ntohs(dport), 0);
+ 	hash = hash_port_and_addr(hport, daddr);
+ 	hashwild = hash_port_and_addr(hport, 0);
 
 	read_lock(&udp_hash_lock);
 
@@ -283,7 +308,7 @@ lookup:
 		struct inet_sock *inet = inet_sk(sk);
 
 		if (sk->sk_hash != hash || ipv6_only_sock(sk) ||
-			inet->num != dport)
+			inet->num != hport)
 			continue;
 
 		score = (sk->sk_family == PF_INET ? 1 : 0);
@@ -327,11 +352,10 @@ found:
 	return result;
 }
 
-static inline struct sock *udp_v4_mcast_next(
-			struct sock *sk,
-			unsigned int hnum, __be16 loc_port, __be32 loc_addr,
-			__be16 rmt_port, __be32 rmt_addr,
-			int dif)
+static inline struct sock *udp_v4_mcast_next(struct sock *sk, unsigned int hnum,
+					     int hport, __be32 loc_addr,
+					     __be16 rmt_port, __be32 rmt_addr,
+					     int dif)
 {
 	struct hlist_node *node;
 	struct sock *s = sk;
@@ -340,7 +364,7 @@ static inline struct sock *udp_v4_mcast_next(
 		struct inet_sock *inet = inet_sk(s);
 
 		if (s->sk_hash != hnum					||
-		    inet->num != loc_port				||
+		    inet->num != hport					||
 		    (inet->daddr && inet->daddr != rmt_addr)		||
 		    (inet->dport != rmt_port && inet->dport)		||
 		    (inet->rcv_saddr && inet->rcv_saddr != loc_addr)	||
@@ -1173,8 +1197,9 @@ static int __udp4_lib_mcast_deliver(struct sk_buff *skb,
 {
 	struct sock *sk, *skw, *sknext;
 	int dif;
-	unsigned int hash = hash_port_and_addr(ntohs(uh->dest), daddr);
-	unsigned int hashwild = hash_port_and_addr(ntohs(uh->dest), 0);
+	int hport = ntohs(uh->dest);
+	unsigned int hash = hash_port_and_addr(hport, daddr);
+	unsigned int hashwild = hash_port_and_addr(hport, 0);
 
 	dif = skb->dev->ifindex;
 
@@ -1183,20 +1208,20 @@ static int __udp4_lib_mcast_deliver(struct sk_buff *skb,
 	sk = sk_head(&udptable[hash & (UDP_HTABLE_SIZE - 1)]);
 	skw = sk_head(&udptable[hashwild & (UDP_HTABLE_SIZE - 1)]);
 
-	sk = udp_v4_mcast_next(sk, hash, uh->dest, daddr, uh->source, saddr, dif);
+	sk = udp_v4_mcast_next(sk, hash, hport, daddr, uh->source, saddr, dif);
 	if (!sk) {
 		hash = hashwild;
-		sk = udp_v4_mcast_next(skw, hash, uh->dest, daddr, uh->source,
+		sk = udp_v4_mcast_next(skw, hash, hport, daddr, uh->source,
 			saddr, dif);
 	}
 	if (sk) {
 		do {
 			struct sk_buff *skb1 = skb;
-			sknext = udp_v4_mcast_next(sk_next(sk), hash, uh->dest,
-				daddr, uh->source, saddr, dif);
+			sknext = udp_v4_mcast_next(sk_next(sk), hash, hport,
+						daddr, uh->source, saddr, dif);
 			if (!sknext && hash != hashwild) {
 				hash = hashwild;
-				sknext = udp_v4_mcast_next(skw, hash, uh->dest,
+				sknext = udp_v4_mcast_next(skw, hash, hport,
 					daddr, uh->source, saddr, dif);
 			}
 			if (sknext)
@@ -1295,7 +1320,7 @@ int __udp4_lib_rcv(struct sk_buff *skb, struct hlist_head udptable[],
 		return __udp4_lib_mcast_deliver(skb, uh, saddr, daddr, udptable);
 
 	sk = __udp4_lib_lookup(saddr, uh->source, daddr, uh->dest,
-			       skb->dev->ifindex, udptable        );
+			       skb->dev->ifindex, udptable);
 
 	if (sk != NULL) {
 		int ret = udp_queue_rcv_skb(sk, skb);
