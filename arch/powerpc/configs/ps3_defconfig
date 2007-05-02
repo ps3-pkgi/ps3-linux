@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.21
-# Tue May  1 14:46:47 2007
+# Wed May  2 10:23:05 2007
 #
 CONFIG_PPC64=y
 CONFIG_64BIT=y
@@ -523,6 +523,7 @@ CONFIG_MII=m
 # Ethernet (1000 Mbit)
 #
 CONFIG_GELIC_NET=y
+CONFIG_GELIC_WIRELESS=y
 
 #
 # Ethernet (10000 Mbit)
