@@ -440,12 +440,10 @@ static int __devinit ps3_register_sound(void)
 				   &p->d_region,
 				   &p->m_region);
 
-	/*
-	 * mmio/dma region will be initialized
-	 * in sound driver probe
-	 */
+#warning need device specific data here
 
 	result = ps3_system_bus_device_register(&p->dev, PS3_IOBUS_IOC0);
+
 	if (result)
 		kfree(p);
 

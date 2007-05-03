@@ -819,11 +819,8 @@ static int __init snd_ps3_driver_probe(struct ps3_system_bus_device * dev)
 	u64 lpar_addr, lpar_size;
 	struct ps3_device_id null_id = {0, 0};
 
-	if (!firmware_has_feature(FW_FEATURE_PS3_LV1))
-		return -ENXIO;
-
-	if (dev->match_id != PS3_MATCH_ID_SOUND)
-		return -ENXIO;
+	BUG_ON(!firmware_has_feature(FW_FEATURE_PS3_LV1));
+	BUG_ON(dev->match_id != PS3_MATCH_ID_SOUND);
 
 	the_card.ps3_dev = dev;
 
@@ -982,13 +979,6 @@ clean_open:
 	return ret;
 }; /* snd_ps3_probe */
 
-/* called when system shutdown */
-#if 0
-static void snd_ps3_driver_shutdown(struct ps3_system_bus_device * device)
-{
-	snd_ps3_driver_remove(device);
-}
-#endif
 /* called when module removal */
 static int snd_ps3_driver_remove(struct ps3_system_bus_device * device)
 {
@@ -1029,10 +1019,10 @@ static struct ps3_system_bus_driver snd_ps3_bus_driver_info = {
 	.match_id = PS3_MATCH_ID_SOUND,
 	.probe = snd_ps3_driver_probe,
 	.remove = snd_ps3_driver_remove,
-	/* FIXME .shutdown = snd_ps3_driver_shutdown */
+	.shutdown = snd_ps3_driver_remove,
 	.core = {
-		.name = SND_PS3_DRIVER_NAME
-	}
+		.name = SND_PS3_DRIVER_NAME,
+	},
 };
 
 

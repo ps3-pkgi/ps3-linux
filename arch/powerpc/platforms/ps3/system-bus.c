@@ -36,6 +36,71 @@ static struct device ps3_system_bus = {
         .bus_id         = "ps3_system",
 };
 
+// FIXME: need device usage counters!
+struct {
+	int id_11; // usb 0
+	int id_12; // usb 1
+} static usage_hack;
+
+int ps3_open_hv_device(struct ps3_device_id *did)
+{
+	int result;
+
+	BUG_ON(!did->bus_id); // now just for sb devices.
+
+	// FIXME: hacks for dev usage counts.
+
+	if(did->bus_id == 1 && did->dev_id == 1) {
+		usage_hack.id_11++;
+		if (usage_hack.id_11 > 1)
+			return 0;
+	}
+
+	if(did->bus_id == 1 && did->dev_id == 2) {
+		usage_hack.id_12++;
+		if (usage_hack.id_12 > 1)
+			return 0;
+	}
+
+	result = lv1_open_device(did->bus_id, did->dev_id, 0);
+
+  	if (result) {
+  		pr_debug("%s:%d: lv1_open_device failed: %s\n", __func__,
+			__LINE__, ps3_result(result));
+			result = -EPERM;
+	}
+
+	return result;
+}
+EXPORT_SYMBOL_GPL(ps3_open_hv_device);
+
+int ps3_close_hv_device(struct ps3_device_id *did)
+{
+	int result;
+
+	BUG_ON(!did->bus_id); // now just for sb devices.
+
+	// FIXME: hacks for dev usage counts.
+
+	if(did->bus_id == 1 && did->dev_id == 1) {
+		usage_hack.id_11--;
+		if (usage_hack.id_11)
+			return 0;
+	}
+
+	if(did->bus_id == 1 && did->dev_id == 2) {
+		usage_hack.id_12--;
+		if (usage_hack.id_12)
+			return 0;
+	}
+
+	result = lv1_close_device(did->bus_id, did->dev_id);
+	BUG_ON(result);
+
+	return result;
+}
+EXPORT_SYMBOL_GPL(ps3_close_hv_device);
+
 #define dump_mmio_region(_a) _dump_mmio_region(_a, __func__, __LINE__)
 static void _dump_mmio_region(const struct ps3_mmio_region* r,
 	const char* func, int line)
@@ -80,6 +145,8 @@ static int ps3_sb_free_mmio_region(struct ps3_mmio_region *r)
 {
 	int result;
 
+	dump_mmio_region(r);
+;
 	result = lv1_unmap_device_mmio_region(r->did.bus_id, r->did.dev_id,
 		r->lpar_addr);
 
@@ -156,76 +223,83 @@ static int ps3_system_bus_probe(struct device *_dev)
 {
 	int result = 0;
 	struct ps3_system_bus_device *dev = to_ps3_system_bus_device(_dev);
-	struct ps3_system_bus_driver *drv =
-		to_ps3_system_bus_driver(_dev->driver);
+	struct ps3_system_bus_driver *drv;
 
-	if (dev->did.bus_id)
-		result = lv1_open_device(dev->did.bus_id, dev->did.dev_id, 0);
+	BUG_ON(!dev);
+	pr_info(" -> %s:%d: %s\n", __func__, __LINE__, _dev->bus_id);
 
-	if (result && (result != LV1_BUSY || (dev->match_id != PS3_MATCH_ID_EHCI
-		&& dev->match_id != PS3_MATCH_ID_OHCI))) {
-		pr_debug("%s:%d: lv1_open_device failed: %s\n",
-			__func__, __LINE__, ps3_result(result));
-		result = -EACCES;
-		goto clean_none;
-	}
-
-	if (dev->d_region && dev->d_region->did.bus_id) {
-		result = ps3_dma_region_create(dev->d_region);
-
-		if (result) {
-			pr_debug("%s:%d: ps3_dma_region_create failed (%d)\n",
-				__func__, __LINE__, result);
-			BUG_ON("check region type");
-			result = -EINVAL;
-			goto clean_device;
-		}
-	}
-
+	drv = to_ps3_system_bus_driver(_dev->driver);
 	BUG_ON(!drv);
 
-	if (drv->probe)
+	if(drv->probe)
 		result = drv->probe(dev);
 	else
 		pr_info("%s:%d: %s no probe method\n", __func__, __LINE__,
 			dev->core.bus_id);
 
-	if (result) {
-		pr_debug("%s:%d: drv->probe failed\n", __func__, __LINE__);
-		goto clean_dma;
-	}
-
-	return result;
-
-clean_dma:
-	if (dev->d_region && dev->d_region->did.bus_id)
-		ps3_dma_region_free(dev->d_region);
-clean_device:
-	if (dev->did.bus_id)
-		lv1_close_device(dev->did.bus_id, dev->did.dev_id);
-clean_none:
+	pr_info(" <- %s:%d: %s\n", __func__, __LINE__, dev->core.bus_id);
 	return result;
 }
 
 static int ps3_system_bus_remove(struct device *_dev)
 {
+	int result = 0;
 	struct ps3_system_bus_device *dev = to_ps3_system_bus_device(_dev);
-	struct ps3_system_bus_driver *drv =
-		to_ps3_system_bus_driver(_dev->driver);
+	struct ps3_system_bus_driver *drv;
+
+	BUG_ON(!dev);
+	pr_info(" -> %s:%d: %s\n", __func__, __LINE__, _dev->bus_id);
+
+	drv = to_ps3_system_bus_driver(_dev->driver);
+	BUG_ON(!drv);
 
 	if (drv->remove)
-		drv->remove(dev);
+		result = drv->remove(dev);
 	else
 		pr_info("%s:%d: %s no remove method\n", __func__, __LINE__,
 			dev->core.bus_id);
 
-	if (dev->d_region && dev->d_region->did.dev_id)
-		ps3_dma_region_free(dev->d_region);
+	pr_info(" <- %s:%d: %s\n", __func__, __LINE__, dev->core.bus_id);
+	return result;
+}
 
-	if (dev->did.bus_id)
-		lv1_close_device(dev->did.bus_id, dev->did.dev_id);
+static void ps3_system_bus_shutdown(struct device *_dev)
+{
+	struct ps3_system_bus_device *dev = to_ps3_system_bus_device(_dev);
+	struct ps3_system_bus_driver *drv
+		= to_ps3_system_bus_driver(_dev->driver);
 
-	return 0;
+	BUG_ON(!dev);
+
+	pr_info(" -> %s:%d: %s, match_id %d\n", __func__, __LINE__,
+		dev->core.bus_id, dev->match_id);
+
+	if(!dev->core.driver) {
+		pr_info("%s:%d: %s: no driver bound\n", __func__, __LINE__,
+			dev->core.bus_id);
+		return;
+	}
+
+	drv = to_ps3_system_bus_driver(dev->core.driver);
+
+	BUG_ON(!drv);
+
+	pr_info("%s:%d: %s -> %s\n", __func__, __LINE__, dev->core.bus_id,
+		drv->core.name);
+
+	if (drv->shutdown)
+		drv->shutdown(dev);
+	else if (drv->remove) {
+		pr_info("%s:%d: %s no shutdown, calling remove\n",
+			__func__, __LINE__, dev->core.bus_id);
+		drv->remove(dev);
+	} else {
+		pr_info("%s:%d: %s no shutdown method\n", __func__, __LINE__,
+			dev->core.bus_id);
+		BUG();
+	}
+
+	pr_info(" <- %s:%d: %s\n", __func__, __LINE__, dev->core.bus_id);
 }
 
 static int ps3_system_bus_uevent(struct device *_dev, char **envp,
@@ -262,6 +336,7 @@ struct bus_type ps3_system_bus_type = {
 	.match = ps3_system_bus_match,
 	.probe = ps3_system_bus_probe,
 	.remove = ps3_system_bus_remove,
+ 	.shutdown = ps3_system_bus_shutdown,
 	.uevent = ps3_system_bus_uevent,
 	.dev_attrs = ps3_system_bus_dev_attrs,
 };
@@ -272,10 +347,13 @@ int __init ps3_system_bus_init(void)
 
 	if (!firmware_has_feature(FW_FEATURE_PS3_LV1))
 		return -ENODEV;
+
+	printk(" -> %s:%d\n", __func__, __LINE__);
 	result = device_register(&ps3_system_bus);
 	BUG_ON(result);
 	result = bus_register(&ps3_system_bus_type);
 	BUG_ON(result);
+	printk(" <- %s:%d\n", __func__, __LINE__);
 	return result;
 }
 
@@ -541,9 +619,11 @@ int ps3_system_bus_driver_register(struct ps3_system_bus_driver *drv,
 {
 	int result;
 
+	printk(" -> %s:%d: %s\n", __func__, __LINE__, drv->core.name);
 	drv->core.bus = &ps3_system_bus_type;
 
 	result = driver_register(&drv->core);
+	printk(" <- %s:%d: %s\n", __func__, __LINE__, drv->core.name);
 	return result;
 }
 
@@ -551,7 +631,9 @@ EXPORT_SYMBOL_GPL(ps3_system_bus_driver_register);
 
 void ps3_system_bus_driver_unregister(struct ps3_system_bus_driver *drv)
 {
+	printk(" -> %s:%d: %s\n", __func__, __LINE__, drv->core.name);
 	driver_unregister(&drv->core);
+	printk(" <- %s:%d: %s\n", __func__, __LINE__, drv->core.name);
 }
 
 EXPORT_SYMBOL_GPL(ps3_system_bus_driver_unregister);

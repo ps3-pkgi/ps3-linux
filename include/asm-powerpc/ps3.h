@@ -59,6 +59,8 @@ struct ps3_device_id {
 	unsigned int dev_id;
 };
 
+int ps3_open_hv_device(struct ps3_device_id *did);
+int ps3_close_hv_device(struct ps3_device_id *did);
 
 /* dma routines */
 
@@ -357,6 +359,7 @@ struct ps3_system_bus_driver {
 	struct device_driver core;
 	int (*probe)(struct ps3_system_bus_device *);
 	int (*remove)(struct ps3_system_bus_device *);
+	int (*shutdown)(struct ps3_system_bus_device *);
 /*	int (*suspend)(struct ps3_system_bus_device *, pm_message_t); */
 /*	int (*resume)(struct ps3_system_bus_device *); */
 };

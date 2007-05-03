@@ -223,9 +223,15 @@ fail:
 
 void ps3_mm_vas_destroy(void)
 {
+	int result;
+
+	DBG("%s:%d: map.vas_id    = %lu\n", __func__, __LINE__, map.vas_id);
+
 	if (map.vas_id) {
-		lv1_select_virtual_address_space(0);
-		lv1_destruct_virtual_address_space(map.vas_id);
+		result = lv1_select_virtual_address_space(0);
+		BUG_ON(result);
+		result = lv1_destruct_virtual_address_space(map.vas_id);
+		BUG_ON(result);
 		map.vas_id = 0;
 	}
 }
@@ -286,8 +292,12 @@ zero_region:
 
 void ps3_mm_region_destroy(struct mem_region *r)
 {
+	int result;
+
+	DBG("%s:%d: r->base = %lxh\n", __func__, __LINE__, r->base);
 	if (r->base) {
-		lv1_release_memory(r->base);
+		result = lv1_release_memory(r->base);
+		BUG_ON(result);
 		r->size = r->base = r->offset = 0;
 		map.total = map.rm.size;
 	}
@@ -653,6 +663,13 @@ static int dma_sb_region_create(struct ps3_dma_region* r)
 	u64 len;
 	int result;
 
+	BUG_ON(!r);
+	if(!r->did.bus_id) {
+		pr_info("%s:%d: %u:%u no dma\n", __func__, __LINE__,
+			r->did.bus_id, r->did.dev_id);
+		return 0;
+	}
+
 	DBG("%s:%u: len = 0x%lx, page_size = %u, offset = 0x%lx\n", __func__,
 	    __LINE__, r->len, r->page_size, r->offset);
 	INIT_LIST_HEAD(&r->chunk_list.head);
@@ -707,6 +724,13 @@ static int dma_sb_region_free(struct ps3_dma_region* r)
 	struct dma_chunk *c;
 	struct dma_chunk *tmp;
 
+	BUG_ON(!r);
+	if(!r->did.bus_id) {
+		pr_info("%s:%d: %u:%u no dma\n", __func__, __LINE__,
+			r->did.bus_id, r->did.dev_id);
+		return 0;
+	}
+
 	list_for_each_entry_safe(c, tmp, &r->chunk_list.head, link) {
 		list_del(&c->link);
 		dma_sb_free_chunk(c);
@@ -716,7 +740,7 @@ static int dma_sb_region_free(struct ps3_dma_region* r)
 		r->bus_addr);
 
 	if (result)
-		DBG("%s:%d: lv1_free_device_dma_region failed: %s\n",
+		DBG("%s:%d: lv1_release_io_segment failed: %s\n",
 			__func__, __LINE__, ps3_result(result));
 
 	r->len = r->bus_addr = 0;
@@ -1132,12 +1156,18 @@ EXPORT_SYMBOL(ps3_dma_region_init);
 
 int ps3_dma_region_create(struct ps3_dma_region *r)
 {
+	BUG_ON(!r);
+	BUG_ON(!r->region_ops);
+	BUG_ON(!r->region_ops->create);
 	return r->region_ops->create(r);
 }
 EXPORT_SYMBOL(ps3_dma_region_create);
 
 int ps3_dma_region_free(struct ps3_dma_region *r)
 {
+	BUG_ON(!r);
+	BUG_ON(!r->region_ops);
+	BUG_ON(!r->region_ops->free);
 	return r->region_ops->free(r);
 }
 EXPORT_SYMBOL(ps3_dma_region_free);

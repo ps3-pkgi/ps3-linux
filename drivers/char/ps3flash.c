@@ -414,6 +414,14 @@ static int ps3flash_probe(struct ps3_system_bus_device *_dev)
 		goto fail;
 	}
 
+	error = ps3_open_hv_device(&dev->sbd.did); // ok here???
+
+	if (error) {
+		dev_dbg(&dev->sbd.core, "%s:%d: ps3_open_hv_device failed %d\n",
+			__func__, __LINE__, error);
+		goto fail_close_device;
+	}
+
 	error = ps3_sb_event_receive_port_setup(PS3_BINDING_CPU_ANY,
 						&dev->sbd.did,
 						dev->sbd.interrupt_id,
@@ -482,6 +490,8 @@ fail_free_irq:
 fail_sb_event_receive_port_destroy:
 	ps3_sb_event_receive_port_destroy(&dev->sbd.did, dev->sbd.interrupt_id,
 					  dev->irq);
+fail_close_device:
+	ps3_close_hv_device(&dev->sbd.did);
 fail:
 	ps3flash_dev = NULL;
 	return error;
@@ -512,6 +522,12 @@ static int ps3flash_remove(struct ps3_system_bus_device *_dev)
 			"%s:%u: destroy event receive port failed %d\n",
 			__func__, __LINE__, error);
 
+	error = ps3_close_hv_device(&dev->sbd.did);
+	if (error)
+		dev_err(&dev->sbd.core,
+			"%s:%u: ps3_close_hv_device failed %d\n",
+			__func__, __LINE__, error);
+
 	ps3flash_dev = NULL;
 
 	return 0;
@@ -522,7 +538,8 @@ static struct ps3_system_bus_driver ps3flash = {
 	.match_id	= PS3_MATCH_ID_STOR_FLASH,
 	.core.name	= DEVICE_NAME,
 	.probe		= ps3flash_probe,
-	.remove		= ps3flash_remove
+	.remove		= ps3flash_remove,
+	.shutdown	= ps3flash_remove,
 };
 
 

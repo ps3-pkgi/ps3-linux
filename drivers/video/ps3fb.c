@@ -1094,19 +1094,11 @@ err:
 	return retval;
 }
 
-static void ps3fb_shutdown(struct platform_device *dev)
-{
-	ps3fb_flip_ctl(0);	/* flip off */
-	ps3fb.dinfo->irq.mask = 0;
-	free_irq(ps3fb.irq_no, ps3fb.dev);
-	ps3_irq_plug_destroy(ps3fb.irq_no);
-	iounmap((u8 __iomem *)ps3fb.dinfo);
-}
-
 void ps3fb_cleanup(void)
 {
 	int status;
 
+	printk(" -> %s:%d\n", __func__, __LINE__);
 	if (ps3fb.task) {
 		struct task_struct *task = ps3fb.task;
 		ps3fb.task = NULL;
@@ -1135,13 +1127,30 @@ static int ps3fb_remove(struct platform_device *dev)
 {
 	struct fb_info *info = platform_get_drvdata(dev);
 
+	printk(" -> %s:%d\n", __func__, __LINE__);
+
 	if (info) {
 		unregister_framebuffer(info);
 		fb_dealloc_cmap(&info->cmap);
 		framebuffer_release(info);
 	}
 	ps3fb_cleanup();
+	printk(" <- %s:%d\n", __func__, __LINE__);
 	return 0;
+}
+
+static void ps3fb_shutdown(struct platform_device *dev)
+{
+	printk(" -> %s:%d\n", __func__, __LINE__);
+
+	ps3fb_remove(dev);
+
+	ps3fb_flip_ctl(0);	/* flip off */
+	ps3fb.dinfo->irq.mask = 0;
+	free_irq(ps3fb.irq_no, ps3fb.dev);
+	ps3_irq_plug_destroy(ps3fb.irq_no);
+	iounmap((u8 __iomem *)ps3fb.dinfo);
+	printk(" <- %s:%d\n", __func__, __LINE__);
 }
 
 static struct platform_driver ps3fb_driver = {

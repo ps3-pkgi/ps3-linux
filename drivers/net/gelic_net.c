@@ -1646,41 +1646,70 @@ gelic_net_alloc_card(void)
  */
 static int ps3_gelic_driver_probe (struct ps3_system_bus_device *dev)
 {
-	struct gelic_net_card *card;
-	int error = -EIO;
-	uint64_t status;
-	uint64_t lpar;
+	int result;
 
-	card = gelic_net_alloc_card();
-	if (!card) {
-		printk("Couldn't allocate net_device structure, aborting.\n");
-		return -ENOMEM;
-	}
-	gcard = card;
-	card->dev = dev;
+	gcard = gelic_net_alloc_card();
 
-	/* setup status indicator */
-	lpar = ps3_mm_phys_to_lpar(__pa(&gelic_irq_status));
-	status = lv1_net_set_interrupt_status_indicator(
-						card->dev->did.bus_id,
-						card->dev->did.dev_id,
-						lpar, 0);
-	if (status) {
-		printk("lv1_net_set_interrupt_status_indicator failed, status=%ld\n",
-			status);
-		goto error;
+	if (!gcard) {
+		dev_dbg(&dev->core, "%s:%d: gelic_net_alloc_card failed\n",
+			__func__, __LINE__);
+		result = -ENOMEM;
+		goto fail_alloc_card;
 	}
 
-	error = gelic_net_setup_netdev(card);
-	if (error) {
-		printk("gelic_net_setup_netdev() failed: error = %d\n", error);
-		goto error;
+	gcard->dev = dev;
+
+	result = ps3_open_hv_device(&dev->did);
+
+	if (result) {
+		dev_dbg(&dev->core, "%s:%d: ps3_open_hv_device failed\n",
+			__func__, __LINE__);
+		goto fail_open;
 	}
+
+	result = ps3_dma_region_create(dev->d_region);
+
+	if (result) {
+		dev_dbg(&dev->core, "%s:%d: ps3_dma_region_create failed: "
+			"(%d)\n", __func__, __LINE__, result);
+		BUG_ON("check region type");
+		goto fail_dma_region;
+	}
+
+	result = lv1_net_set_interrupt_status_indicator(dev->did.bus_id,
+		dev->did.dev_id, ps3_mm_phys_to_lpar(__pa(&gelic_irq_status)),
+		0);
+
+	if (result) {
+		dev_dbg(&dev->core, "%s:%d: "
+			"lv1_net_set_interrupt_status_indicator failed: %s\n",
+			__func__, __LINE__, ps3_result(result));
+		result = -EIO;
+		goto fail_status_indicator;
+	}
+
+	result = gelic_net_setup_netdev(gcard);
+
+	if (result) {
+		dev_dbg(&dev->core, "%s:%d: ps3_dma_region_create failed: "
+			"(%d)\n", __func__, __LINE__, result);
+		goto fail_setup_netdev;
+	}
+
 	return 0;
 
-error:
-	free_netdev(card->netdev);
-	return error;
+fail_setup_netdev:
+	lv1_net_set_interrupt_status_indicator(dev->did.bus_id, dev->did.dev_id,
+		0 , 0); // check if ok!!!
+fail_status_indicator:
+	ps3_dma_region_free(dev->d_region);
+fail_dma_region:
+	ps3_close_hv_device(&dev->did);
+fail_open:
+	free_netdev(gcard->netdev); // enough???
+	gcard = NULL;
+fail_alloc_card:
+	return result;
 }
 
 /**
@@ -1705,6 +1734,16 @@ ps3_gelic_driver_remove (struct ps3_system_bus_device *dev)
 	unregister_netdev(netdev);
 	free_netdev(netdev);
 
+	lv1_net_set_interrupt_status_indicator(dev->did.bus_id, dev->did.dev_id,
+		0 , 0); // check if ok!!!
+
+	ps3_dma_region_free(dev->d_region);
+
+	ps3_close_hv_device(&dev->did);
+
+	// anything else needed???
+
+	printk(" <- %s:%d:\n", __func__, __LINE__);
 	return 0;
 }
 
