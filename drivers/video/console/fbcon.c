@@ -194,7 +194,7 @@ static void fbcon_redraw_move(struct vc_data *vc, struct display *p,
 static void fbcon_modechanged(struct fb_info *info);
 static void fbcon_set_all_vcs(struct fb_info *info);
 static void fbcon_start(void);
-static void fbcon_exit(void);
+void fbcon_exit(void);
 static struct class_device *fbcon_class_device;
 
 #ifdef CONFIG_MAC
@@ -455,6 +455,8 @@ static void fbcon_add_cursor_timer(struct fb_info *info)
 static void fbcon_del_cursor_timer(struct fb_info *info)
 {
 	struct fbcon_ops *ops = info->fbcon_par;
+
+	printk("%s:%d:\n", __func__, __LINE__);
 
 	if (info->queue.func == fb_flashcursor &&
 	    ops->flags & FBCON_FLAGS_CURSOR_TIMER) {
@@ -3220,7 +3222,7 @@ static void fbcon_start(void)
 	}
 }
 
-static void fbcon_exit(void)
+void fbcon_exit(void)
 {
 	struct fb_info *info;
 	int i, j, mapped;

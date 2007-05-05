@@ -153,7 +153,7 @@ static void snd_ps3_wait_for_dma_stop(struct snd_ps3_card_info * card);
 
 static dma_addr_t v_to_bus(struct snd_ps3_card_info *, void  * vaddr, int ch);
 
-#if defined(_SND_PS3_DEV_ATTR)
+#ifdef _SND_PS3_DEV_ATTR
 static ssize_t snd_ps3_get_start_delay(struct device *dev,
 				       struct device_attribute *attr,
 				       char *buf);

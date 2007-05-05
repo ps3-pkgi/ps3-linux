@@ -951,29 +951,27 @@ fail_match:
 	return result;
 }
 
-static int ps3_vuart_remove(struct device *_dev)
+/**
+ * ps3_vuart_cleanup - common cleanup helper.
+ * @dev: The struct ps3_vuart_port_device instance.
+ * @drv: The struct ps3_vuart_port_driver instance.
+ *
+ * Cleans dynamicly allocated mem and interrupts.  Must be called with
+ * vuart_bus_priv.probe_mutex held.  Used by ps3_vuart_remove and
+ * ps3_vuart_shutdown.
+ */
+
+static int ps3_vuart_cleanup(struct ps3_vuart_port_device *dev,
+	struct ps3_vuart_port_driver *drv)
 {
-	struct ps3_vuart_port_device *dev = to_ps3_vuart_port_device(_dev);
-	struct ps3_vuart_port_driver *drv =
-		to_ps3_vuart_port_driver(_dev->driver);
-
-	down(&vuart_bus_priv.probe_mutex);
-
-	dev_dbg(&dev->core, "%s:%d: %s\n", __func__, __LINE__,
-		dev->core.bus_id);
+	dev_dbg(&dev->core, "%s:%d: %s\n", __func__, __LINE__, drv->core.name);
 
 	BUG_ON(vuart_bus_priv.use_count < 1);
-
-	if (drv->remove)
-		drv->remove(dev);
-	else
-		dev_dbg(&dev->core, "%s:%d: %s no remove method\n", __func__,
-			__LINE__, dev->core.bus_id);
 
 	vuart_bus_priv.devices[dev->priv->port_number] = NULL;
 
 	if (--vuart_bus_priv.use_count == 0) {
-		BUG();
+		// need to do this only for kexec???
 		free_irq(vuart_bus_priv.virq, &vuart_bus_priv);
 		ps3_vuart_irq_destroy(vuart_bus_priv.virq);
 		vuart_bus_priv.virq = NO_IRQ;
@@ -982,24 +980,89 @@ static int ps3_vuart_remove(struct device *_dev)
 	kfree(dev->priv);
 	dev->priv = NULL;
 
+	return 0;
+}
+
+static int ps3_vuart_remove(struct device *_dev)
+{
+	struct ps3_vuart_port_device *dev = to_ps3_vuart_port_device(_dev);
+	struct ps3_vuart_port_driver *drv;
+
+	BUG_ON(!dev);
+
+	down(&vuart_bus_priv.probe_mutex);
+
+	dev_dbg(&dev->core, " -> %s:%d: match_id %d\n", __func__, __LINE__,
+		dev->match_id);
+
+	if(!dev->core.driver) {
+		dev_dbg(&dev->core, "%s:%d: no driver bound\n", __func__,
+			__LINE__);
+		return 0;
+	}
+
+	drv = to_ps3_vuart_port_driver(dev->core.driver);
+
+	BUG_ON(!drv);
+
+	if (drv->remove) {
+		drv->remove(dev);
+	} else {
+		dev_dbg(&dev->core, "%s:%d %s: no remove method\n",
+			__func__, __LINE__, drv->core.name);
+		BUG();
+	}
+
+	ps3_vuart_cleanup(dev, drv);
+
+	dev_dbg(&dev->core, " <- %s:%d\n", __func__, __LINE__);
+
 	up(&vuart_bus_priv.probe_mutex);
+
 	return 0;
 }
 
 static void ps3_vuart_shutdown(struct device *_dev)
 {
 	struct ps3_vuart_port_device *dev = to_ps3_vuart_port_device(_dev);
-	struct ps3_vuart_port_driver *drv =
-		to_ps3_vuart_port_driver(_dev->driver);
+	struct ps3_vuart_port_driver *drv;
 
-	dev_dbg(&dev->core, "%s:%d: %s\n", __func__, __LINE__,
-		dev->core.bus_id);
+	BUG_ON(!dev);
+
+	down(&vuart_bus_priv.probe_mutex);
+
+	dev_dbg(&dev->core, " -> %s:%d: match_id %d\n", __func__, __LINE__,
+		dev->match_id);
+
+	if(!dev->core.driver) {
+		dev_dbg(&dev->core, "%s:%d: no driver bound\n", __func__,
+			__LINE__);
+		return;
+	}
+
+	drv = to_ps3_vuart_port_driver(dev->core.driver);
+
+	BUG_ON(!drv);
 
 	if (drv->shutdown)
 		drv->shutdown(dev);
-	else
-		dev_dbg(&dev->core, "%s:%d: %s no shutdown method\n", __func__,
-			__LINE__, dev->core.bus_id);
+	else if (drv->remove) {
+		dev_dbg(&dev->core, "%s:%d %s: no shutdown, calling remove\n",
+			__func__, __LINE__, drv->core.name);
+		drv->remove(dev);
+	} else {
+		dev_dbg(&dev->core, "%s:%d %s: no shutdown method\n",
+			__func__, __LINE__, drv->core.name);
+		BUG();
+	}
+
+	ps3_vuart_cleanup(dev, drv);
+
+	dev_dbg(&dev->core, " <- %s:%d\n", __func__, __LINE__);
+
+	up(&vuart_bus_priv.probe_mutex);
+
+	return;
 }
 
 /**

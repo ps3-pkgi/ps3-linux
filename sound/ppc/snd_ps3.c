@@ -62,7 +62,7 @@ module_init(snd_ps3_init);
 module_exit(snd_ps3_exit);
 
 
-#if defined(_SND_PS3_DEV_ATTR)
+#ifdef _SND_PS3_DEV_ATTR
 static DEVICE_ATTR(start_delay,
 		   S_IRUGO | S_IWUSR,
 		   snd_ps3_get_start_delay,
@@ -1091,7 +1091,7 @@ static irqreturn_t snd_ps3_interrupt(int irq, void * dev_id)
 	return IRQ_HANDLED;
 };
 
-#if defined(_SND_PS3_DEV_ATTR)
+#ifdef _SND_PS3_DEV_ATTR
 /*
  * sysfs
  */

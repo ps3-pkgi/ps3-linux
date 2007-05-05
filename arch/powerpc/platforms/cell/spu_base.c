@@ -471,8 +471,21 @@ void spu_free(struct spu *spu)
 }
 EXPORT_SYMBOL_GPL(spu_free);
 
+static int spu_shutdown(struct sys_device *sysdev)
+{
+	struct spu *spu = container_of(sysdev, struct spu, sysdev);
+
+	// what else here???
+
+	spu_free_irqs(spu);
+	spu_destroy_spu(spu);
+	kfree(spu);
+	return 0;
+}
+
 struct sysdev_class spu_sysdev_class = {
-	set_kset_name("spu")
+	set_kset_name("spu"),
+	.shutdown = spu_shutdown,
 };
 
 int spu_add_sysdev_attr(struct sysdev_attribute *attr)

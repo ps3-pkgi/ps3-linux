@@ -984,6 +984,8 @@ static int __init ps3fb_probe(struct platform_device *dev)
 	unsigned long offset;
 	struct task_struct *task;
 
+	printk(" -> %s:%u\n", __func__, __LINE__);
+
 	/* get gpu context handle */
 	status = lv1_gpu_memory_allocate(DDR_SIZE, 0, 0, 0, 0,
 					 &ps3fb.memory_handle, &ddr_lpar);
@@ -1073,6 +1075,7 @@ static int __init ps3fb_probe(struct platform_device *dev)
 
 	ps3fb.task = task;
 
+	printk(" <- %s:%u\n", __func__, __LINE__);
 	return 0;
 
 err_unregister_framebuffer:
@@ -1121,8 +1124,6 @@ void ps3fb_cleanup(void)
 	ps3av_dev_close();
 }
 
-EXPORT_SYMBOL_GPL(ps3fb_cleanup);
-
 static int ps3fb_remove(struct platform_device *dev)
 {
 	struct fb_info *info = platform_get_drvdata(dev);
@@ -1139,17 +1140,20 @@ static int ps3fb_remove(struct platform_device *dev)
 	return 0;
 }
 
+extern void fbcon_exit(void);
+
 static void ps3fb_shutdown(struct platform_device *dev)
 {
 	printk(" -> %s:%d\n", __func__, __LINE__);
 
-	ps3fb_remove(dev);
+	fbcon_exit();
+
+	// is this stuff ok here??
+	// just set .shutdown = ps3fb_remove???
 
 	ps3fb_flip_ctl(0);	/* flip off */
 	ps3fb.dinfo->irq.mask = 0;
-	free_irq(ps3fb.irq_no, ps3fb.dev);
-	ps3_irq_plug_destroy(ps3fb.irq_no);
-	iounmap((u8 __iomem *)ps3fb.dinfo);
+	ps3fb_remove(dev);
 	printk(" <- %s:%d\n", __func__, __LINE__);
 }
 

@@ -91,7 +91,7 @@ ps3_register_gelic (void)
 	return result;
 
 fail:
-#if defined(DEBUG)
+#ifdef DEBUG
 	memset(dev, 0xad, sizeof(struct ps3_system_bus_device)
 		+ sizeof(struct ps3_dma_region));
 #endif
@@ -168,7 +168,7 @@ ps3_register_ohci_0 (void)
 	return result;
 
 fail:
-#if defined(DEBUG)
+#ifdef DEBUG
 	memset(p, 0xad, sizeof(struct ohci_layout));
 #endif
 	kfree(p);
@@ -253,7 +253,7 @@ ps3_register_ohci_1 (void)
 	return result;
 
 fail:
-#if defined(DEBUG)
+#ifdef DEBUG
 	memset(p, 0xad, sizeof(struct ohci_layout));
 #endif
 	kfree(p);
@@ -329,7 +329,7 @@ ps3_register_ehci_0 (void)
 	return result;
 
 fail:
-#if defined(DEBUG)
+#ifdef DEBUG
 	memset(p, 0xad, sizeof(struct ehci_layout));
 #endif
 	kfree(p);
@@ -414,7 +414,7 @@ ps3_register_ehci_1 (void)
 	return result;
 
 fail:
-#if defined(DEBUG)
+#ifdef DEBUG
 	memset(p, 0xad, sizeof(struct ehci_layout));
 #endif
 	kfree(p);
@@ -488,7 +488,7 @@ ps3_register_known_devices (void)
 	result = ps3_register_ehci_1();
 	result = ps3_register_sound();
 
-#if defined(CONFIG_PS3_SYS_MANAGER)
+#ifdef CONFIG_PS3_SYS_MANAGER
 	result = ps3_register_sys_manager();
 #endif
 	result = ps3_register_gelic();

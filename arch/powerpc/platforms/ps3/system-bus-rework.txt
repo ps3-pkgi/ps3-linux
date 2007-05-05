@@ -1,0 +1,48 @@
+Status of the system-bus re-work
+
+o=working
+x=not working
+
+				1st	shut	2nd	insmod	rmmod
+				boot	down	boot
+
+CONFIG_GELIC_NET		x(1)	o	o
+CONFIG_FB_PS3			o	o(2)	o
+CONFIG_USB_EHCI_HCD		o	o	o
+CONFIG_USB_OHCI_HCD		o	o	o
+CONFIG_PS3_VUART		o	o	o
+CONFIG_PS3_STORAGE		o	o	o
+CONFIG_PS3_STORAGE_BUS		o	o	o
+CONFIG_PS3_STORAGE_FLASH	o	o	o
+CONFIG_PS3_STORAGE_DISK		o	o	o
+CONFIG_PS3_STORAGE_ROM		o	o	o
+CONFIG_SND_PS3			o	o	o
+CONFIG_SPU_FS			o	o	o
+
+32 bit kexec: not working
+64 bit kexec: --append not working
+
+
+(1) Root-NFS: Unable to get nfsd port number from server
+    Tested on FC7 and Ubuntu-7.04.
+    Startup timing problem?
+
+(2) queue_work() to 'events' bug
+    kernel BUG at kernel/workqueue.c:215!
+    temp fix: ps3-hack-fbcon-shutdown.diff
+
+--------------------------------------------------------------------------------
+
+ps3fb_probe
+ps3fb_remove
+ps3fb_shutdown
+
+ps3_gelic_driver_probe
+ps3_ohci_sb_probe
+ps3_ehci_sb_probe
+ps3flash_probe
+ps3disk_probe
+ps3rom_probe
+snd_ps3_driver_probe
+
+--------------------------------------------------------------------------------

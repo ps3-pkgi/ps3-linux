@@ -1139,7 +1139,7 @@ void ps3_dma_region_init(struct ps3_dma_region *r,
 		r->offset -= map.r1.offset;
 	r->len = len ? len : _ALIGN_UP(map.total, 1 << r->page_size);
 
-	switch(iobus_type) {
+	switch (iobus_type) {
 	case PS3_IOBUS_SB:
 		r->region_ops =  (USE_DYNAMIC_DMA)
 			? &ps3_dma_sb_region_ops

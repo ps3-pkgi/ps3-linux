@@ -32,10 +32,6 @@
 
 #include "platform.h"
 
-static struct device ps3_system_bus = {
-        .bus_id         = "ps3_system",
-};
-
 // FIXME: need device usage counters!
 struct {
 	int id_11; // usb 0
@@ -256,50 +252,50 @@ static int ps3_system_bus_remove(struct device *_dev)
 	if (drv->remove)
 		result = drv->remove(dev);
 	else
-		pr_info("%s:%d: %s no remove method\n", __func__, __LINE__,
-			dev->core.bus_id);
+		dev_dbg(&dev->core, "%s:%d %s: no remove method\n",
+			__func__, __LINE__, drv->core.name);
 
 	pr_info(" <- %s:%d: %s\n", __func__, __LINE__, dev->core.bus_id);
 	return result;
 }
 
-static void ps3_system_bus_shutdown(struct device *_dev)
+static int ps3_system_bus_shutdown(struct device *_dev)
 {
 	struct ps3_system_bus_device *dev = to_ps3_system_bus_device(_dev);
-	struct ps3_system_bus_driver *drv
-		= to_ps3_system_bus_driver(_dev->driver);
+	struct ps3_system_bus_driver *drv;
 
 	BUG_ON(!dev);
 
-	pr_info(" -> %s:%d: %s, match_id %d\n", __func__, __LINE__,
-		dev->core.bus_id, dev->match_id);
+	dev_dbg(&dev->core, " -> %s:%d: match_id %d\n", __func__, __LINE__,
+		dev->match_id);
 
 	if(!dev->core.driver) {
-		pr_info("%s:%d: %s: no driver bound\n", __func__, __LINE__,
-			dev->core.bus_id);
-		return;
+		dev_dbg(&dev->core, "%s:%d: no driver bound\n", __func__,
+			__LINE__);
+		return 0;
 	}
 
 	drv = to_ps3_system_bus_driver(dev->core.driver);
 
 	BUG_ON(!drv);
 
-	pr_info("%s:%d: %s -> %s\n", __func__, __LINE__, dev->core.bus_id,
-		drv->core.name);
+	dev_dbg(&dev->core, "%s:%d: %s -> %s\n", __func__, __LINE__,
+		dev->core.bus_id, drv->core.name);
 
 	if (drv->shutdown)
 		drv->shutdown(dev);
 	else if (drv->remove) {
-		pr_info("%s:%d: %s no shutdown, calling remove\n",
-			__func__, __LINE__, dev->core.bus_id);
+		dev_dbg(&dev->core, "%s:%d %s: no shutdown, calling remove\n",
+			__func__, __LINE__, drv->core.name);
 		drv->remove(dev);
 	} else {
-		pr_info("%s:%d: %s no shutdown method\n", __func__, __LINE__,
-			dev->core.bus_id);
+		dev_dbg(&dev->core, "%s:%d %s: no shutdown method\n",
+			__func__, __LINE__, drv->core.name);
 		BUG();
 	}
 
-	pr_info(" <- %s:%d: %s\n", __func__, __LINE__, dev->core.bus_id);
+	dev_dbg(&dev->core, " <- %s:%d\n", __func__, __LINE__);
+	return 0;
 }
 
 static int ps3_system_bus_uevent(struct device *_dev, char **envp,
@@ -329,6 +325,10 @@ static ssize_t modalias_show(struct device *_dev, struct device_attribute *a,
 static struct device_attribute ps3_system_bus_dev_attrs[] = {
         __ATTR_RO(modalias),
         __ATTR_NULL,
+};
+
+static struct device ps3_system_bus = {
+	.bus_id         = "ps3_system",
 };
 
 struct bus_type ps3_system_bus_type = {

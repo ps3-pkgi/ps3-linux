@@ -371,7 +371,7 @@ int ps3_event_receive_port_destroy(unsigned int virq)
 {
 	int result;
 
-	pr_debug(" -> %s:%d virq: %u\n", __func__, __LINE__, virq);
+	pr_debug(" -> %s:%d virq %u\n", __func__, __LINE__, virq);
 
 	ps3_chip_mask(virq);
 
@@ -506,7 +506,7 @@ EXPORT_SYMBOL_GPL(ps3_io_irq_setup);
 int ps3_io_irq_destroy(unsigned int virq)
 {
 	int result;
-	unsigned int outlet = virq_to_hw(virq);
+	unsigned long outlet = virq_to_hw(virq);
 
 	ps3_chip_mask(virq);
 
@@ -616,9 +616,15 @@ int ps3_spe_irq_setup(enum ps3_cpu_binding cpu, unsigned long spe_id,
 
 int ps3_spe_irq_destroy(unsigned int virq)
 {
-	int result = ps3_irq_plug_destroy(virq);
+	int result;
+	unsigned long outlet = virq_to_hw(virq);
+
+	ps3_chip_mask(virq);
+
+	result = ps3_irq_plug_destroy(virq);
 	BUG_ON(result);
-	return 0;
+
+	return result;
 }
 
 

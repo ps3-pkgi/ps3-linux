@@ -74,7 +74,7 @@ static const struct hc_driver ps3_ehci_hc_driver = {
 #endif
 };
 
-static int ps3_ehci_sb_probe(struct ps3_system_bus_device *dev)
+static int ps3_ehci_probe(struct ps3_system_bus_device *dev)
 {
 	int result;
 	struct usb_hcd *hcd;
@@ -191,8 +191,9 @@ fail_start:
 	return result;
 }
 
-static int ps3_ehci_sb_remove(struct ps3_system_bus_device *dev)
+static int ps3_ehci_remove(struct ps3_system_bus_device *dev)
 {
+	unsigned int tmp;
 	struct usb_hcd *hcd =
 		(struct usb_hcd *)ps3_system_bus_get_driver_data(dev);
 
@@ -200,6 +201,8 @@ static int ps3_ehci_sb_remove(struct ps3_system_bus_device *dev)
 
 	dev_dbg(&dev->core, "%s:%d: regs %p\n", __func__, __LINE__, hcd->regs);
 	dev_dbg(&dev->core, "%s:%d: irq %u\n", __func__, __LINE__, hcd->irq);
+
+	tmp = hcd->irq;
 
 	usb_remove_hcd(hcd);
 
@@ -211,7 +214,7 @@ static int ps3_ehci_sb_remove(struct ps3_system_bus_device *dev)
 	release_mem_region(hcd->rsrc_start, hcd->rsrc_len);
 	usb_put_hcd(hcd);
 
-	ps3_io_irq_destroy(hcd->irq);
+	ps3_io_irq_destroy(tmp);
 	ps3_free_mmio_region(dev->m_region);
 
 	ps3_dma_region_free(dev->d_region);
@@ -222,12 +225,12 @@ static int ps3_ehci_sb_remove(struct ps3_system_bus_device *dev)
 
 MODULE_ALIAS("ps3-ehci");
 
-static struct ps3_system_bus_driver ps3_ehci_sb_driver = {
+static struct ps3_system_bus_driver ps3_ehci_driver = {
 	.match_id = PS3_MATCH_ID_EHCI,
 	.core = {
 		.name = "ps3-ehci-driver",
 	},
-	.probe = ps3_ehci_sb_probe,
-	.remove = ps3_ehci_sb_remove,
-	.shutdown = ps3_ehci_sb_remove,
+	.probe = ps3_ehci_probe,
+	.remove = ps3_ehci_remove,
+	.shutdown = ps3_ehci_remove,
 };

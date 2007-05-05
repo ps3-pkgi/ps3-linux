@@ -414,12 +414,12 @@ static int ps3flash_probe(struct ps3_system_bus_device *_dev)
 		goto fail;
 	}
 
-	error = ps3_open_hv_device(&dev->sbd.did); // ok here???
+	error = ps3_open_hv_device(&dev->sbd.did);
 
 	if (error) {
 		dev_dbg(&dev->sbd.core, "%s:%d: ps3_open_hv_device failed %d\n",
 			__func__, __LINE__, error);
-		goto fail_close_device;
+		goto fail;
 	}
 
 	error = ps3_sb_event_receive_port_setup(PS3_BINDING_CPU_ANY,
@@ -430,7 +430,7 @@ static int ps3flash_probe(struct ps3_system_bus_device *_dev)
 		dev_err(&dev->sbd.core,
 			"%s:%u: ps3_sb_event_receive_port_setup failed %d\n",
 		       __func__, __LINE__, error);
-		goto fail;
+		goto fail_close_device;
 	}
 
 	error = request_irq(dev->irq, ps3flash_interrupt, IRQF_DISABLED,

@@ -918,7 +918,7 @@ MODULE_LICENSE ("GPL");
 
 #ifdef CONFIG_PPC_PS3
 #include "ohci-ps3.c"
-#define PS3_SYSTEM_BUS_DRIVER	ps3_ohci_sb_driver
+#define PS3_SYSTEM_BUS_DRIVER	ps3_ohci_driver
 #endif
 
 #if	!defined(PCI_DRIVER) &&		\

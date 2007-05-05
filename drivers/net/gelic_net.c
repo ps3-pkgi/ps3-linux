@@ -1751,6 +1751,7 @@ static struct ps3_system_bus_driver ps3_gelic_driver = {
 	.match_id = PS3_MATCH_ID_GELIC,
 	.probe = ps3_gelic_driver_probe,
 	.remove = ps3_gelic_driver_remove,
+	.shutdown = ps3_gelic_driver_remove,
 	.core = {
 		.name = "ps3_gelic_driver",
 	},

@@ -323,7 +323,7 @@ static struct logo_data_extra {
 	const struct linux_logo *logo;
 	unsigned int n;
 } fb_logo_ex[FB_LOGO_EX_NUM_MAX];
-static unsigned int fb_logo_ex_num = 0;
+static unsigned int fb_logo_ex_num;
 
 static void fb_rotate_logo_ud(const u8 *in, u8 *out, u32 width, u32 height)
 {

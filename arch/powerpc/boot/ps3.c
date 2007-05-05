@@ -28,7 +28,7 @@
 #include "ops.h"
 #include "lv1call.h"
 
-#if defined(DEBUG)
+#ifdef DEBUG
 #define DBG(fmt...) printf(fmt)
 #else
 static inline int __attribute__ ((format (printf, 1, 2))) DBG(
