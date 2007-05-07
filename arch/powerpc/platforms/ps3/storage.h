@@ -50,7 +50,7 @@ struct ps3_storage_device {
 	u64 dma_region;
 	struct mutex mutex;
 
-	// FIXME ps3 disk only?
+	// FIXME ps3disk only?
 	spinlock_t lock;
 	struct request_queue *queue;
 	struct gendisk *gendisk;

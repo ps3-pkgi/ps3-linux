@@ -23,6 +23,8 @@ static inline int pm_suspend_disk(void)
 }
 #endif
 
+extern int pfn_is_nosave(unsigned long);
+
 extern struct mutex pm_mutex;
 
 #define power_attr(_name) \
@@ -35,10 +37,7 @@ static struct subsys_attribute _name##_attr = {	\
 	.store	= _name##_store,		\
 }
 
-extern struct subsystem power_subsys;
-
-/* References to section boundaries */
-extern const void __nosave_begin, __nosave_end;
+extern struct kset power_subsys;
 
 /* Preferred image size in bytes (default 500 MB) */
 extern unsigned long image_size;
