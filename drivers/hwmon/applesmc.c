@@ -981,7 +981,7 @@ static SENSOR_DEVICE_ATTR_2(fan##offset##_output, S_IRUGO | S_IWUSR, \
 static SENSOR_DEVICE_ATTR(fan##offset##_manual, S_IRUGO | S_IWUSR, \
 	applesmc_show_fan_manual, applesmc_store_fan_manual, offset-1); \
 \
-static SENSOR_DEVICE_ATTR(fan##offset##_position, S_IRUGO, \
+static SENSOR_DEVICE_ATTR(fan##offset##_label, S_IRUGO, \
 	applesmc_show_fan_position, NULL, offset-1); \
 \
 static struct attribute *fan##offset##_attributes[] = { \
@@ -991,7 +991,7 @@ static struct attribute *fan##offset##_attributes[] = { \
 	&sensor_dev_attr_fan##offset##_safe.dev_attr.attr, \
 	&sensor_dev_attr_fan##offset##_output.dev_attr.attr, \
 	&sensor_dev_attr_fan##offset##_manual.dev_attr.attr, \
-	&sensor_dev_attr_fan##offset##_position.dev_attr.attr, \
+	&sensor_dev_attr_fan##offset##_label.dev_attr.attr, \
 	NULL \
 };
 
@@ -1190,7 +1190,8 @@ static int __init applesmc_init(void)
 	if (ret)
 		goto out_region;
 
-	pdev = platform_device_register_simple("applesmc", -1, NULL, 0);
+	pdev = platform_device_register_simple("applesmc", APPLESMC_DATA_PORT,
+					       NULL, 0);
 	if (IS_ERR(pdev)) {
 		ret = PTR_ERR(pdev);
 		goto out_driver;
