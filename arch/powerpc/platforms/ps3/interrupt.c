@@ -617,7 +617,6 @@ int ps3_spe_irq_setup(enum ps3_cpu_binding cpu, unsigned long spe_id,
 int ps3_spe_irq_destroy(unsigned int virq)
 {
 	int result;
-	unsigned long outlet = virq_to_hw(virq);
 
 	ps3_chip_mask(virq);
 

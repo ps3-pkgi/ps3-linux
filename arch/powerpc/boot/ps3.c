@@ -40,7 +40,7 @@ extern char _end[];
 extern char _dtb_start[];
 extern char _dtb_end[];
 
-PLATFORM_STACK(4096);
+BSS_STACK(4096);
 
 static void ps3_console_write(const char *buf, int len)
 {

@@ -188,8 +188,8 @@ static inline void exit(void)
 #define fatal(args...) { printf(args); exit(); }
 
 
-#define PLATFORM_STACK(size) \
-	char _platform_stack[size]; \
-	void *_platform_stack_top = _platform_stack + sizeof(_platform_stack);
+#define BSS_STACK(size) \
+	static char _bss_stack[size]; \
+	void *_platform_stack_top = _bss_stack + sizeof(_bss_stack);
 
 #endif /* _PPC_BOOT_OPS_H_ */

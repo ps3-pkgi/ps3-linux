@@ -15,11 +15,11 @@
 #include <linux/signal.h>
 #include <linux/mm.h>
 #include <linux/module.h>
-#include <linux/smp_lock.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/kprobes.h>
 #include <linux/kallsyms.h>
+#include <linux/kdebug.h>
 
 #include <asm/page.h>
 #include <asm/pgtable.h>
@@ -29,7 +29,6 @@
 #include <asm/asi.h>
 #include <asm/lsu.h>
 #include <asm/sections.h>
-#include <asm/kdebug.h>
 #include <asm/mmu_context.h>
 
 #ifdef CONFIG_KPROBES
