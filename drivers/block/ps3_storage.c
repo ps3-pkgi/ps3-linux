@@ -1720,8 +1720,13 @@ static unsigned int ps3_stor_enum_storage_drives(void)
 	printk("Looking for disk devices...\n");
 	devices += ps3_stor_enum_storage_type(PS3_DEV_TYPE_STOR_DISK);
 #endif
+#if defined(CONFIG_PS3_STORAGE_ROM) ||\
+    defined(CONFIG_PS3_STORAGE_ROM_MODULE)
+	printk("Not looking for ROM devices...\n");
+#else
 	printk("Looking for ROM devices...\n");
 	devices += ps3_stor_enum_storage_type(PS3_DEV_TYPE_STOR_ROM);
+#endif
 #if defined(CONFIG_PS3_STORAGE_FLASH) ||\
     defined(CONFIG_PS3_STORAGE_FLASH_MODULE)
 	printk("NOT looking for FLASH devices!!!\n");

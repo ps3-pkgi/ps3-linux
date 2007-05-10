@@ -18,7 +18,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#include "platform.h"
+#include <asm/ps3.h>
 
 
 struct ps3_storage_region {
@@ -30,7 +30,6 @@ struct ps3_storage_region {
 struct ps3_storage_device {
 	struct ps3_system_bus_device sbd;
 
-	enum ps3_dev_type dev_type;
 	struct ps3_dma_region dma;
 	unsigned int irq;
 	u64 port;
@@ -41,7 +40,7 @@ struct ps3_storage_device {
 	int lv1_res;
 	u64 lv1_tag;
 	u64 lv1_status;
-	struct completion done;
+	struct completion irq_done;
 
 	unsigned long bounce_size;
 	void *bounce_buf;
@@ -55,6 +54,11 @@ struct ps3_storage_device {
 	struct request_queue *queue;
 	struct gendisk *gendisk;
 	struct task_struct *thread;
+
+	// FIXME ps3rom only?
+	struct Scsi_Host *host;
+	struct scsi_cmnd *cmd;
+	void (*scsi_done)(struct scsi_cmnd *);
 
 	// FIXME Should we keep the (single?) accessible region only?
 	unsigned int num_regions;

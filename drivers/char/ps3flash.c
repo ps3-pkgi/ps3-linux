@@ -21,8 +21,10 @@
 #define DEBUG
 
 #include <linux/dma-mapping.h>
+#include <linux/interrupt.h>
 #include <linux/miscdevice.h>
 
+#include <asm/uaccess.h>
 #include <asm/lv1call.h>
 
 #include "../../arch/powerpc/platforms/ps3/storage.h"	// FIXME
@@ -48,17 +50,15 @@ static ssize_t ps3flash_read_write_sectors(struct ps3_storage_device *dev,
 	unsigned int idx = ffs(dev->accessible_regions)-1;
 	unsigned int region_id = dev->regions[idx].id;
 	int res = 0;
-#ifdef DEBUG
 	static const char *op[] = {
 		[PS3FLASH_READ]		= "read",
 		[PS3FLASH_WRITE]	= "write",
 	};
-#endif
 
 	dev_dbg(&dev->sbd.core, "%s:%u %s %lu sectors starting at %lu\n",
 		__func__, __LINE__, op[rw], sectors, start_sector);
 
-	init_completion(&dev->done);
+	init_completion(&dev->irq_done);
 	switch (rw) {
 	case PS3FLASH_READ:
 		res = lv1_storage_read(dev->sbd.did.dev_id, region_id,
@@ -80,7 +80,7 @@ static ssize_t ps3flash_read_write_sectors(struct ps3_storage_device *dev,
 		return -EIO;
 	}
 
-	wait_for_completion(&dev->done);
+	wait_for_completion(&dev->irq_done);
 	if (dev->lv1_status) {
 		dev_err(&dev->sbd.core, "%s:%u: %s failed 0x%lx\n", __func__,
 			__LINE__, op[rw], dev->lv1_status);
@@ -364,7 +364,7 @@ static irqreturn_t ps3flash_interrupt(int irq, void *data)
 		dev_err(&dev->sbd.core, "%s:%u res=%d status=0x%lx\n",
 			__func__, __LINE__, dev->lv1_res, dev->lv1_status);
 	else
-		complete(&dev->done);
+		complete(&dev->irq_done);
 	return IRQ_HANDLED;
 }
 
@@ -415,10 +415,10 @@ static int ps3flash_probe(struct ps3_system_bus_device *_dev)
 	}
 
 	error = ps3_open_hv_device(&dev->sbd.did);
-
 	if (error) {
-		dev_dbg(&dev->sbd.core, "%s:%d: ps3_open_hv_device failed %d\n",
-			__func__, __LINE__, error);
+		dev_err(&dev->sbd.core,
+			"%s:%u: ps3_open_hv_device failed %d\n", __func__,
+			__LINE__, error);
 		goto fail;
 	}
 
@@ -452,8 +452,8 @@ static int ps3flash_probe(struct ps3_system_bus_device *_dev)
 			    PS3_IOBUS_SB);
 	res = ps3_dma_region_create(&dev->dma);
 	if (res) {
-		printk(KERN_ERR "%s:%u: cannot create DMA region\n", __func__,
-		       __LINE__);
+		dev_err(&dev->sbd.core, "%s:%u: cannot create DMA region\n",
+			__func__, __LINE__);
 		error = -ENOMEM;
 		goto fail_free_irq;
 	}
@@ -525,8 +525,8 @@ static int ps3flash_remove(struct ps3_system_bus_device *_dev)
 	error = ps3_close_hv_device(&dev->sbd.did);
 	if (error)
 		dev_err(&dev->sbd.core,
-			"%s:%u: ps3_close_hv_device failed %d\n",
-			__func__, __LINE__, error);
+			"%s:%u: ps3_close_hv_device failed %d\n", __func__,
+			__LINE__, error);
 
 	ps3flash_dev = NULL;
 

@@ -29,6 +29,7 @@
 #include <asm/firmware.h>
 #include <asm/lv1call.h>
 
+#include "platform.h"
 #include "storage.h"
 
 
@@ -84,7 +85,8 @@ static u64 ps3_stor_wait_for_completion(u64 devid, u64 tag,
 	return res;
 }
 
-static int ps3_stor_probe_notification(struct ps3_storage_device *dev)
+static int ps3_stor_probe_notification(struct ps3_storage_device *dev,
+				       enum ps3_dev_type dev_type)
 {
 	int error = -ENODEV, res;
 	u64 *buf;
@@ -148,7 +150,7 @@ static int ps3_stor_probe_notification(struct ps3_storage_device *dev)
 			break;
 		}
 
-		if (buf[2] == dev->sbd.did.dev_id && buf[3] == dev->dev_type) {
+		if (buf[2] == dev->sbd.did.dev_id && buf[3] == dev_type) {
 			pr_debug("%s:%u: device ready\n", __func__, __LINE__);
 			error = 0;
 			break;
@@ -170,7 +172,7 @@ static irqreturn_t ps3_stor_probe_interrupt(int irq, void *data)
 	dev->lv1_res = lv1_storage_get_async_status(dev->sbd.did.dev_id,
 						    &dev->lv1_tag,
 						    &dev->lv1_status);
-	complete(&dev->done);
+	complete(&dev->irq_done);
 
 	return IRQ_HANDLED;
 }
@@ -264,7 +266,7 @@ static int ps3_stor_probe_access(struct ps3_storage_device *dev)
 		pr_debug("%s:%u: checking accessibility of region %u\n",
 			 __func__, __LINE__, i);
 
-		init_completion(&dev->done);
+		init_completion(&dev->irq_done);
 		res = lv1_storage_read(dev->sbd.did.dev_id, dev->regions[i].id,
 				       0, /* start sector */
 				       1, /* sector count */
@@ -276,7 +278,7 @@ static int ps3_stor_probe_access(struct ps3_storage_device *dev)
 			continue;
 		}
 
-		wait_for_completion(&dev->done);
+		wait_for_completion(&dev->irq_done);
 
 		if (dev->lv1_res || dev->lv1_status) {
 			pr_debug("%s:%u: read failed, region %u is not accessible\n",
@@ -365,9 +367,6 @@ static int ps3_stor_probe_dev(struct ps3_repository_device *repo)
 		match_id = PS3_MATCH_ID_STOR_FLASH;
 		break;
 
-	case PS3_DEV_TYPE_NONE:
-		return 0;
-
 	default:
 		return 0;
 	}
@@ -395,7 +394,6 @@ static int ps3_stor_probe_dev(struct ps3_repository_device *repo)
 	dev->sbd.match_id = match_id;
 	dev->sbd.did = repo->did;
 	dev->sbd.d_region = &dev->dma;
-	dev->dev_type = dev_type;
 	dev->port = port;
 	dev->blk_size = blk_size;
 	dev->num_blocks = num_blocks;
@@ -411,9 +409,10 @@ static int ps3_stor_probe_dev(struct ps3_repository_device *repo)
 	}
 
 #ifdef CONFIG_PS3_STORAGE
-	switch (dev->dev_type) {
-	case PS3_DEV_TYPE_STOR_FLASH:
-	case PS3_DEV_TYPE_STOR_DISK:
+	switch (match_id) {
+	case PS3_MATCH_ID_STOR_FLASH:
+	case PS3_MATCH_ID_STOR_DISK:
+	case PS3_MATCH_ID_STOR_ROM:
 		break;
 
 	default:
@@ -428,7 +427,7 @@ static int ps3_stor_probe_dev(struct ps3_repository_device *repo)
 #endif
 
 	/* FIXME Do we really need this? I guess for kboot only? */
-	error = ps3_stor_probe_notification(dev);
+	error = ps3_stor_probe_notification(dev, dev_type);
 	if (error) {
 		pr_debug("%s:%u: probe_notification failed %d\n", __func__,
 			 __LINE__, error);

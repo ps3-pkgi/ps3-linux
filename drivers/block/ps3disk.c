@@ -1,11 +1,3 @@
-
-#define PS3DISK_DIRECT_IO		1
-#define PS3DISK_BOUNCE			2
-#define PS3DISK_SG			3
-#define PS3DISK_TCQ			4
-
-#define PS3DISK_DEFAULT_STRATEGY	PS3DISK_SG
-
 /*
  * PS3 Disk Storage Driver
  *
@@ -32,6 +24,7 @@
 #include <linux/blkdev.h>
 #include <linux/freezer.h>
 #include <linux/hdreg.h>
+#include <linux/interrupt.h>
 #include <linux/kthread.h>
 
 #include <asm/lv1call.h>
@@ -61,11 +54,6 @@
 
 static int ps3disk_major = PS3DISK_MAJOR;
 
-static int read_only;
-module_param(read_only, bool, 0);
-static int strategy = PS3DISK_DEFAULT_STRATEGY;
-module_param(strategy, int, 0);
-
 static ssize_t ps3disk_read_write_sectors(struct ps3_storage_device *dev,
 					  u64 lpar, u64 start_sector,
 					  u64 sectors, int write)
@@ -78,12 +66,8 @@ static ssize_t ps3disk_read_write_sectors(struct ps3_storage_device *dev,
 	dev_dbg(&dev->sbd.core, "%s:%u: %s %lu sectors starting at %lu\n",
 		__func__, __LINE__, op, sectors, start_sector);
 
-	init_completion(&dev->done);
+	init_completion(&dev->irq_done);
 	if (write) {
-		if (read_only) {
-			dev_err(&dev->sbd.core, "NOT writing to disk!!\n");
-			return sectors;
-		}
 		res = lv1_storage_write(dev->sbd.did.dev_id, region_id,
 					start_sector, sectors,
 					0, /* flags */
@@ -100,7 +84,7 @@ static ssize_t ps3disk_read_write_sectors(struct ps3_storage_device *dev,
 		return -EIO;
 	}
 
-	wait_for_completion(&dev->done);
+	wait_for_completion(&dev->irq_done);
 	if (dev->lv1_status) {
 		dev_err(&dev->sbd.core, "%s:%u: %s failed 0x%lx\n", __func__,
 			__LINE__, op, dev->lv1_status);
@@ -153,10 +137,8 @@ static ssize_t ps3disk_read_write(struct ps3_storage_device *dev, void *buffer,
 				  u64 start_sector, u64 sectors, int write)
 {
 	ssize_t res = 0;
-	u64 bytes, lpar, hw_start_sector, hw_sectors;
-#ifdef DEBUG
+	u64 bytes, hw_start_sector, hw_sectors;
 	const char *op = write ? "write" : "read";
-#endif
 
 	dev_dbg(&dev->sbd.core, "%s:%u: %s buffer 0x%p sector %lu nr %lu\n",
 		__func__, __LINE__, op, buffer, start_sector, sectors);
@@ -168,36 +150,8 @@ static ssize_t ps3disk_read_write(struct ps3_storage_device *dev, void *buffer,
 
 	BUG_ON(bytes > dev->bounce_size);
 
-	switch (strategy) {
-	case PS3DISK_DIRECT_IO:
-		lpar = ps3_mm_phys_to_lpar(__pa(buffer));
-		res = ps3disk_read_write_sectors(dev, lpar,
-						 hw_start_sector, hw_sectors,
-						 write);
-		break;
-
-	case PS3DISK_BOUNCE:
-		if (write)
-			memcpy(dev->bounce_buf, buffer, bytes);
-
-		lpar = dev->bounce_lpar;
-		res = ps3disk_read_write_sectors(dev, lpar, hw_start_sector,
-						 hw_sectors, write);
-
-		if (!write && res > 0)
-			memcpy(buffer, dev->bounce_buf, bytes);
-		break;
-
-	case PS3DISK_SG:
-		lpar = dev->bounce_lpar;
-		res = ps3disk_read_write_sectors(dev, lpar, hw_start_sector,
-						 hw_sectors, write);
-		break;
-
-	case PS3DISK_TCQ:
-		// FIXME
-		break;
-	}
+	res = ps3disk_read_write_sectors(dev, dev->bounce_lpar,
+					 hw_start_sector, hw_sectors, write);
 
 	return res < 0 ? res : sectors;
 }
@@ -214,6 +168,7 @@ static irqreturn_t ps3disk_interrupt(int irq, void *data)
 	 * ATAPI command itself resulted CHECK CONDITION
 	 * so, upper layer should issue REQUEST_SENSE to check the sense data
 	 */
+
 	if (dev->lv1_tag != dev->tag)
 		dev_err(&dev->sbd.core,
 			"%s:%u: tag mismatch, got %lx, expected %lx\n",
@@ -222,30 +177,8 @@ static irqreturn_t ps3disk_interrupt(int irq, void *data)
 		dev_err(&dev->sbd.core, "%s:%u: res=%d status=0x%lx\n",
 			__func__, __LINE__, dev->lv1_res, dev->lv1_status);
 	else
-		complete(&dev->done);
+		complete(&dev->irq_done);
 	return IRQ_HANDLED;
-}
-
-static void ps3disk_handle_request_single(struct ps3_storage_device *dev,
-					  struct request *req)
-{
-	ssize_t sectors_done;
-	int uptodate;
-
-	dev_dbg(&dev->sbd.core, "%s:%u\n", __func__, __LINE__);
-
-	sectors_done = ps3disk_read_write(dev, req->buffer, req->sector,
-					  req->current_nr_sectors,
-					  rq_data_dir(req));
-	if (sectors_done != req->current_nr_sectors) {
-		dev_err(&dev->sbd.core, "%s:%u: request failed: %Zd\n",
-			__func__, __LINE__, sectors_done);
-		uptodate = 0;
-	} else
-		uptodate = 1;
-	spin_lock_irq(&dev->lock);
-	end_request(req, uptodate);
-	spin_unlock_irq(&dev->lock);
 }
 
 static void ps3disk_scatter_gather(struct ps3_storage_device *dev,
@@ -325,10 +258,11 @@ static int ps3disk_thread(void *data)
 	request_queue_t *q = dev->queue;
 	struct request *req;
 
-	dev_dbg(&dev->sbd.core, "%s:%u\n", __func__, __LINE__);
+	dev_dbg(&dev->sbd.core, "%s thread init\n", __func__);
+
+	current->flags |= PF_NOFREEZE;
 
 	while (!kthread_should_stop()) {
-		try_to_freeze();
 		spin_lock_irq(&dev->lock);
 		set_current_state(TASK_INTERRUPTIBLE);
 		req = elv_next_request(q);
@@ -344,23 +278,10 @@ static int ps3disk_thread(void *data)
 			continue;
 		}
 		spin_unlock_irq(&dev->lock);
-		switch (strategy) {
-		case PS3DISK_DIRECT_IO:
-		case PS3DISK_BOUNCE:
-			ps3disk_handle_request_single(dev, req);
-			break;
-
-		case PS3DISK_SG:
-			ps3disk_handle_request_sg(dev, req);
-			break;
-
-		case PS3DISK_TCQ:
-			// FIXME
-			break;
-		}
+		ps3disk_handle_request_sg(dev, req);
 	}
 
-	dev_dbg(&dev->sbd.core, "%s:%u\n", __func__, __LINE__);
+	dev_dbg(&dev->sbd.core, "%s thread exit\n", __func__);
 	return 0;
 }
 
@@ -420,10 +341,10 @@ static int ps3disk_probe(struct ps3_system_bus_device *_dev)
 	}
 
 	error = ps3_open_hv_device(&dev->sbd.did);
-
 	if (error) {
-		dev_dbg(&dev->sbd.core, "%s:%d: ps3_open_hv_device failed %d\n",
-			__func__, __LINE__, error);
+		dev_err(&dev->sbd.core,
+			"%s:%u: ps3_open_hv_device failed %d\n", __func__,
+			__LINE__, error);
 		goto fail_free;
 	}
 
@@ -449,26 +370,13 @@ static int ps3disk_probe(struct ps3_system_bus_device *_dev)
 	dev->bounce_lpar = ps3_mm_phys_to_lpar(__pa(dev->bounce_buf));
 
 	dev->sbd.d_region = &dev->dma;
-	switch (strategy) {
-	case PS3DISK_DIRECT_IO:
-	case PS3DISK_TCQ:
-		// All RAM must be accessible
-		ps3_dma_region_init(&dev->dma, &dev->sbd.did, PS3_DMA_4K,
-				    PS3_DMA_OTHER, NULL, 0, PS3_IOBUS_SB);
-		break;
-
-	case PS3DISK_BOUNCE:
-	case PS3DISK_SG:
-		// Only the bounce buffer must be accessible
-		ps3_dma_region_init(&dev->dma, &dev->sbd.did, PS3_DMA_4K,
-				    PS3_DMA_OTHER, dev->bounce_buf,
-				    dev->bounce_size, PS3_IOBUS_SB);
-		break;
-	}
+	ps3_dma_region_init(&dev->dma, &dev->sbd.did, PS3_DMA_4K,
+			    PS3_DMA_OTHER, dev->bounce_buf, dev->bounce_size,
+			    PS3_IOBUS_SB);
 	res = ps3_dma_region_create(&dev->dma);
 	if (res) {
-		printk(KERN_ERR "%s:%u: cannot create DMA region\n", __func__,
-		       __LINE__);
+		dev_err(&dev->sbd.core, "%s:%u: cannot create DMA region\n",
+			__func__, __LINE__);
 		error = -ENOMEM;
 		goto fail_free_irq;
 	}
@@ -598,8 +506,8 @@ static int ps3disk_remove(struct ps3_system_bus_device *_dev)
 	error = ps3_close_hv_device(&dev->sbd.did);
 	if (error)
 		dev_err(&dev->sbd.core,
-			"%s:%u: ps3_close_hv_device failed %d\n",
-			__func__, __LINE__, error);
+			"%s:%u: ps3_close_hv_device failed %d\n", __func__,
+			__LINE__, error);
 
 	kfree(dev->bounce_buf);
 	return 0;
@@ -632,39 +540,6 @@ static int __init ps3disk_init(void)
 
 	pr_info("%s:%u: registered block device major %d\n", __func__,
 		__LINE__, ps3disk_major);
-
-	if (read_only)
-		pr_info("%s:%u: disk driver is READ-ONLY!\n", __func__,
-			__LINE__);
-
-	switch (strategy) {
-	case PS3DISK_DIRECT_IO:
-		pr_info("%s:%u: using direct I/O\n", __func__, __LINE__);
-		break;
-
-	case PS3DISK_BOUNCE:
-		pr_info("%s:%u: using a bounce buffer of %u bytes\n", __func__,
-			__LINE__, BOUNCE_SIZE);
-		break;
-
-	case PS3DISK_SG:
-		pr_info("%s:%u: using a bounce buffer of %u bytes with "
-			"scatter-gather\n",
-			__func__, __LINE__, BOUNCE_SIZE);
-		break;
-
-	case PS3DISK_TCQ:
-		pr_info("%s:%u: using tagged command queuing\n", __func__,
-			__LINE__);
-		printk(KERN_ERR "%s:%u: NOT YET IMPLEMENTED\n", __func__,
-		       __LINE__);
-		return -EINVAL;	// FIXME Not yet implemented
-
-	default:
-		printk(KERN_ERR "%s:%u: INVALID STRATEGY %d\n", __func__,
-		       __LINE__, strategy);
-		return -EINVAL;
-	}
 
 	return ps3_system_bus_driver_register(&ps3disk, PS3_IOBUS_SB);
 }
