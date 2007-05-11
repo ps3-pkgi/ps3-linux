@@ -286,10 +286,11 @@ static int ps3_sys_manager_send_next_op(struct ps3_vuart_port_device *dev,
  * the command is then communicated back to the system manager with a response
  * message.
  *
- * Currently, the only supported request it the 'shutdown self' request.
+ * Currently, the only supported request is the 'shutdown self' request.
  */
 
-static int ps3_sys_manager_send_request_shutdown(struct ps3_vuart_port_device *dev)
+static int ps3_sys_manager_send_request_shutdown(
+	struct ps3_vuart_port_device *dev)
 {
 	static const struct ps3_sys_manager_header header = {
 		.version = 1,
@@ -386,7 +387,7 @@ static int ps3_sys_manager_handle_event(struct ps3_vuart_port_device *dev)
 	case PS3_SM_EVENT_POWER_RELEASED:
 		dev_dbg(&dev->core, "%s:%d: POWER_RELEASED (%u ms)\n",
 			__func__, __LINE__, event.value);
-		kill_cad_pid(SIGINT, 1);
+		//kill_cad_pid(SIGINT, 1);
 		break;
 	case PS3_SM_EVENT_THERMAL_ALERT:
 		dev_dbg(&dev->core, "%s:%d: THERMAL_ALERT (zone %u)\n",

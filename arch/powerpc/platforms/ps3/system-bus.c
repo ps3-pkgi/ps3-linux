@@ -259,7 +259,7 @@ static int ps3_system_bus_remove(struct device *_dev)
 	return result;
 }
 
-static int ps3_system_bus_shutdown(struct device *_dev)
+static void ps3_system_bus_shutdown(struct device *_dev)
 {
 	struct ps3_system_bus_device *dev = to_ps3_system_bus_device(_dev);
 	struct ps3_system_bus_driver *drv;
@@ -269,11 +269,9 @@ static int ps3_system_bus_shutdown(struct device *_dev)
 	dev_dbg(&dev->core, " -> %s:%d: match_id %d\n", __func__, __LINE__,
 		dev->match_id);
 
-	if(!dev->core.driver) {
+	if (!dev->core.driver)
 		dev_dbg(&dev->core, "%s:%d: no driver bound\n", __func__,
 			__LINE__);
-		return 0;
-	}
 
 	drv = to_ps3_system_bus_driver(dev->core.driver);
 
@@ -295,7 +293,6 @@ static int ps3_system_bus_shutdown(struct device *_dev)
 	}
 
 	dev_dbg(&dev->core, " <- %s:%d\n", __func__, __LINE__);
-	return 0;
 }
 
 static int ps3_system_bus_uevent(struct device *_dev, char **envp,
@@ -336,7 +333,7 @@ struct bus_type ps3_system_bus_type = {
 	.match = ps3_system_bus_match,
 	.probe = ps3_system_bus_probe,
 	.remove = ps3_system_bus_remove,
- 	.shutdown = ps3_system_bus_shutdown,
+	.shutdown = ps3_system_bus_shutdown,
 	.uevent = ps3_system_bus_uevent,
 	.dev_attrs = ps3_system_bus_dev_attrs,
 };
