@@ -6,7 +6,7 @@ x=not working
 				1st	shut	2nd	insmod	rmmod
 				boot	down	boot
 
-CONFIG_GELIC_NET		x(1)	o	o
+CONFIG_GELIC_NET		o	o	o
 CONFIG_FB_PS3			o	o(2)	o
 CONFIG_USB_EHCI_HCD		o	o	o
 CONFIG_USB_OHCI_HCD		o	o	o
@@ -30,15 +30,9 @@ poweroff	?
 
 -- notes --
 
-(1) Root-NFS: Unable to get nfsd port number from server
-    Tested on FC7 and Ubuntu-7.04.
-    Startup timing problem?
-
 (2) queue_work() to 'events' bug
     kernel BUG at kernel/workqueue.c:215!
     temp fix: ps3-hack-fbcon-shutdown.diff
 
 (3) not working, WIP
---------------------------------------------------------------------------------
-
 --------------------------------------------------------------------------------
