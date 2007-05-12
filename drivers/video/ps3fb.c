@@ -1141,17 +1141,16 @@ static int ps3fb_remove(struct platform_device *dev)
 }
 
 extern void fbcon_exit(void);
+extern void vt_console_stop(void);
 
 static void ps3fb_shutdown(struct platform_device *dev)
 {
 	printk(" -> %s:%d\n", __func__, __LINE__);
 
+	vt_console_stop();
 	fbcon_exit();
 
-	// is this stuff ok here??
-	// just set .shutdown = ps3fb_remove???
-
-	ps3fb_flip_ctl(0);	/* flip off */
+	ps3fb_flip_ctl(0); /* flip off */
 	ps3fb.dinfo->irq.mask = 0;
 	ps3fb_remove(dev);
 	printk(" <- %s:%d\n", __func__, __LINE__);
