@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.21
-# Sat May 12 10:47:20 2007
+# Sat May 12 11:10:23 2007
 #
 CONFIG_PPC64=y
 CONFIG_64BIT=y
@@ -228,7 +228,8 @@ CONFIG_ARCH_MEMORY_PROBE=y
 # CONFIG_PPC_64K_PAGES is not set
 # CONFIG_SCHED_SMT is not set
 CONFIG_PROC_DEVICETREE=y
-# CONFIG_CMDLINE_BOOL is not set
+CONFIG_CMDLINE_BOOL=y
+CONFIG_CMDLINE="root=/dev/nfs rw ip=dhcp video=wuxga console=lcons0"
 # CONFIG_PM is not set
 # CONFIG_SECCOMP is not set
 # CONFIG_WANT_DEVICE_TREE is not set
@@ -481,10 +482,6 @@ CONFIG_SCSI_WAIT_SCAN=m
 # CONFIG_ISCSI_TCP is not set
 # CONFIG_SCSI_DEBUG is not set
 # CONFIG_SCSI_ESP_CORE is not set
-
-#
-# Serial ATA (prod) and Parallel ATA (experimental) drivers
-#
 # CONFIG_ATA is not set
 
 #
@@ -503,25 +500,14 @@ CONFIG_NETDEVICES=y
 # CONFIG_TUN is not set
 
 #
-# PHY device support
-#
-
-#
 # Ethernet (10 or 100Mbit)
 #
 # CONFIG_NET_ETHERNET is not set
 CONFIG_MII=m
-
-#
-# Ethernet (1000 Mbit)
-#
+CONFIG_NETDEV_1000=y
 CONFIG_GELIC_NET=y
 CONFIG_GELIC_WIRELESS=y
-
-#
-# Ethernet (10000 Mbit)
-#
-CONFIG_MLX4_DEBUG=y
+# CONFIG_NETDEV_10000 is not set
 
 #
 # Token Ring devices
@@ -551,10 +537,6 @@ CONFIG_USB_NET_MCS7830=m
 # CONFIG_USB_NET_RNDIS_HOST is not set
 # CONFIG_USB_NET_CDC_SUBSET is not set
 # CONFIG_USB_NET_ZAURUS is not set
-
-#
-# Wan interfaces
-#
 # CONFIG_WAN is not set
 # CONFIG_PPP is not set
 # CONFIG_SLIP is not set
