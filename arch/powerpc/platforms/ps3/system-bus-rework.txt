@@ -23,16 +23,15 @@ CONFIG_SPU_FS			o	o	o
 
 64 bit kexec	o
 32 bit kexec	x(3)
-reboot:  	?
-halt		?
-shutdown	?
-poweroff	?
+reboot:  	o
+halt		o
+shutdown	o
+poweroff	o
+bower button	?
 
 -- notes --
 
-(2) queue_work() to 'events' bug
-    kernel BUG at kernel/workqueue.c:215!
-    temp fix: ps3-hack-fbcon-shutdown.diff
+(2) fbcon trouble, temp fix: ps3-hack-fbcon-shutdown.diff
 
 (3) not working, WIP
 --------------------------------------------------------------------------------
