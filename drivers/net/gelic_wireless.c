@@ -2,6 +2,7 @@
  * gelic_wireless.c: wireless extension for gelic_net
  *
  * Copyright (C) 2007 Sony Computer Entertainment Inc.
+ * Copyright 2007 Sony Corporation
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published
@@ -28,7 +29,6 @@
 #include <asm/ps3.h>
 #include <asm/lv1call.h>
 
-#include "gelic_wireless.h"
 #include "gelic_net.h"
 
 MODULE_AUTHOR("SCE Inc.");
@@ -117,9 +117,8 @@ static int gelicw_disassoc(struct net_device *netdev)
 	struct gelic_wireless *w = gelicw_priv(netdev);
 
 	memset(w->bssid, 0, ETH_ALEN); /* clear current bssid */
-	if (w->state < GELICW_STATE_ASSOCIATED) {
+	if (w->state < GELICW_STATE_ASSOCIATED)
 		return 0;
-	}
 
 	schedule_delayed_work(&w->work_stop, 0);
 	w->state = GELICW_STATE_SCAN_DONE;
@@ -153,11 +152,9 @@ static int gelicw_cmd_set_port(struct net_device *netdev, int mode)
 	status = lv1_net_control(bus_id(w), dev_id(w),
 			GELICW_SET_PORT, GELICW_ETHER_PORT, mode, 0,
 			&tag, &val);
-	if (status) {
+	if (status)
 		pr_debug("GELICW_SET_PORT failed:%ld\n", status);
-		return status;
-	}
-	return 0;
+	return status;
 }
 
 /* check support channels */
@@ -175,12 +172,11 @@ static int gelicw_cmd_get_ch_info(struct net_device *netdev)
 	if (status) {
 		pr_debug("GELICW_GET_INFO failed:%ld\n", status);
 		w->ch_info = CH_INFO_FAIL;
-		return status;
+	} else {
+		pr_debug("ch_info:%lx val:%lx\n", ch_info, val);
+		w->ch_info = ch_info >> 48; /* MSB 16bit shows supported channnels */
 	}
-	pr_debug("ch_info:%lx val:%lx\n", ch_info, val);
-	w->ch_info = ch_info >> 48; /* MSB 16bit shows supported channnels */
-
-	return 0;
+	return status;
 }
 
 
@@ -205,7 +201,6 @@ static void gelicw_cmd_start(struct net_device *netdev)
 	if (status) {
 		w->cmd_tag = 0;
 		pr_debug("GELICW_CMD_START failed:%ld\n", status);
-		return;
 	}
 }
 
@@ -221,10 +216,8 @@ static void gelicw_cmd_start_done(struct net_device *netdev)
 	w->cmd_tag = 0;
 	wake_up_interruptible(&w->waitq_cmd);
 
-	if (status || res) {
+	if (status || res)
 		pr_debug("GELICW_CMD_START res:%ld,%ld\n", status, res);
-		return;
-	}
 }
 
 /* disassociation */
@@ -1042,7 +1035,7 @@ int gelicw_setup_netdev(struct net_device *netdev, int wi)
 	w->data_buf = kmalloc(GELICW_DATA_BUF_SIZE, GFP_KERNEL);
 	if (!w->data_buf) {
 		w->wireless = 0;
-		printk("GELICW kmalloc failed\n");
+		pr_info("%s:kmalloc failed\n", __func__);
 		return -ENOMEM;
 	}
 	w->wireless = GELICW_WIRELESS_SUPPORTED; /* wireless support */

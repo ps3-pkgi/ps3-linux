@@ -592,8 +592,14 @@ static int ps3_sys_manager_probe(struct ps3_vuart_port_device *dev)
 	return result;
 }
 
-static void ps3_sys_manager_remove(struct ps3_vuart_port_device *dev)
+static int ps3_sys_manager_remove(struct ps3_vuart_port_device *dev)
 {
+	return 0;
+}
+
+static void ps3_sys_manager_shutdown(struct ps3_vuart_port_device *dev)
+{
+	ps3_sys_manager_remove(dev);
 }
 
 static struct ps3_vuart_port_driver ps3_sys_manager = {
@@ -603,7 +609,7 @@ static struct ps3_vuart_port_driver ps3_sys_manager = {
 	},
 	.probe = ps3_sys_manager_probe,
 	.remove = ps3_sys_manager_remove,
-	.shutdown = ps3_sys_manager_remove,
+	.shutdown = ps3_sys_manager_shutdown,
 };
 
 static int __init ps3_sys_manager_init(void)

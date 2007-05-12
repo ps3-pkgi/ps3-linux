@@ -408,12 +408,20 @@ static int ps3_stor_probe_dev(struct ps3_repository_device *repo)
 		goto cleanup;
 	}
 
-#ifdef CONFIG_PS3_STORAGE
+#if defined(CONFIG_PS3_STORAGE) || defined(CONFIG_PS3_STORAGE_MODULE)
 	switch (match_id) {
-	case PS3_MATCH_ID_STOR_FLASH:
+#if defined(CONFIG_PS3_DISK) || defined(CONFIG_PS3_DISK_MODULE)
 	case PS3_MATCH_ID_STOR_DISK:
+		break;
+#endif
+#if defined(CONFIG_PS3_ROM) || defined(CONFIG_PS3_ROM_MODULE)
 	case PS3_MATCH_ID_STOR_ROM:
 		break;
+#endif
+#if defined(CONFIG_PS3_FLASH) || defined(CONFIG_PS3_FLASH_MODULE)
+	case PS3_MATCH_ID_STOR_FLASH:
+		break;
+#endif
 
 	default:
 		/*

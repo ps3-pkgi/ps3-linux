@@ -137,11 +137,10 @@ early_param("ps3fb", early_parse_ps3fb);
 #define prealloc_ps3fb_videomemory()	do { } while (0)
 #endif
 
-#if defined(CONFIG_PS3_STORAGE) || defined(CONFIG_PS3_STORAGE_MODULE) || \
-    defined(CONFIG_PS3_STORAGE_FLASH) || \
-    defined(CONFIG_PS3_STORAGE_FLASH_MODULE)
+#if defined(CONFIG_PS3_FLASH) || defined(CONFIG_PS3_FLASH_MODULE) || \
+    defined(CONFIG_PS3_STORAGE) || defined(CONFIG_PS3_STORAGE_MODULE)
 struct ps3_prealloc ps3flash_bounce_buffer = {
-	.name = "ps3_stor bounce buffer",
+	.name = "ps3flash bounce buffer",
 	.size = 256*1024,
 	.align = 256*1024
 };
