@@ -52,6 +52,7 @@ MODULE_DESCRIPTION("PS3 System Manager");
  * @size: Header size in bytes, curently 16.
  * @payload_size: Message payload size in bytes.
  * @service_id: Message type, one of enum ps3_sys_manager_service_id.
+ * @request_tag: Unique number to identify reply.
  */
 
 struct ps3_sys_manager_header {
@@ -61,7 +62,8 @@ struct ps3_sys_manager_header {
 	u16 reserved_1;
 	u32 payload_size;
 	u16 service_id;
-	u16 reserved_2[3];
+	u16 reserved_2;
+	u32 request_tag;
 };
 
 /**
@@ -383,11 +385,11 @@ static int ps3_sys_manager_handle_event(struct ps3_vuart_port_device *dev)
 	case PS3_SM_EVENT_POWER_PRESSED:
 		dev_dbg(&dev->core, "%s:%d: POWER_PRESSED\n",
 			__func__, __LINE__);
+		ctrl_alt_del();
 		break;
 	case PS3_SM_EVENT_POWER_RELEASED:
 		dev_dbg(&dev->core, "%s:%d: POWER_RELEASED (%u ms)\n",
 			__func__, __LINE__, event.value);
-		//kill_cad_pid(SIGINT, 1);
 		break;
 	case PS3_SM_EVENT_THERMAL_ALERT:
 		dev_dbg(&dev->core, "%s:%d: THERMAL_ALERT (zone %u)\n",
