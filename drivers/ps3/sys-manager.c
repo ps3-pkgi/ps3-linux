@@ -187,6 +187,16 @@ enum ps3_sys_manager_cmd {
 };
 
 /**
+ * ps3_sm_power_pressed - Poweroff helper.
+ *
+ * A global varable used to force a poweroff when the power button has
+ * been pressed irrespective of how init handles the ctrl_alt_del signal.
+ *
+ */
+
+static unsigned int ps3_sm_power_pressed;
+
+/**
  * ps3_sys_manager_write - Helper to write a two part message to the vuart.
  *
  */
@@ -385,6 +395,8 @@ static int ps3_sys_manager_handle_event(struct ps3_vuart_port_device *dev)
 	case PS3_SM_EVENT_POWER_PRESSED:
 		dev_dbg(&dev->core, "%s:%d: POWER_PRESSED\n",
 			__func__, __LINE__);
+		ps3_sm_power_pressed = 1;
+		wmb();
 		ctrl_alt_del();
 		break;
 	case PS3_SM_EVENT_POWER_RELEASED:
@@ -515,37 +527,6 @@ struct {
 } static drv_priv;
 
 /**
- * ps3_sys_manager_restart - The final platform machine_restart routine.
- *
- * This routine never returns.  The routine disables asyncronous vuart reads
- * then spins calling ps3_sys_manager_handle_msg() to receive and acknowledge
- * the shutdown command sent from the system manager.  Soon after the
- * acknowledgement is sent the lpar is destroyed by the HV.  This routine
- * should only be called from ps3_restart().
- */
-
-void ps3_sys_manager_restart(void)
-{
-	struct ps3_vuart_port_device *dev = drv_priv.dev;
-
-	BUG_ON(!drv_priv.dev);
-
-	dev_dbg(&dev->core, "%s:%d\n", __func__, __LINE__);
-
-	ps3_vuart_cancel_async(dev);
-
-	ps3_sys_manager_send_attr(dev, 0);
-	ps3_sys_manager_send_next_op(dev, PS3_SM_NEXT_OP_LPAR_REBOOT,
-		PS3_SM_WAKE_DEFAULT);
-	ps3_sys_manager_send_request_shutdown(dev);
-
-	printk(KERN_EMERG "System Halted, OK to turn off power\n");
-
-	while(1)
-		ps3_sys_manager_handle_msg(dev);
-}
-
-/**
  * ps3_sys_manager_power_off - The final platform machine_power_off routine.
  *
  * This routine never returns.  The routine disables asyncronous vuart reads
@@ -566,6 +547,45 @@ void ps3_sys_manager_power_off(void)
 	ps3_vuart_cancel_async(dev);
 
 	ps3_sys_manager_send_next_op(dev, PS3_SM_NEXT_OP_SYS_SHUTDOWN,
+		PS3_SM_WAKE_DEFAULT);
+	ps3_sys_manager_send_request_shutdown(dev);
+
+	printk(KERN_EMERG "System Halted, OK to turn off power\n");
+
+	while(1)
+		ps3_sys_manager_handle_msg(dev);
+}
+
+/**
+ * ps3_sys_manager_restart - The final platform machine_restart routine.
+ *
+ * This routine never returns.  The routine disables asyncronous vuart reads
+ * then spins calling ps3_sys_manager_handle_msg() to receive and acknowledge
+ * the shutdown command sent from the system manager.  Soon after the
+ * acknowledgement is sent the lpar is destroyed by the HV.  This routine
+ * should only be called from ps3_restart().
+ */
+
+void ps3_sys_manager_restart(void)
+{
+	struct ps3_vuart_port_device *dev = drv_priv.dev;
+
+	BUG_ON(!drv_priv.dev);
+
+	dev_dbg(&dev->core, "%s:%d\n", __func__, __LINE__);
+
+	/* Check if we got here via a power button event. */
+
+	if(ps3_sm_power_pressed) {
+		dev_dbg(&dev->core, "%s:%d: forcing poweroff\n",
+			__func__, __LINE__);
+		ps3_sys_manager_power_off();
+	}
+
+	ps3_vuart_cancel_async(dev);
+
+	ps3_sys_manager_send_attr(dev, 0);
+	ps3_sys_manager_send_next_op(dev, PS3_SM_NEXT_OP_LPAR_REBOOT,
 		PS3_SM_WAKE_DEFAULT);
 	ps3_sys_manager_send_request_shutdown(dev);
 
