@@ -11,13 +11,13 @@ CONFIG_FB_PS3			o	o(2)	o
 CONFIG_USB_EHCI_HCD		o	o	o
 CONFIG_USB_OHCI_HCD		o	o	o
 CONFIG_PS3_VUART		o	o	o
-CONFIG_PS3_STORAGE		o	o	o
 CONFIG_PS3_STORAGE_BUS		o	o	o
 CONFIG_PS3_FLASH		o	o	o
 CONFIG_PS3_DISK			o	o	o
 CONFIG_PS3_ROM			o	o	o
 CONFIG_SND_PS3			o	o	o
 CONFIG_SPU_FS			o	o	o
+CONFIG_PS3_STORAGE		o	o	o
 
 -- commands --
 
@@ -27,11 +27,10 @@ reboot:  	o
 halt		o
 shutdown	o
 poweroff	o
-bower button	o(4)
+power button	o
 
 -- notes --
 
 (2) fbcon trouble, temp fix: ps3-hack-fbcon-shutdown.diff
 (3) not working, WIP
-(4) Sends SIGINT (ctrl-alt-del) to init.  Set inittab to your pref.
 --------------------------------------------------------------------------------

@@ -209,8 +209,9 @@ struct gelic_net_descr_chain {
 
 struct gelic_net_card {
 	struct net_device *netdev;
-	u64 irq_status;
+	u64 irq_status __attribute__((aligned(8)));
 	u64 ghiintmask;
+
 	struct ps3_system_bus_device *dev;
 	u32 vlan_id[GELIC_NET_VLAN_MAX];
 	int vlan_index;
@@ -221,7 +222,8 @@ struct gelic_net_card {
 
 	struct net_device_stats netdev_stats;
 	int rx_csum;
-	spinlock_t intmask_lock;
+	spinlock_t tx_dma_lock;
+	int tx_dma_progress;
 
 	struct work_struct tx_timeout_task;
 	atomic_t tx_timeout_task_counter;
@@ -318,8 +320,8 @@ struct gelic_net_card {
 #define GELICW_PORT_UP			4 /* Ether port on (auto neg) */
 
 /* interrupt status bit */
-#define GELICW_DEVICE_CMD_COMP		0x0000000080000000UL
-#define GELICW_DEVICE_EVENT_RECV	0x0000000040000000UL
+#define GELICW_DEVICE_CMD_COMP		(1UL << 31)
+#define GELICW_DEVICE_EVENT_RECV	(1UL << 30)
 
 /* GELICW_GET_EVENT ID */
 #define GELICW_EVENT_UNKNOWN		0x00
@@ -409,7 +411,7 @@ extern int gelicw_setup_netdev(struct net_device *netdev, int wi);
 extern void gelicw_up(struct net_device *netdev);
 extern int gelicw_down(struct net_device *netdev);
 extern void gelicw_remove(struct net_device *netdev);
-extern void gelicw_interrupt(struct net_device *netdev, u32 status1);
+extern void gelicw_interrupt(struct net_device *netdev, u64 status);
 extern int gelicw_is_associated(struct net_device *netdev);
 
 #endif //_GELIC_NET_H

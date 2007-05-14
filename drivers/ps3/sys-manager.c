@@ -35,7 +35,7 @@ MODULE_DESCRIPTION("PS3 System Manager");
 /**
  * ps3_sys_manager - PS3 system manager driver.
  *
- * The system manager provides an asyncronous system event notification
+ * The system manager provides an asynchronous system event notification
  * mechanism for reporting events like thermal alert and button presses to
  * guests.  It also provides support to control system shutdown and startup.
  *
@@ -189,7 +189,7 @@ enum ps3_sys_manager_cmd {
 /**
  * ps3_sm_power_pressed - Poweroff helper.
  *
- * A global varable used to force a poweroff when the power button has
+ * A global variable used to force a poweroff when the power button has
  * been pressed irrespective of how init handles the ctrl_alt_del signal.
  *
  */
@@ -393,6 +393,7 @@ static int ps3_sys_manager_handle_event(struct ps3_vuart_port_device *dev)
 
 	switch (event.type) {
 	case PS3_SM_EVENT_POWER_PRESSED:
+	case PS3_SM_EVENT_RESET_PRESSED:
 		dev_dbg(&dev->core, "%s:%d: POWER_PRESSED\n",
 			__func__, __LINE__);
 		ps3_sm_power_pressed = 1;
@@ -400,6 +401,7 @@ static int ps3_sys_manager_handle_event(struct ps3_vuart_port_device *dev)
 		ctrl_alt_del();
 		break;
 	case PS3_SM_EVENT_POWER_RELEASED:
+	case PS3_SM_EVENT_RESET_RELEASED:
 		dev_dbg(&dev->core, "%s:%d: POWER_RELEASED (%u ms)\n",
 			__func__, __LINE__, event.value);
 		break;
@@ -509,7 +511,7 @@ fail_id:
 }
 
 /**
- * ps3_sys_manager_work - Asyncronous read handler.
+ * ps3_sys_manager_work - Asynchronous read handler.
  *
  * Signaled when a complete message arrives at the vuart port.
  */
@@ -529,7 +531,7 @@ struct {
 /**
  * ps3_sys_manager_power_off - The final platform machine_power_off routine.
  *
- * This routine never returns.  The routine disables asyncronous vuart reads
+ * This routine never returns.  The routine disables asynchronous vuart reads
  * then spins calling ps3_sys_manager_handle_msg() to receive and acknowledge
  * the shutdown command sent from the system manager.  Soon after the
  * acknowledgement is sent the lpar is destroyed by the HV.  This routine
@@ -559,7 +561,7 @@ void ps3_sys_manager_power_off(void)
 /**
  * ps3_sys_manager_restart - The final platform machine_restart routine.
  *
- * This routine never returns.  The routine disables asyncronous vuart reads
+ * This routine never returns.  The routine disables asynchronous vuart reads
  * then spins calling ps3_sys_manager_handle_msg() to receive and acknowledge
  * the shutdown command sent from the system manager.  Soon after the
  * acknowledgement is sent the lpar is destroyed by the HV.  This routine

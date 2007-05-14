@@ -52,12 +52,6 @@
 #define GELIC_NET_DRV_NAME "Gelic Network Driver"
 #define GELIC_NET_DRV_VERSION "1.0"
 
-static int ps3_gelic_param = 1; /* vlan desc support */
-#ifdef CONFIG_GELIC_NET_MODULE
-module_param(ps3_gelic_param, int, S_IRUGO);
-#endif
-
-static int dmac_status;
 
 MODULE_AUTHOR("SCE Inc.");
 MODULE_DESCRIPTION("Gelic Network driver");
@@ -103,9 +97,7 @@ gelic_net_get_descr_status(struct gelic_net_descr *descr)
 {
 	u32 cmd_status;
 
-	rmb();
 	cmd_status = descr->dmac_cmd_status;
-	rmb();
 	cmd_status >>= GELIC_NET_DESCR_IND_PROC_SHIFT;
 	return cmd_status;
 }
@@ -124,7 +116,6 @@ static void gelic_net_set_descr_status(struct gelic_net_descr *descr,
 	u32 cmd_status;
 
 	/* read the status */
-	mb();
 	cmd_status = descr->dmac_cmd_status;
 	/* clean the upper 4 bits */
 	cmd_status &= GELIC_NET_DESCR_IND_PROC_MASKO;
@@ -206,7 +197,7 @@ static int gelic_net_init_chain(struct gelic_net_card *card,
 	return 0;
 
 iommu_error:
-	for (i--; 0 <= i; i--, descr--)
+	for (i--, descr--; 0 <= i; i--, descr--)
 		if (descr->bus_addr)
 			dma_unmap_single(ctodev(card), descr->bus_addr,
 					 GELIC_NET_DESCR_SIZE,
@@ -364,24 +355,17 @@ static void gelic_net_release_tx_descr(struct gelic_net_card *card,
 {
 	struct sk_buff *skb;
 
-	if (!ps3_gelic_param) {
-		/* unmap the skb */
+
+	if ((descr->data_status & 0x00000001) == 1) { /* end of frame */
 		skb = descr->skb;
 		dma_unmap_single(ctodev(card), descr->buf_addr, skb->len,
 				 DMA_BIDIRECTIONAL);
-
 		dev_kfree_skb_any(skb);
 	} else {
-		if ((descr->data_status & 0x00000001) == 1) { /* end of frame */
-			skb = descr->skb;
-			dma_unmap_single(ctodev(card), descr->buf_addr, skb->len,
-					 DMA_BIDIRECTIONAL);
-			dev_kfree_skb_any(skb);
-		} else {
-			dma_unmap_single(ctodev(card), descr->buf_addr,
-					 descr->buf_size, DMA_BIDIRECTIONAL);
-		}
+		dma_unmap_single(ctodev(card), descr->buf_addr,
+				 descr->buf_size, DMA_BIDIRECTIONAL);
 	}
+
 	descr->buf_addr = 0;
 	descr->buf_size = 0;
 	descr->next_descr_addr = 0;
@@ -390,7 +374,7 @@ static void gelic_net_release_tx_descr(struct gelic_net_card *card,
 	descr->data_status = 0;
 	descr->data_error = 0;
 	descr->skb = NULL;
-	card->tx_chain.tail = card->tx_chain.tail->next;
+	//card->tx_chain.tail = card->tx_chain.tail->next;
 
 	/* set descr status */
 	descr->dmac_cmd_status = GELIC_NET_DMAC_CMDSTAT_NOT_IN_USE;
@@ -405,20 +389,23 @@ static void gelic_net_release_tx_descr(struct gelic_net_card *card,
  */
 static void gelic_net_release_tx_chain(struct gelic_net_card *card, int stop)
 {
-	struct gelic_net_descr_chain *tx_chain = &card->tx_chain;
+	struct gelic_net_descr_chain *tx_chain;
 	enum gelic_net_descr_status status;
 	int release = 0;
 
-	for (;tx_chain->head != tx_chain->tail && tx_chain->tail;) {
+	for (tx_chain = &card->tx_chain;
+	     tx_chain->head != tx_chain->tail && tx_chain->tail;
+	     tx_chain->tail = tx_chain->tail->next) {
 		status = gelic_net_get_descr_status(tx_chain->tail);
 		switch (status) {
 		case GELIC_NET_DESCR_RESPONSE_ERROR:
 		case GELIC_NET_DESCR_PROTECTION_ERROR:
 		case GELIC_NET_DESCR_FORCE_END:
-			dev_info(ctodev(card),
-				 "%s: forcing end of tx descriptor "	\
-				 "with status %x\n",
-				 __func__, status);
+			if (printk_ratelimit())
+				dev_info(ctodev(card),
+					 "%s: forcing end of tx descriptor " \
+					 "with status %x\n",
+					 __func__, status);
 			card->netdev_stats.tx_dropped++;
 			break;
 
@@ -429,22 +416,15 @@ static void gelic_net_release_tx_chain(struct gelic_net_card *card, int stop)
 			break;
 
 		case GELIC_NET_DESCR_CARDOWNED:
-		default: /* any other value (== GELIC_NET_DESCR_NOT_IN_USE) */
+			/* pending tx request */
+		default:
+			/* any other value (== GELIC_NET_DESCR_NOT_IN_USE) */
 			goto out;
 		}
 		gelic_net_release_tx_descr(card, tx_chain->tail);
 		release = 1;
 	}
 out:
-	/* status NOT_IN_USE or chain end */
-	if (!tx_chain->tail) {
-		/* release all chains */
-		if (card->tx_chain.head)
-			dev_err(ctodev(card), "%s:tx_chain.head is NULL\n",
-				__func__);
-		card->tx_chain.tail = card->tx_top;
-		card->tx_chain.head = card->tx_top;
-	}
 	if (!stop && release && netif_queue_stopped(card->netdev))
 		netif_wake_queue(card->netdev);
 }
@@ -592,26 +572,19 @@ int gelic_net_stop(struct net_device *netdev)
 static struct gelic_net_descr *
 gelic_net_get_next_tx_descr(struct gelic_net_card *card)
 {
-	if (card->tx_chain.head == NULL) return NULL;
-	/* check, if head points to not-in-use descr */
-	if (!ps3_gelic_param) {
-		if ( card->tx_chain.tail != card->tx_chain.head->next
-		     && gelic_net_get_descr_status(card->tx_chain.head) ==
-		     GELIC_NET_DESCR_NOT_IN_USE )
-			return card->tx_chain.head;
-		else
-			return NULL;
-	} else {
-		if ( card->tx_chain.tail != card->tx_chain.head->next
-		     && card->tx_chain.tail != card->tx_chain.head->next->next
-		     && gelic_net_get_descr_status(card->tx_chain.head) ==
-		     GELIC_NET_DESCR_NOT_IN_USE
-		     && gelic_net_get_descr_status(card->tx_chain.head->next) ==
-		     GELIC_NET_DESCR_NOT_IN_USE )
-			return card->tx_chain.head;
-		else
-			return NULL;
-	}
+	if (card->tx_chain.head == NULL)
+		return NULL;
+	/*  see if we can two consecutive free descrs */
+	if (card->tx_chain.tail != card->tx_chain.head->next &&
+	    gelic_net_get_descr_status(card->tx_chain.head) ==
+	    GELIC_NET_DESCR_NOT_IN_USE &&
+	    card->tx_chain.tail != card->tx_chain.head->next->next &&
+	    gelic_net_get_descr_status(card->tx_chain.head->next) ==
+	     GELIC_NET_DESCR_NOT_IN_USE )
+		return card->tx_chain.head;
+	else
+		return NULL;
+
 }
 
 /**
@@ -627,35 +600,28 @@ gelic_net_get_next_tx_descr(struct gelic_net_card *card)
 static void gelic_net_set_txdescr_cmdstat(struct gelic_net_descr *descr,
 					  struct sk_buff *skb, int middle)
 {
-	u32 nocs, tcpcs, udpcs;
+	u32 eofr;
 
-	if (middle) {
-		nocs =  GELIC_NET_DMAC_CMDSTAT_NOCS;
-		tcpcs = GELIC_NET_DMAC_CMDSTAT_TCPCS;
-		udpcs = GELIC_NET_DMAC_CMDSTAT_UDPCS;
-	} else {
-		nocs =  GELIC_NET_DMAC_CMDSTAT_NOCS
-			| GELIC_NET_DMAC_CMDSTAT_END_FRAME;
-		tcpcs = GELIC_NET_DMAC_CMDSTAT_TCPCS
-			| GELIC_NET_DMAC_CMDSTAT_END_FRAME;
-		udpcs = GELIC_NET_DMAC_CMDSTAT_UDPCS
-			| GELIC_NET_DMAC_CMDSTAT_END_FRAME;
-	}
+	if (middle)
+		eofr = 0;
+	else
+		eofr = GELIC_NET_DMAC_CMDSTAT_END_FRAME;
 
 	if (skb->ip_summed != CHECKSUM_PARTIAL)
-		descr->dmac_cmd_status = nocs;
+		descr->dmac_cmd_status = GELIC_NET_DMAC_CMDSTAT_NOCS | eofr;
 	else {
 		/* is packet ip?
 		 * if yes: tcp? udp? */
 		if (skb->protocol == htons(ETH_P_IP)) {
 			if (ip_hdr(skb)->protocol == IPPROTO_TCP)
-				descr->dmac_cmd_status = tcpcs;
+				descr->dmac_cmd_status = GELIC_NET_DMAC_CMDSTAT_TCPCS | eofr;
 			else if (ip_hdr(skb)->protocol == IPPROTO_UDP)
-				descr->dmac_cmd_status = udpcs;
-			else
-				/* the stack should checksum non-tcp and non-udp
-				   packets on his own: NETIF_F_IP_CSUM */
-				descr->dmac_cmd_status = nocs;
+				descr->dmac_cmd_status = GELIC_NET_DMAC_CMDSTAT_UDPCS | eofr;
+			else	/*
+				 * the stack should checksum non-tcp and non-udp
+				 * packets on his own: NETIF_F_IP_CSUM
+				 */
+				descr->dmac_cmd_status = GELIC_NET_DMAC_CMDSTAT_NOCS | eofr;
 		}
 	}
 }
@@ -674,16 +640,12 @@ static int gelic_net_prepare_tx_descr_v(struct gelic_net_card *card,
 					struct sk_buff *skb)
 {
 	dma_addr_t buf[2];
-	uint8_t *hdr;
-	struct vlan_ethhdr *v_hdr;
 	unsigned int vlan_len;
 
 	if (skb->len < GELIC_NET_VLAN_POS)
 		return -EINVAL;
 
-	hdr = skb->data;
-	v_hdr = (struct vlan_ethhdr *)skb->data;
-	memcpy(&descr->vlan, v_hdr, GELIC_NET_VLAN_POS);
+	memcpy(&descr->vlan, skb->data, GELIC_NET_VLAN_POS);
 	if (card->vlan_index != -1) {
 		descr->vlan.h_vlan_proto = htons(ETH_P_8021Q); /* vlan 0x8100*/
 		descr->vlan.h_vlan_TCI = htons(card->vlan_id[card->vlan_index]);
@@ -698,7 +660,7 @@ static int gelic_net_prepare_tx_descr_v(struct gelic_net_card *card,
 	if (!buf[0]) {
 		dev_err(ctodev(card),
 			"dma map 1 failed (%p, %i). Dropping packet\n",
-			v_hdr, vlan_len);
+			skb->data, vlan_len);
 		return -ENOMEM;
 	}
 
@@ -715,14 +677,14 @@ static int gelic_net_prepare_tx_descr_v(struct gelic_net_card *card,
 	if (gelic_net_get_descr_status(descr) != GELIC_NET_DESCR_NOT_IN_USE)
 		dev_err(ctodev(card),"descr is not free!\n"); /* XXX will be removed */
 
-	buf[1] = dma_map_single(ctodev(card), hdr + GELIC_NET_VLAN_POS,
+	buf[1] = dma_map_single(ctodev(card), (u8*)skb->data + GELIC_NET_VLAN_POS,
 			     skb->len - GELIC_NET_VLAN_POS,
 			     DMA_BIDIRECTIONAL);
 
 	if (!buf[1]) {
 		dev_err(ctodev(card),
 			"dma map 2 failed (%p, %i). Dropping packet\n",
-			hdr + GELIC_NET_VLAN_POS,
+			(u8*)skb->data + GELIC_NET_VLAN_POS,
 			skb->len - GELIC_NET_VLAN_POS);
 		dma_unmap_single(ctodev(card), buf[0], vlan_len,
 				 DMA_BIDIRECTIONAL);
@@ -733,43 +695,10 @@ static int gelic_net_prepare_tx_descr_v(struct gelic_net_card *card,
 	descr->buf_size = skb->len - GELIC_NET_VLAN_POS;
 	descr->skb = skb;
 	descr->data_status = 0;
-	descr->next_descr_addr= 0;
+	descr->next_descr_addr= 0; /* terminate hw descr */
 	gelic_net_set_txdescr_cmdstat(descr,skb, 0);
 
 	return 0;
-}
-
-static int gelic_net_prepare_tx_descr(struct gelic_net_card *card,
-				      struct gelic_net_descr *descr,
-				      struct sk_buff *skb)
-{
-	dma_addr_t buf = dma_map_single(ctodev(card), skb->data,
-					 skb->len, DMA_BIDIRECTIONAL);
-
-	if (!buf) {
-		dev_err(ctodev(card),
-			"%s:dma map failed(%p, %i). Dropping packet\n",
-			__func__, skb->data, skb->len);
-		return -ENOMEM;
-	}
-
-	descr->buf_addr = buf;
-	descr->buf_size = skb->len;
-	descr->skb = skb;
-	descr->data_status = 0;
-
-	return 0;
-}
-
-static void gelic_net_set_frame_end(struct gelic_net_card *card,
-				    struct gelic_net_descr *descr,
-				    struct sk_buff *skb)
-{
-	descr->next_descr_addr= 0;
-	gelic_net_set_txdescr_cmdstat(descr,skb, 0);
-	wmb();
-	if (descr->prev)
-		descr->prev->next_descr_addr = descr->bus_addr;
 }
 
 /**
@@ -784,17 +713,17 @@ static void gelic_net_kick_txdma(struct gelic_net_card *card,
 	int status;
 	int count = 10;
 
-	if (dmac_status)
+	if (card->tx_dma_progress)
 		return ;
 
 	if (gelic_net_get_descr_status(descr) == GELIC_NET_DESCR_CARDOWNED) {
 		/* kick */
-		dmac_status = 1;
+		card->tx_dma_progress = 1;
 
 		while (count--) {
 			status = lv1_net_start_tx_dma(bus_id(card),
 						      dev_id(card),
-					descr->bus_addr, 0);
+						      descr->bus_addr, 0);
 			if (!status)
 				break;
 		}
@@ -819,29 +748,24 @@ static int gelic_net_xmit(struct sk_buff *skb, struct net_device *netdev)
 	int result;
 	unsigned long flags;
 
-	spin_lock_irqsave(&card->intmask_lock, flags);
+	spin_lock_irqsave(&card->tx_dma_lock, flags);
 
 	gelic_net_release_tx_chain(card, 0);
 	if (skb == NULL)
 		goto kick;
-	descr = gelic_net_get_next_tx_descr(card); /* get tx_chain.head */
+	descr = gelic_net_get_next_tx_descr(card);
 	if (!descr) {
 		netif_stop_queue(netdev);
-		spin_unlock_irqrestore(&card->intmask_lock, flags);
-		return 1;
+		spin_unlock_irqrestore(&card->tx_dma_lock, flags);
+		return NETDEV_TX_BUSY;
 	}
-	if (!ps3_gelic_param)
-		result = gelic_net_prepare_tx_descr(card, descr, skb);
-	else
-		result = gelic_net_prepare_tx_descr_v(card, descr, skb);
+	result = gelic_net_prepare_tx_descr_v(card, descr, skb);
 
 	if (result)
 		goto error;
 
 	card->tx_chain.head = card->tx_chain.head->next;
-	if (!ps3_gelic_param)
-		gelic_net_set_frame_end(card, descr, skb);
-	else
+
 		if (descr->prev)
 			descr->prev->next_descr_addr = descr->bus_addr;
 kick:
@@ -849,12 +773,12 @@ kick:
 	gelic_net_kick_txdma(card, card->tx_chain.tail);
 
 	netdev->trans_start = jiffies;
-	spin_unlock_irqrestore(&card->intmask_lock, flags);
+	spin_unlock_irqrestore(&card->tx_dma_lock, flags);
 	return NETDEV_TX_OK;
 
 error:
 	card->netdev_stats.tx_dropped++;
-	spin_unlock_irqrestore(&card->intmask_lock, flags);
+	spin_unlock_irqrestore(&card->tx_dma_lock, flags);
 	return NETDEV_TX_LOCKED;
 }
 
@@ -944,7 +868,6 @@ static int gelic_net_decode_one_descr(struct gelic_net_card *card)
 
 	descr = chain->tail;
 	cmd_status = chain->tail->dmac_cmd_status;
-	rmb();
 	status = cmd_status >> GELIC_NET_DESCR_IND_PROC_SHIFT;
 	if (status == GELIC_NET_DESCR_CARDOWNED)
 		goto no_decode;
@@ -1073,34 +996,28 @@ static int gelic_net_change_mtu(struct net_device *netdev, int new_mtu)
  */
 static irqreturn_t gelic_net_interrupt(int irq, void *ptr)
 {
+	unsigned long flags;
 	struct net_device *netdev = ptr;
 	struct gelic_net_card *card = netdev_priv(netdev);
-	u32 status0, status1, status2;
-	unsigned long flags;
 	u64 status;
 
 	status = card->irq_status;
-	rmb();
-	status0 = (u32)(status >> 32);
-	status1 = (u32)(status & 0xffffffff);
-	status2 = 0;
 
-	if (!status0 && !status1 && !status2)
+	if (!status)
 		return IRQ_NONE;
 
-	if (status1 & (1 << GELIC_NET_GDADCEINT))
-		netif_rx_schedule(netdev);
-	else if (status0 & (1 << GELIC_NET_GRFANMINT))
+	if (status & GELIC_NET_RXINT)
 		netif_rx_schedule(netdev);
 
-	if (status0 & (1 << GELIC_NET_GDTDCEINT)) {
-		spin_lock_irqsave(&card->intmask_lock, flags);
-		dmac_status = 0;
-		spin_unlock_irqrestore(&card->intmask_lock, flags);
+	if (status & GELIC_NET_TXINT) {
+		spin_lock_irqsave(&card->tx_dma_lock, flags);
+		card->tx_dma_progress = 0;
+		spin_unlock_irqrestore(&card->tx_dma_lock, flags);
+		/* start pending DMA */
 		gelic_net_xmit(NULL, netdev);
 	}
 #ifdef CONFIG_GELIC_WIRELESS
-	gelicw_interrupt(netdev, status1);
+	gelicw_interrupt(netdev, status);
 #endif
 	return IRQ_HANDLED;
 }
@@ -1193,7 +1110,7 @@ int gelic_net_open(struct net_device *netdev)
 	if (gelic_net_alloc_rx_skbs(card))
 		goto alloc_skbs_failed;
 
-	dmac_status = 0;
+	card->tx_dma_progress = 0;
 	card->ghiintmask = GELIC_NET_RXINT | GELIC_NET_TXINT;
 #ifdef CONFIG_GELIC_WIRELESS
 	card->ghiintmask = card->ghiintmask |
@@ -1347,50 +1264,6 @@ static struct ethtool_ops gelic_net_ethtool_ops = {
 };
 #endif
 
-static int gelic_net_ioctl(struct net_device *netdev,
-			   struct ifreq *ifr, int cmd)
-{
-	struct gelic_net_card *card = netdev_priv(netdev);
-	void __user *addr = (void __user *) ifr->ifr_ifru.ifru_data;
-	int mode, res = 0;
-
-	switch(cmd) {
-	case GELIC_NET_GET_MODE:
-		dev_dbg(ctodev(card), "%s:GELIC_NET_GET_MODE:\n", __func__);
-		mode = card->vlan_index;
-		if (copy_to_user(addr, &mode, sizeof(mode)))
-			printk("error copy_to_user\n");
-		res = 0;
-		break;
-	case GELIC_NET_SET_MODE:
-		if (card->vlan_index == -1) {
-			res = -EOPNOTSUPP; /* vlan mode only */
-			break;
-		}
-		if (copy_from_user(&mode, addr, sizeof(mode)))
-			dev_info(ctodev(card),"error copy_from_user\n");
-		dev_dbg(ctodev(card), "%s:GELIC_NET_SET_MODE:%x --> %x \n",
-			 __func__, card->vlan_index, mode);
-		if (mode > GELIC_NET_VLAN_MAX -1 || mode < -1)
-			mode = GELIC_NET_VLAN_WIRED - 1;
-
-		if (card->vlan_index != mode) {
-			card->vlan_index = mode;
-			if (netif_running(netdev)) {
-				gelic_net_stop(netdev);
-				gelic_net_open(netdev);
-			}
-		}
-		res = 0;
-		break;
-	default:
-		res = -EOPNOTSUPP;
-		break;
-	}
-
-	return res;
-}
-
 /**
  * gelic_net_tx_timeout_task - task scheduled by the watchdog timeout
  * function (to be called not under interrupt status)
@@ -1460,7 +1333,6 @@ static void gelic_net_setup_netdev_ops(struct net_device *netdev)
 #ifdef GELIC_NET_ETHTOOL
 	netdev->ethtool_ops = &gelic_net_ethtool_ops;
 #endif
-	netdev->do_ioctl = &gelic_net_ioctl;
 }
 
 /**
@@ -1480,7 +1352,7 @@ static int gelic_net_setup_netdev(struct gelic_net_card *card)
 	u64 v1, v2;
 
 	SET_MODULE_OWNER(netdev);
-	spin_lock_init(&card->intmask_lock);
+	spin_lock_init(&card->tx_dma_lock);
 
 	card->rx_csum = GELIC_NET_RX_CSUM_DEFAULT;
 
@@ -1574,6 +1446,8 @@ static struct gelic_net_card * gelic_net_alloc_card(void)
 	 * check this assumption here.
 	 */
 	BUILD_BUG_ON(NETDEV_ALIGN < 32);
+	BUILD_BUG_ON(offsetof(struct gelic_net_card, irq_status) % 8);
+	BUILD_BUG_ON(offsetof(struct gelic_net_card, descr) % 32);
 
 	netdev = alloc_etherdev(alloc_size);
 	if (!netdev)
@@ -1718,16 +1592,4 @@ static void __exit ps3_gelic_driver_exit (void)
 module_init (ps3_gelic_driver_init);
 module_exit (ps3_gelic_driver_exit);
 
-#ifdef CONFIG_GELIC_NET
-static int __init early_param_gelic_net(char *p)
-{
-	if (strstr(p, "n")) {
-		ps3_gelic_param = 0;	/* gelic_vlan off */
-		pr_debug("ps3_gelic_param:vlan off\n");
-	} else
-		ps3_gelic_param = 1;	/* gelic_vlan on */
-	return 0;
 
-}
-early_param("gelic_vlan", early_param_gelic_net);
-#endif

@@ -878,7 +878,10 @@ static int ps3rom_probe(struct ps3_system_bus_device *_dev)
 
 	dev->host = host;
 	host->hostdata[0] = (unsigned long)dev;
+
+	/* One device/LUN per SCSI bus */
 	host->max_id = 1;
+	host->max_lun = 1;
 
 	error = scsi_add_host(host, &dev->sbd.core);
 	if (error) {

@@ -1129,7 +1129,7 @@ void gelicw_remove(struct net_device *netdev)
 	kfree(w->data_buf);
 }
 
-void gelicw_interrupt(struct net_device *netdev, u32 status1)
+void gelicw_interrupt(struct net_device *netdev, u64 status)
 {
 	struct gelic_wireless *w = gelicw_priv(netdev);
 
@@ -1137,7 +1137,7 @@ void gelicw_interrupt(struct net_device *netdev, u32 status1)
 		return;
 	}
 
-	if (status1 & GELICW_DEVICE_CMD_COMP) {
+	if (status & GELICW_DEVICE_CMD_COMP) {
 		pr_debug("GELICW_DEVICE_CMD_COMP\n");
 		if (w->cmd_id == GELICW_CMD_START) {
 			schedule_work(&w->work_start_done);
@@ -1145,7 +1145,7 @@ void gelicw_interrupt(struct net_device *netdev, u32 status1)
 			complete(&w->cmd_done);
 		}
 	}
-	if (status1 & GELICW_DEVICE_EVENT_RECV) {
+	if (status & GELICW_DEVICE_EVENT_RECV) {
 		pr_debug("GELICW_DEVICE_EVENT_RECV\n");
 		if (w->wireless == GELICW_WIRELESS_SHUTDOWN)
 			gelicw_clear_event(netdev);

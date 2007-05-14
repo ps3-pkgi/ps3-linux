@@ -123,7 +123,7 @@ config PS3_DISK
 
 config PS3_ROM
 	tristate "PS3 ROM Storage Driver"
-	depends on PS3_STORAGE_BUS
+	depends on PS3_STORAGE_BUS && BLK_DEV_SR
 	default y
 	help
 	  Include support for the PS3 ROM Storage.

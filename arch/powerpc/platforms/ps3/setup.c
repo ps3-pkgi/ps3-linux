@@ -99,7 +99,9 @@ static void ps3_panic(char *str)
 	while(1);
 }
 
-#ifdef CONFIG_FB_PS3
+#if defined(CONFIG_FB_PS3) || defined(CONFIG_PS3_FLASH) || \
+    defined(CONFIG_PS3_FLASH_MODULE) || defined(CONFIG_PS3_STORAGE) || \
+    defined(CONFIG_PS3_STORAGE_MODULE)
 static void prealloc(struct ps3_prealloc *p)
 {
 	if (!p->size)
@@ -115,7 +117,9 @@ static void prealloc(struct ps3_prealloc *p)
 	printk(KERN_INFO "%s: %lu bytes at %p\n", p->name, p->size,
 	       p->address);
 }
+#endif
 
+#ifdef CONFIG_FB_PS3
 struct ps3_prealloc ps3fb_videomemory = {
     .name = "ps3fb videomemory",
     .size = CONFIG_FB_PS3_DEFAULT_SIZE_M*1024*1024,
