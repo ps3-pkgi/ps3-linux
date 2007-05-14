@@ -393,7 +393,6 @@ static int ps3_sys_manager_handle_event(struct ps3_vuart_port_device *dev)
 
 	switch (event.type) {
 	case PS3_SM_EVENT_POWER_PRESSED:
-	case PS3_SM_EVENT_RESET_PRESSED:
 		dev_dbg(&dev->core, "%s:%d: POWER_PRESSED\n",
 			__func__, __LINE__);
 		ps3_sm_power_pressed = 1;
@@ -401,8 +400,18 @@ static int ps3_sys_manager_handle_event(struct ps3_vuart_port_device *dev)
 		ctrl_alt_del();
 		break;
 	case PS3_SM_EVENT_POWER_RELEASED:
-	case PS3_SM_EVENT_RESET_RELEASED:
 		dev_dbg(&dev->core, "%s:%d: POWER_RELEASED (%u ms)\n",
+			__func__, __LINE__, event.value);
+		break;
+	case PS3_SM_EVENT_RESET_PRESSED:
+		dev_dbg(&dev->core, "%s:%d: RESET_PRESSED\n",
+			__func__, __LINE__);
+		ps3_sm_power_pressed = 0;
+		wmb();
+		ctrl_alt_del();
+		break;
+	case PS3_SM_EVENT_RESET_RELEASED:
+		dev_dbg(&dev->core, "%s:%d: RESET_RELEASED (%u ms)\n",
 			__func__, __LINE__, event.value);
 		break;
 	case PS3_SM_EVENT_THERMAL_ALERT:
