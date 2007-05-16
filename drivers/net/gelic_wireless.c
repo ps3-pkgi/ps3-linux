@@ -1125,7 +1125,7 @@ void gelicw_remove(struct net_device *netdev)
 	pr_debug("gelicw_remove\n");
 	gelicw_down(netdev);
 	w->wireless = 0;
-	netdev->wireless_handlers = 0;
+	netdev->wireless_handlers = NULL;
 	kfree(w->data_buf);
 }
 

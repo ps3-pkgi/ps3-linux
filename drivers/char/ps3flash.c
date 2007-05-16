@@ -80,8 +80,7 @@ static ssize_t ps3flash_write_chunk(struct ps3_storage_device *dev,
 static loff_t ps3flash_llseek(struct file *file, loff_t offset, int origin)
 {
 	struct ps3_storage_device *dev = ps3flash_dev;
-	unsigned int idx = ffs(dev->accessible_regions)-1;
-	u64 size = dev->regions[idx].size*dev->blk_size;
+	u64 size = dev->regions[dev->region_idx].size*dev->blk_size;
 
 	switch (origin) {
 	case 1:
@@ -103,7 +102,6 @@ static ssize_t ps3flash_read(struct file *file, char __user *buf, size_t count,
 {
 	struct ps3_storage_device *dev = ps3flash_dev;
 	struct ps3flash_private *priv = ps3flash_priv(dev);
-	unsigned int idx = ffs(dev->accessible_regions)-1;
 	u64 size, start_sector, end_sector, offset;
 	ssize_t sectors_read;
 	size_t remaining, n;
@@ -112,7 +110,7 @@ static ssize_t ps3flash_read(struct file *file, char __user *buf, size_t count,
 		"%s:%u: Reading %zu bytes at position %lld to user 0x%p\n",
 		__func__, __LINE__, count, *pos, buf);
 
-	size = dev->regions[idx].size*dev->blk_size;
+	size = dev->regions[dev->region_idx].size*dev->blk_size;
 	if (*pos >= size || !count)
 		return 0;
 
@@ -164,7 +162,6 @@ static ssize_t ps3flash_write(struct file *file, const char __user *buf,
 {
 	struct ps3_storage_device *dev = ps3flash_dev;
 	struct ps3flash_private *priv = ps3flash_priv(dev);
-	unsigned int idx = ffs(dev->accessible_regions)-1;
 	u64 size, chunk_sectors, start_write_sector, end_write_sector,
 	    end_read_sector, start_read_sector, head, tail, offset;
 	ssize_t res;
@@ -174,7 +171,7 @@ static ssize_t ps3flash_write(struct file *file, const char __user *buf,
 		"%s:%u: Writing %zu bytes at position %lld from user 0x%p\n",
 		__func__, __LINE__, count, *pos, buf);
 
-	size = dev->regions[idx].size*dev->blk_size;
+	size = dev->regions[dev->region_idx].size*dev->blk_size;
 	if (*pos >= size || !count)
 		return 0;
 
@@ -304,7 +301,14 @@ static int ps3flash_probe(struct ps3_system_bus_device *_dev)
 	struct ps3_storage_device *dev = to_ps3_storage_device(&_dev->core);
 	struct ps3flash_private *priv;
 	int res, error;
-	unsigned int idx;
+	unsigned long tmp;
+
+	error = ps3stor_probe_access(dev);
+	if (error) {
+		dev_err(&dev->sbd.core, "%s:%u: No accessible regions found\n",
+			__func__, __LINE__);
+		return error;
+	}
 
 	if (!ps3flash_bounce_buffer.address)
 		return -ENOMEM;
@@ -315,25 +319,21 @@ static int ps3flash_probe(struct ps3_system_bus_device *_dev)
 		return -EBUSY;
 	}
 
-	idx = ffs(dev->accessible_regions)-1;
-	dev_dbg(&dev->sbd.core,
-		"First accessible region has index %u start %lu size %lu\n",
-		idx, dev->regions[idx].start, dev->regions[idx].size);
-
 	ps3flash_dev = dev;
 
-	if (dev->regions[idx].start*dev->blk_size % FLASH_BLOCK_SIZE) {
+	tmp = dev->regions[dev->region_idx].start*dev->blk_size;
+	if (tmp % FLASH_BLOCK_SIZE) {
 		dev_err(&dev->sbd.core,
 			"%s:%u region start %lu is not aligned\n", __func__,
-			__LINE__,
-			dev->regions[idx].start*dev->blk_size);
+			__LINE__, tmp);
 		error = -EINVAL;
 		goto fail;
 	}
-	if (dev->regions[idx].size*dev->blk_size % FLASH_BLOCK_SIZE) {
+	tmp = dev->regions[dev->region_idx].size*dev->blk_size;
+	if (tmp % FLASH_BLOCK_SIZE) {
 		dev_err(&dev->sbd.core,
 			"%s:%u region size %lu is not aligned\n", __func__,
-			__LINE__, dev->regions[idx].size*dev->blk_size);
+			__LINE__, tmp);
 		error = -EINVAL;
 		goto fail;
 	}
@@ -379,11 +379,11 @@ static int ps3flash_probe(struct ps3_system_bus_device *_dev)
 	dev->bounce_buf = ps3flash_bounce_buffer.address;
 	dev->bounce_lpar = ps3_mm_phys_to_lpar(__pa(dev->bounce_buf));
 
-	dev->sbd.d_region = &dev->dma;
-	ps3_dma_region_init(&dev->dma, &dev->sbd.did, PS3_DMA_64K,
+	dev->sbd.d_region = &dev->dma_region;
+	ps3_dma_region_init(&dev->dma_region, &dev->sbd.did, PS3_DMA_64K,
 			    PS3_DMA_OTHER, dev->bounce_buf, dev->bounce_size,
 			    PS3_IOBUS_SB);
-	res = ps3_dma_region_create(&dev->dma);
+	res = ps3_dma_region_create(&dev->dma_region);
 	if (res) {
 		dev_err(&dev->sbd.core, "%s:%u: cannot create DMA region\n",
 			__func__, __LINE__);
@@ -415,9 +415,7 @@ fail_unmap_dma:
 	dma_unmap_single(&dev->sbd.core, dev->bounce_dma, dev->bounce_size,
 			 DMA_BIDIRECTIONAL);
 fail_free_dma:
-	ps3_dma_region_free(&dev->dma);
-	// FIXME Prevent the system bus from messing with our DMA
-	dev->sbd.d_region = NULL;
+	ps3_dma_region_free(&dev->dma_region);
 fail_free_irq:
 	free_irq(dev->irq, dev);
 fail_sb_event_receive_port_destroy:
@@ -441,9 +439,7 @@ static int ps3flash_remove(struct ps3_system_bus_device *_dev)
 
 	dma_unmap_single(&dev->sbd.core, dev->bounce_dma, dev->bounce_size,
 			 DMA_BIDIRECTIONAL);
-	ps3_dma_region_free(&dev->dma);
-	// FIXME Prevent the system bus from messing with our DMA
-	dev->sbd.d_region = NULL;
+	ps3_dma_region_free(&dev->dma_region);
 
 	free_irq(dev->irq, dev);
 

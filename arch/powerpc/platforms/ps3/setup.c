@@ -100,8 +100,8 @@ static void ps3_panic(char *str)
 }
 
 #if defined(CONFIG_FB_PS3) || defined(CONFIG_PS3_FLASH) || \
-    defined(CONFIG_PS3_FLASH_MODULE) || defined(CONFIG_PS3_STORAGE) || \
-    defined(CONFIG_PS3_STORAGE_MODULE)
+    defined(CONFIG_PS3_FLASH_MODULE) || defined(CONFIG_PS3_STORAGE_OLD) || \
+    defined(CONFIG_PS3_STORAGE_MODULE_OLD)
 static void prealloc(struct ps3_prealloc *p)
 {
 	if (!p->size)
@@ -142,7 +142,7 @@ early_param("ps3fb", early_parse_ps3fb);
 #endif
 
 #if defined(CONFIG_PS3_FLASH) || defined(CONFIG_PS3_FLASH_MODULE) || \
-    defined(CONFIG_PS3_STORAGE) || defined(CONFIG_PS3_STORAGE_MODULE)
+    defined(CONFIG_PS3_STORAGE_OLD) || defined(CONFIG_PS3_STORAGE_OLD_MODULE)
 struct ps3_prealloc ps3flash_bounce_buffer = {
 	.name = "ps3flash bounce buffer",
 	.size = 256*1024,

@@ -92,7 +92,7 @@ static int gelic_net_set_irq_mask(struct gelic_net_card *card, u64 mask)
  *
  * returns the status as in the dmac_cmd_status field of the descriptor
  */
-enum gelic_net_descr_status
+static enum gelic_net_descr_status
 gelic_net_get_descr_status(struct gelic_net_descr *descr)
 {
 	u32 cmd_status;
@@ -529,7 +529,7 @@ static void gelic_net_disable_txdmac(struct gelic_net_card *card)
  *
  * always returns 0
  */
-int gelic_net_stop(struct net_device *netdev)
+static int gelic_net_stop(struct net_device *netdev)
 {
 	struct gelic_net_card *card = netdev_priv(netdev);
 
@@ -1087,7 +1087,7 @@ fail_alloc_irq:
  * gelic_net_open allocates all the descriptors and memory needed for
  * operation, sets up multicast list and enables interrupts
  */
-int gelic_net_open(struct net_device *netdev)
+static int gelic_net_open(struct net_device *netdev)
 {
 	struct gelic_net_card *card = netdev_priv(netdev);
 

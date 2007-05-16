@@ -703,7 +703,7 @@ void __init ps3_register_ipi_debug_brk(unsigned int cpu, unsigned int virq)
 		cpu, virq, pd->bmp.ipi_debug_brk_mask);
 }
 
-unsigned int ps3_get_irq(void)
+static unsigned int ps3_get_irq(void)
 {
 	struct ps3_private *pd = &__get_cpu_var(ps3_private);
 	u64 x = (pd->bmp.status & pd->bmp.mask);

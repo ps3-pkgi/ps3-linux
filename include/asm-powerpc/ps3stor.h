@@ -35,7 +35,7 @@ struct ps3_storage_region {
 struct ps3_storage_device {
 	struct ps3_system_bus_device sbd;
 
-	struct ps3_dma_region dma;
+	struct ps3_dma_region dma_region;
 	unsigned int irq;
 	u64 blk_size;
 
@@ -50,9 +50,9 @@ struct ps3_storage_device {
 	u64 bounce_lpar;
 	dma_addr_t bounce_dma;
 
-	// FIXME Should we keep the (single?) accessible region only?
 	unsigned int num_regions;
 	unsigned long accessible_regions;
+	unsigned int region_idx;		/* first accessible region */
 	struct ps3_storage_region regions[0];	/* Must be last */
 };
 
@@ -61,6 +61,7 @@ static inline struct ps3_storage_device *to_ps3_storage_device(struct device *de
 	return container_of(dev, struct ps3_storage_device, sbd.core);
 }
 
+extern int ps3stor_probe_access(struct ps3_storage_device *dev);
 extern irqreturn_t ps3stor_interrupt(int irq, void *data);
 extern u64 ps3stor_read_write_sectors(struct ps3_storage_device *dev, u64 lpar,
 				      u64 start_sector, u64 sectors,

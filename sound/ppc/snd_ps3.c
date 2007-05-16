@@ -72,7 +72,7 @@ static DEVICE_ATTR(start_delay,
 /*
  * global
  */
-struct snd_ps3_card_info the_card;
+static struct snd_ps3_card_info the_card;
 
 static int snd_ps3_start_delay = CONFIG_SND_PS3_DEFAULT_START_DELAY;
 
@@ -739,7 +739,7 @@ static int snd_ps3_map_mmio(void)
 static void snd_ps3_unmap_mmio(void)
 {
 	iounmap(the_card.mapped_mmio_vaddr);
-	the_card.mapped_mmio_vaddr = 0;
+	the_card.mapped_mmio_vaddr = NULL;
 }
 
 static int snd_ps3_allocate_irq(void)

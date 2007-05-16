@@ -340,7 +340,7 @@ struct bus_type ps3_system_bus_type = {
 	.dev_attrs = ps3_system_bus_dev_attrs,
 };
 
-int __init ps3_system_bus_init(void)
+static int __init ps3_system_bus_init(void)
 {
 	int result;
 
@@ -534,7 +534,7 @@ static int ps3_dma_supported(struct device *_dev, u64 mask)
 	return mask >= DMA_32BIT_MASK;
 }
 
-struct dma_mapping_ops ps3_sb_dma_ops = {
+static struct dma_mapping_ops ps3_sb_dma_ops = {
 	.alloc_coherent = ps3_alloc_coherent,
 	.free_coherent = ps3_free_coherent,
 	.map_single = ps3_sb_map_single,
@@ -543,9 +543,8 @@ struct dma_mapping_ops ps3_sb_dma_ops = {
 	.unmap_sg = ps3_sb_unmap_sg,
 	.dma_supported = ps3_dma_supported
 };
-EXPORT_SYMBOL(ps3_sb_dma_ops);
 
-struct dma_mapping_ops ps3_ioc0_dma_ops = {
+static struct dma_mapping_ops ps3_ioc0_dma_ops = {
 	.alloc_coherent = ps3_alloc_coherent,
 	.free_coherent = ps3_free_coherent,
 	.map_single = ps3_ioc0_map_single,
@@ -554,7 +553,6 @@ struct dma_mapping_ops ps3_ioc0_dma_ops = {
 	.unmap_sg = ps3_ioc0_unmap_sg,
 	.dma_supported = ps3_dma_supported
 };
-EXPORT_SYMBOL(ps3_ioc0_dma_ops);
 
 /**
  * ps3_system_bus_release_device - remove a device from the system bus

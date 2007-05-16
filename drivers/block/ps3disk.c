@@ -56,6 +56,7 @@ struct ps3disk_private {
 	struct task_struct *thread;
 	struct request_queue *queue;
 	struct gendisk *gendisk;
+	unsigned int blocking_factor;
 };
 #define ps3disk_priv(dev)	((dev)->sbd.core.driver_data)
 
@@ -66,11 +67,6 @@ static int ps3disk_open(struct inode *inode, struct file *file)
 	struct ps3_storage_device *dev = inode->i_bdev->bd_disk->private_data;
 
 	file->private_data = dev;
-	return 0;
-}
-
-static int ps3disk_release(struct inode *inode, struct file *file)
-{
 	return 0;
 }
 
@@ -88,25 +84,8 @@ static int ps3disk_getgeo(struct block_device *bdev, struct hd_geometry *geo)
 static struct block_device_operations ps3disk_fops = {
 	.owner		= THIS_MODULE,
 	.open		= ps3disk_open,
-	.release	= ps3disk_release,
 	.getgeo		= ps3disk_getgeo,
 };
-
-static ssize_t ps3disk_read_write(struct ps3_storage_device *dev,
-				  u64 start_sector, u64 sectors, int write)
-{
-	u64 bytes, hw_start_sector, hw_sectors, res;
-
-	bytes = sectors * KERNEL_SECTOR_SIZE;
-
-	// FIXME Precalculate dev->blk_size/KERNEL_SECTOR_SIZE somewhere
-	hw_start_sector = start_sector * (dev->blk_size/KERNEL_SECTOR_SIZE);
-	hw_sectors = sectors * (dev->blk_size/KERNEL_SECTOR_SIZE);
-
-	res = ps3stor_read_write_sectors(dev, dev->bounce_lpar,
-					 hw_start_sector, hw_sectors, write);
-	return res ? -EIO : sectors;
-}
 
 static void ps3disk_scatter_gather(struct ps3_storage_device *dev,
 				   struct request *req, int gather)
@@ -146,7 +125,7 @@ static void ps3disk_handle_request_sg(struct ps3_storage_device *dev,
 	struct ps3disk_private *priv = ps3disk_priv(dev);
 	int uptodate = 1;
 	int write = rq_data_dir(req);
-	ssize_t res;
+	u64 res;
 
 #ifdef DEBUG
 	unsigned int n = 0;
@@ -163,8 +142,11 @@ static void ps3disk_handle_request_sg(struct ps3_storage_device *dev,
 	if (write)
 		ps3disk_scatter_gather(dev, req, 1);
 
-	res = ps3disk_read_write(dev, req->sector, req->nr_sectors, write);
-	if (res < 0)
+	res = ps3stor_read_write_sectors(dev, dev->bounce_lpar,
+					 req->sector*priv->blocking_factor,
+					 req->nr_sectors*priv->blocking_factor,
+					 write);
+	if (res)
 		uptodate = 0;
 	else if (!write)
 		ps3disk_scatter_gather(dev, req, 0);
@@ -225,10 +207,24 @@ static int ps3disk_probe(struct ps3_system_bus_device *_dev)
 	struct ps3_storage_device *dev = to_ps3_storage_device(&_dev->core);
 	struct ps3disk_private *priv;
 	int res, error;
-	unsigned int idx, devidx;
+	unsigned int devidx;
 	struct request_queue *queue;
 	struct gendisk *gendisk;
 	struct task_struct *task;
+
+	error = ps3stor_probe_access(dev);
+	if (error) {
+		dev_err(&dev->sbd.core, "%s:%u: No accessible regions found\n",
+			__func__, __LINE__);
+		return error;
+	}
+
+	if (dev->blk_size < KERNEL_SECTOR_SIZE) {
+		dev_err(&dev->sbd.core,
+			"%s:%u: cannot handle block size %lu\n", __func__,
+			__LINE__, dev->blk_size);
+		return -EINVAL;
+	}
 
 	BUILD_BUG_ON(PS3DISK_MAX_DISKS > BITS_PER_LONG);
 	devidx = find_first_zero_bit(&ps3disk_mask, PS3DISK_MAX_DISKS);
@@ -238,19 +234,6 @@ static int ps3disk_probe(struct ps3_system_bus_device *_dev)
 		return -ENOSPC;
 	}
 	__set_bit(devidx, &ps3disk_mask);
-
-	idx = ffs(dev->accessible_regions)-1;
-	dev_dbg(&dev->sbd.core,
-		"First accessible region has index %u start %lu size %lu\n",
-		idx, dev->regions[idx].start, dev->regions[idx].size);
-
-	if (dev->blk_size < KERNEL_SECTOR_SIZE) {
-		dev_err(&dev->sbd.core,
-			"%s:%u: cannot handle block size %lu\n", __func__,
-			__LINE__, dev->blk_size);
-		error = -EINVAL;
-		goto fail;
-	}
 
 	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (!priv) {
@@ -297,11 +280,11 @@ static int ps3disk_probe(struct ps3_system_bus_device *_dev)
 
 	dev->bounce_lpar = ps3_mm_phys_to_lpar(__pa(dev->bounce_buf));
 
-	dev->sbd.d_region = &dev->dma;
-	ps3_dma_region_init(&dev->dma, &dev->sbd.did, PS3_DMA_4K,
+	dev->sbd.d_region = &dev->dma_region;
+	ps3_dma_region_init(&dev->dma_region, &dev->sbd.did, PS3_DMA_4K,
 			    PS3_DMA_OTHER, dev->bounce_buf, dev->bounce_size,
 			    PS3_IOBUS_SB);
-	res = ps3_dma_region_create(&dev->dma);
+	res = ps3_dma_region_create(&dev->dma_region);
 	if (res) {
 		dev_err(&dev->sbd.core, "%s:%u: cannot create DMA region\n",
 			__func__, __LINE__);
@@ -329,7 +312,7 @@ static int ps3disk_probe(struct ps3_system_bus_device *_dev)
 	priv->queue = queue;
 	queue->queuedata = dev;
 
-	blk_queue_bounce_limit(queue, BLK_BOUNCE_HIGH);	// FIXME no highmem
+	blk_queue_bounce_limit(queue, BLK_BOUNCE_HIGH);
 
 	blk_queue_max_sectors(queue, dev->bounce_size/KERNEL_SECTOR_SIZE);
 	blk_queue_segment_boundary(queue, -1UL);
@@ -338,7 +321,6 @@ static int ps3disk_probe(struct ps3_system_bus_device *_dev)
 
 	blk_queue_ordered(queue, 0, NULL);	// FIXME no barriers
 
-	// FIXME Tagged Command Queueing?
 	blk_queue_max_phys_segments(queue, -1);
 	blk_queue_max_hw_segments(queue, -1);
 	blk_queue_max_segment_size(queue, dev->bounce_size);
@@ -359,8 +341,9 @@ static int ps3disk_probe(struct ps3_system_bus_device *_dev)
 	gendisk->private_data = dev;
 	snprintf(gendisk->disk_name, sizeof(gendisk->disk_name), PS3DISK_NAME,
 		 devidx+'a');
+	priv->blocking_factor = dev->blk_size/KERNEL_SECTOR_SIZE;
 	set_capacity(gendisk,
-		     dev->regions[idx].size*(dev->blk_size/KERNEL_SECTOR_SIZE));
+		     dev->regions[dev->region_idx].size*priv->blocking_factor);
 
 	task = kthread_run(ps3disk_thread, dev, DEVICE_NAME);
 	if (IS_ERR(task)) {
@@ -380,9 +363,7 @@ fail_unmap_dma:
 	dma_unmap_single(&dev->sbd.core, dev->bounce_dma, dev->bounce_size,
 			 DMA_BIDIRECTIONAL);
 fail_free_dma:
-	ps3_dma_region_free(&dev->dma);
-	// FIXME Prevent the system bus from messing with our DMA
-	dev->sbd.d_region = NULL;
+	ps3_dma_region_free(&dev->dma_region);
 fail_free_irq:
 	free_irq(dev->irq, dev);
 fail_sb_event_receive_port_destroy:
@@ -417,9 +398,7 @@ static int ps3disk_remove(struct ps3_system_bus_device *_dev)
 		blk_cleanup_queue(priv->queue);
 	dma_unmap_single(&dev->sbd.core, dev->bounce_dma, dev->bounce_size,
 			 DMA_BIDIRECTIONAL);
-	ps3_dma_region_free(&dev->dma);
-	// FIXME Prevent the system bus from messing with our DMA
-	dev->sbd.d_region = NULL;
+	ps3_dma_region_free(&dev->dma_region);
 
 	free_irq(dev->irq, dev);
 

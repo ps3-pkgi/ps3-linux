@@ -191,7 +191,8 @@ static int __init setup_areas(struct spu *spu)
 		goto fail_ioremap;
 	}
 
-	spu->local_store = ioremap(spu->local_store_phys, LS_SIZE);
+	spu->local_store = (__force void *)ioremap(spu->local_store_phys,
+						   LS_SIZE);
 	if (!spu->local_store) {
 		pr_debug("%s:%d: ioremap local_store failed\n",
 			__func__, __LINE__);

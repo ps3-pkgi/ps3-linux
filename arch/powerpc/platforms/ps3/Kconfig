@@ -102,18 +102,18 @@ config PS3_SYS_MANAGER
 	  This support is required for system control.  In
 	  general, all users will say Y.
 
-config PS3_STORAGE_BUS
-	tristate "PS3 Storage Bus Driver"
+config PS3_STORAGE
+	tristate "PS3 Storage Drivers"
 	default y
 	help
-	  Include support for the PS3 Storage Bus.
+	  Include support for the PS3's Storage Devices.
 
 	  This support is required to access any PS3 storage devices.
 	  In general, all users will say Y or M.
 
 config PS3_DISK
 	tristate "PS3 Disk Storage Driver"
-	depends on PS3_STORAGE_BUS
+	depends on PS3_STORAGE
 	default y
 	help
 	  Include support for the PS3 Disk Storage.
@@ -123,7 +123,7 @@ config PS3_DISK
 
 config PS3_ROM
 	tristate "PS3 ROM Storage Driver"
-	depends on PS3_STORAGE_BUS && BLK_DEV_SR
+	depends on PS3_STORAGE && BLK_DEV_SR
 	default y
 	help
 	  Include support for the PS3 ROM Storage.
@@ -133,7 +133,7 @@ config PS3_ROM
 
 config PS3_FLASH
 	tristate "PS3 FLASH ROM Storage Driver"
-	depends on PS3_STORAGE_BUS
+	depends on PS3_STORAGE
 	default y
 	help
 	  Include support for the PS3 FLASH ROM Storage.

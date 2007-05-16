@@ -729,14 +729,11 @@ static int ps3rom_probe(struct ps3_system_bus_device *_dev)
 	struct ps3_storage_device *dev = to_ps3_storage_device(&_dev->core);
 	struct ps3rom_private *priv;
 	int res, error;
-	unsigned int idx;
 	struct Scsi_Host *host;
 	struct task_struct *task;
 
-	idx = ffs(dev->accessible_regions)-1;
-	dev_dbg(&dev->sbd.core,
-		"First accessible region has index %u start %lu size %lu\n",
-		idx, dev->regions[idx].start, dev->regions[idx].size);
+	/* special case: CD-ROM is assumed always accessible */
+	dev->accessible_regions = 1;
 
 	if (dev->blk_size != CD_FRAMESIZE) {
 		dev_err(&dev->sbd.core,
@@ -788,11 +785,11 @@ static int ps3rom_probe(struct ps3_system_bus_device *_dev)
 
 	dev->bounce_lpar = ps3_mm_phys_to_lpar(__pa(dev->bounce_buf));
 
-	dev->sbd.d_region = &dev->dma;
-	ps3_dma_region_init(&dev->dma, &dev->sbd.did, PS3_DMA_4K,
+	dev->sbd.d_region = &dev->dma_region;
+	ps3_dma_region_init(&dev->dma_region, &dev->sbd.did, PS3_DMA_4K,
 			    PS3_DMA_OTHER, dev->bounce_buf,
 			    dev->bounce_size, PS3_IOBUS_SB);
-	res = ps3_dma_region_create(&dev->dma);
+	res = ps3_dma_region_create(&dev->dma_region);
 	if (res) {
 		dev_err(&dev->sbd.core, "%s:%u: cannot create DMA region\n",
 			__func__, __LINE__);
@@ -850,9 +847,7 @@ fail_unmap_dma:
 	dma_unmap_single(&dev->sbd.core, dev->bounce_dma, dev->bounce_size,
 			 DMA_BIDIRECTIONAL);
 fail_free_dma:
-	ps3_dma_region_free(&dev->dma);
-	// FIXME Prevent the system bus from messing with our DMA
-	dev->sbd.d_region = NULL;
+	ps3_dma_region_free(&dev->dma_region);
 fail_free_irq:
 	free_irq(dev->irq, dev);
 fail_sb_event_receive_port_destroy:
@@ -885,9 +880,7 @@ static int ps3rom_remove(struct ps3_system_bus_device *_dev)
 
 	dma_unmap_single(&dev->sbd.core, dev->bounce_dma, dev->bounce_size,
 			 DMA_BIDIRECTIONAL);
-	ps3_dma_region_free(&dev->dma);
-	// FIXME Prevent the system bus from messing with our DMA
-	dev->sbd.d_region = NULL;
+	ps3_dma_region_free(&dev->dma_region);
 
 	free_irq(dev->irq, dev);
 

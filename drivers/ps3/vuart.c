@@ -1140,7 +1140,7 @@ static void ps3_vuart_shutdown(struct device *_dev)
  * The vuart is managed as a bus that port devices connect to.
  */
 
-struct bus_type ps3_vuart_bus = {
+static struct bus_type ps3_vuart_bus = {
         .name = "ps3_vuart",
 	.match = ps3_vuart_match,
 	.probe = ps3_vuart_probe,
@@ -1148,7 +1148,7 @@ struct bus_type ps3_vuart_bus = {
 	.shutdown = ps3_vuart_shutdown,
 };
 
-int __init ps3_vuart_bus_init(void)
+static int __init ps3_vuart_bus_init(void)
 {
 	int result;
 
@@ -1164,7 +1164,7 @@ int __init ps3_vuart_bus_init(void)
 	return result;
 }
 
-void __exit ps3_vuart_bus_exit(void)
+static void __exit ps3_vuart_bus_exit(void)
 {
 	pr_debug("%s:%d:\n", __func__, __LINE__);
 	bus_unregister(&ps3_vuart_bus);
