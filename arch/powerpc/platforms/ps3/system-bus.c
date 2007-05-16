@@ -269,9 +269,11 @@ static void ps3_system_bus_shutdown(struct device *_dev)
 	dev_dbg(&dev->core, " -> %s:%d: match_id %d\n", __func__, __LINE__,
 		dev->match_id);
 
-	if (!dev->core.driver)
+	if (!dev->core.driver) {
 		dev_dbg(&dev->core, "%s:%d: no driver bound\n", __func__,
 			__LINE__);
+		return;
+	}
 
 	drv = to_ps3_system_bus_driver(dev->core.driver);
 

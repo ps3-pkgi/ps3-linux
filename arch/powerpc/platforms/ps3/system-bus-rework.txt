@@ -11,9 +11,9 @@ CONFIG_FB_PS3			o	o(2)	o
 CONFIG_USB_EHCI_HCD		o	o	o
 CONFIG_USB_OHCI_HCD		o	o	o
 CONFIG_PS3_VUART		o	o	o
-CONFIG_PS3_STORAGE_BUS		o	o	o
-CONFIG_PS3_FLASH		o	o	o
-CONFIG_PS3_DISK			o	o	o
+CONFIG_PS3_STORAGE_BUS		o	o	o	o	x(4)
+CONFIG_PS3_FLASH		o	o	o	o	o
+CONFIG_PS3_DISK			o	o	o	o	o
 CONFIG_PS3_ROM			o	o	o
 CONFIG_SND_PS3			o	o	o
 CONFIG_SPU_FS			o	o	o
@@ -33,4 +33,5 @@ power button	o
 
 (2) fbcon trouble, temp fix: ps3-hack-fbcon-shutdown.diff
 (3) not working, WIP
+(4) ps3_storage_bus loaded as 'permanent'.
 --------------------------------------------------------------------------------
