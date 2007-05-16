@@ -24,14 +24,13 @@
 #include <linux/interrupt.h>
 #include <linux/kthread.h>
 
-#include <asm/lv1call.h>
-
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>
 #include <scsi/scsi_device.h>
 #include <scsi/scsi_host.h>
 
-#include "../../arch/powerpc/platforms/ps3/storage.h"	// FIXME
+#include <asm/lv1call.h>
+#include <asm/ps3stor.h>
 
 
 #define DEVICE_NAME			"ps3rom"
@@ -42,6 +41,15 @@
 
 #define LV1_STORAGE_SEND_ATAPI_COMMAND	(1)
 
+
+struct ps3rom_private {
+	spinlock_t lock;
+	struct task_struct *thread;
+	struct Scsi_Host *host;
+	struct scsi_cmnd *cmd;
+	void (*scsi_done)(struct scsi_cmnd *);
+};
+#define ps3rom_priv(dev)	((dev)->sbd.core.driver_data)
 
 struct lv1_atapi_cmnd_block {
 	u8	pkt[32];	/* packet command block           */
@@ -232,34 +240,31 @@ static int ps3rom_slave_configure(struct scsi_device *scsi_dev)
 
 static void ps3rom_slave_destroy(struct scsi_device *scsi_dev)
 {
-	struct ps3_storage_device *dev = scsi_dev->hostdata;
-
-	dev_dbg(&dev->sbd.core, "%s:%u: id %u, lun %u, channel %u\n", __func__,
-		__LINE__, scsi_dev->id, scsi_dev->lun, scsi_dev->channel);
 }
 
 static int ps3rom_queuecommand(struct scsi_cmnd *cmd,
 			       void (*done)(struct scsi_cmnd *))
 {
 	struct ps3_storage_device *dev = cmd->device->hostdata;
+	struct ps3rom_private *priv = ps3rom_priv(dev);
 
 	dev_dbg(&dev->sbd.core, "%s:%u: command 0x%02x (%s)\n", __func__,
 		__LINE__, cmd->cmnd[0], scsi_command(cmd->cmnd[0]));
 
-	spin_lock_irq(&dev->lock);
-	if (dev->cmd) {
+	spin_lock_irq(&priv->lock);
+	if (priv->cmd) {
 		/* no more than one can be processed */
 		dev_err(&dev->sbd.core, "%s:%u: more than 1 command queued\n",
 			__func__, __LINE__);
-		spin_unlock_irq(&dev->lock);
+		spin_unlock_irq(&priv->lock);
 		return SCSI_MLQUEUE_HOST_BUSY;
 	}
 
 	// FIXME Prevalidate commands?
-	dev->cmd = cmd;
-	dev->scsi_done = done;
-	spin_unlock_irq(&dev->lock);
-	wake_up_process(dev->thread);
+	priv->cmd = cmd;
+	priv->scsi_done = done;
+	spin_unlock_irq(&priv->lock);
+	wake_up_process(priv->thread);
 	return 0;
 
 
@@ -437,48 +442,6 @@ static u64 ps3rom_send_atapi_command(struct ps3_storage_device *dev,
 	return dev->lv1_status;
 }
 
-static u64 ps3rom_read_write_sectors(struct ps3_storage_device *dev, u64 lpar,
-				     u64 start_sector, u64 sectors, int write)
-{
-	unsigned int idx = ffs(dev->accessible_regions)-1;
-	unsigned int region_id = dev->regions[idx].id;
-	int res = 0;
-	const char *op = write ? "write" : "read";
-
-	dev_dbg(&dev->sbd.core, "%s:%u: %s %lu sectors starting at %lu\n",
-		__func__, __LINE__, op, sectors, start_sector);
-
-	init_completion(&dev->irq_done);
-	if (write) {
-		res = lv1_storage_write(dev->sbd.did.dev_id, region_id,
-					start_sector, sectors,
-					0, /* flags */
-					lpar, &dev->tag);
-	} else {
-		res = lv1_storage_read(dev->sbd.did.dev_id, region_id,
-				       start_sector, sectors,
-				       0, /* flags */
-				       lpar, &dev->tag);
-	}
-	if (res) {
-		dev_err(&dev->sbd.core, "%s:%u: %s failed %d\n", __func__,
-			__LINE__, op, res);
-		return -1;
-	}
-
-	wait_for_completion(&dev->irq_done);
-	if (dev->lv1_status) {
-		dev_err(&dev->sbd.core, "%s:%u: %s failed 0x%lx\n", __func__,
-			__LINE__, op, dev->lv1_status);
-		return dev->lv1_status;
-	}
-
-	dev_dbg(&dev->sbd.core, "%s:%u: %s completed\n", __func__, __LINE__,
-		op);
-
-	return 0;
-}
-
 static void ps3rom_atapi_request(struct ps3_storage_device *dev,
 				 struct scsi_cmnd *cmd, unsigned int len,
 				 int proto, int in_out, int auto_sense)
@@ -590,8 +553,8 @@ static void ps3rom_read_request(struct ps3_storage_device *dev,
 {
 	u64 status;
 
-	status = ps3rom_read_write_sectors(dev, dev->bounce_lpar, start_sector,
-					   sectors, 0);
+	status = ps3stor_read_write_sectors(dev, dev->bounce_lpar,
+					    start_sector, sectors, 0);
 	if (status == -1) {
 		cmd->result = DID_ERROR << 16; /* FIXME: other error code? */
 		return;
@@ -622,8 +585,8 @@ static void ps3rom_write_request(struct ps3_storage_device *dev,
 	// FIXME check error
 	fetch_to_dev_buffer(cmd, dev->bounce_buf, sectors * CD_FRAMESIZE);
 
-	status = ps3rom_read_write_sectors(dev, dev->bounce_lpar, start_sector,
-					   sectors, 1);
+	status = ps3stor_read_write_sectors(dev, dev->bounce_lpar,
+					    start_sector, sectors, 1);
 	if (status == -1) {
 		cmd->result = DID_ERROR << 16; /* FIXME: other error code? */
 		return;
@@ -646,6 +609,7 @@ static void ps3rom_request(struct ps3_storage_device *dev,
 			   struct scsi_cmnd *cmd)
 {
 	unsigned char opcode = cmd->cmnd[0];
+	struct ps3rom_private *priv = ps3rom_priv(dev);
 
 	dev_dbg(&dev->sbd.core, "%s:%u: command 0x%02x (%s)\n", __func__,
 		__LINE__, opcode, scsi_command(opcode));
@@ -710,15 +674,16 @@ static void ps3rom_request(struct ps3_storage_device *dev,
 		cmd->sense_buffer[2] = ILLEGAL_REQUEST;
 	}
 
-	spin_lock_irq(&dev->lock);
-	dev->cmd = NULL;
-	dev->scsi_done(cmd);
-	spin_unlock_irq(&dev->lock);
+	spin_lock_irq(&priv->lock);
+	priv->cmd = NULL;
+	priv->scsi_done(cmd);
+	spin_unlock_irq(&priv->lock);
 }
 
 static int ps3rom_thread(void *data)
 {
 	struct ps3_storage_device *dev = data;
+	struct ps3rom_private *priv = ps3rom_priv(dev);
 	struct scsi_cmnd *cmd;
 
 	dev_dbg(&dev->sbd.core, "%s thread init\n", __func__);
@@ -726,10 +691,10 @@ static int ps3rom_thread(void *data)
 	current->flags |= PF_NOFREEZE;
 
 	while (!kthread_should_stop()) {
-		spin_lock_irq(&dev->lock);
+		spin_lock_irq(&priv->lock);
 		set_current_state(TASK_INTERRUPTIBLE);
-		cmd = dev->cmd;
-		spin_unlock_irq(&dev->lock);
+		cmd = priv->cmd;
+		spin_unlock_irq(&priv->lock);
 		if (!cmd) {
 			schedule();
 			continue;
@@ -739,31 +704,6 @@ static int ps3rom_thread(void *data)
 
 	dev_dbg(&dev->sbd.core, "%s thread exit\n", __func__);
 	return 0;
-}
-
-static irqreturn_t ps3rom_interrupt(int irq, void *data)
-{
-	struct ps3_storage_device *dev = data;
-
-	dev->lv1_res = lv1_storage_get_async_status(dev->sbd.did.dev_id,
-						    &dev->lv1_tag,
-						    &dev->lv1_status);
-	/*
-	 * lv1_status = -1 may mean that ATAPI transport completed OK, but
-	 * ATAPI command itself resulted CHECK CONDITION
-	 * so, upper layer should issue REQUEST_SENSE to check the sense data
-	 */
-
-	if (dev->lv1_tag != dev->tag)
-		dev_err(&dev->sbd.core,
-			"%s:%u: tag mismatch, got %lx, expected %lx\n",
-			__func__, __LINE__, dev->lv1_tag, dev->tag);
-	if (dev->lv1_res)
-		dev_err(&dev->sbd.core, "%s:%u: res=%d status=0x%lx\n",
-			__func__, __LINE__, dev->lv1_res, dev->lv1_status);
-	else
-		complete(&dev->irq_done);
-	return IRQ_HANDLED;
 }
 
 
@@ -787,19 +727,11 @@ static struct scsi_host_template ps3rom_host_template = {
 static int ps3rom_probe(struct ps3_system_bus_device *_dev)
 {
 	struct ps3_storage_device *dev = to_ps3_storage_device(&_dev->core);
+	struct ps3rom_private *priv;
 	int res, error;
 	unsigned int idx;
 	struct Scsi_Host *host;
 	struct task_struct *task;
-
-	dev_dbg(&dev->sbd.core, "%s:%u\n", __func__, __LINE__);
-
-	dev_dbg(&dev->sbd.core, "=============================================\n");
-	dev_dbg(&dev->sbd.core, "        Engaging new ROM driver\n");
-	dev_dbg(&dev->sbd.core, "=============================================\n");
-
-	mutex_init(&dev->mutex);	// FIXME unused?
-	spin_lock_init(&dev->lock);
 
 	idx = ffs(dev->accessible_regions)-1;
 	dev_dbg(&dev->sbd.core,
@@ -813,17 +745,26 @@ static int ps3rom_probe(struct ps3_system_bus_device *_dev)
 		return -EINVAL;
 	}
 
+	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
+	if (!priv)
+		return -ENOMEM;
+
+	ps3rom_priv(dev) = priv;
+	spin_lock_init(&priv->lock);
+
 	dev->bounce_size = BOUNCE_SIZE;
 	dev->bounce_buf = kmalloc(BOUNCE_SIZE, GFP_DMA);
-	if (!dev->bounce_buf)
-		return -ENOMEM;
+	if (!dev->bounce_buf) {
+		error = -ENOMEM;
+		goto fail_free_priv;
+	}
 
 	error = ps3_open_hv_device(&dev->sbd.did);
 	if (error) {
 		dev_err(&dev->sbd.core,
 			"%s:%u: ps3_open_hv_device failed %d\n", __func__,
 			__LINE__, error);
-		goto fail_free;
+		goto fail_free_bounce;
 	}
 
 	error = ps3_sb_event_receive_port_setup(PS3_BINDING_CPU_ANY,
@@ -837,7 +778,7 @@ static int ps3rom_probe(struct ps3_system_bus_device *_dev)
 		goto fail_close_device;
 	}
 
-	error = request_irq(dev->irq, ps3rom_interrupt, IRQF_DISABLED,
+	error = request_irq(dev->irq, ps3stor_interrupt, IRQF_DISABLED,
 			    DEVICE_NAME, dev);
 	if (error) {
 		dev_err(&dev->sbd.core, "%s:%u: request_irq failed %d\n",
@@ -876,7 +817,7 @@ static int ps3rom_probe(struct ps3_system_bus_device *_dev)
 		goto fail_unmap_dma;
 	}
 
-	dev->host = host;
+	priv->host = host;
 	host->hostdata[0] = (unsigned long)dev;
 
 	/* One device/LUN per SCSI bus */
@@ -896,7 +837,7 @@ static int ps3rom_probe(struct ps3_system_bus_device *_dev)
 		error = PTR_ERR(task);
 		goto fail_remove_host;
 	}
-	dev->thread = task;
+	priv->thread = task;
 
 	scsi_scan_host(host);
 	return 0;
@@ -905,7 +846,6 @@ fail_remove_host:
 	scsi_remove_host(host);
 fail_host_put:
 	scsi_host_put(host);
-	dev->host = NULL;
 fail_unmap_dma:
 	dma_unmap_single(&dev->sbd.core, dev->bounce_dma, dev->bounce_size,
 			 DMA_BIDIRECTIONAL);
@@ -920,26 +860,28 @@ fail_sb_event_receive_port_destroy:
 					  dev->irq);
 fail_close_device:
 	ps3_close_hv_device(&dev->sbd.did);
-fail_free:
+fail_free_bounce:
 	kfree(dev->bounce_buf);
-	dev->bounce_buf = NULL;
+fail_free_priv:
+	kfree(priv);
 	return error;
 }
 
 static int ps3rom_remove(struct ps3_system_bus_device *_dev)
 {
 	struct ps3_storage_device *dev = to_ps3_storage_device(&_dev->core);
+	struct ps3rom_private *priv = ps3rom_priv(dev);
 	int error;
 
 	dev_dbg(&dev->sbd.core, "%s:%u\n", __func__, __LINE__);
 
-	if (dev->host) {
-		scsi_remove_host(dev->host);
-		scsi_host_put(dev->host);
+	if (priv->host) {
+		scsi_remove_host(priv->host);
+		scsi_host_put(priv->host);
 	}
 
-	if (dev->thread)
-		kthread_stop(dev->thread);
+	if (priv->thread)
+		kthread_stop(priv->thread);
 
 	dma_unmap_single(&dev->sbd.core, dev->bounce_dma, dev->bounce_size,
 			 DMA_BIDIRECTIONAL);
@@ -964,6 +906,7 @@ static int ps3rom_remove(struct ps3_system_bus_device *_dev)
 			__LINE__, error);
 
 	kfree(dev->bounce_buf);
+	kfree(priv);
 	return 0;
 }
 
@@ -978,13 +921,11 @@ static struct ps3_system_bus_driver ps3rom = {
 
 static int __init ps3rom_init(void)
 {
-	pr_debug("%s:%u\n", __func__, __LINE__);
 	return ps3_system_bus_driver_register(&ps3rom, PS3_IOBUS_SB);
 }
 
 static void __exit ps3rom_exit(void)
 {
-	pr_debug("%s:%u\n", __func__, __LINE__);
 	return ps3_system_bus_driver_unregister(&ps3rom);
 }
 

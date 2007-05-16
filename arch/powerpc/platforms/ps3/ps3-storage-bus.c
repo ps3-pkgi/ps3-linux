@@ -28,15 +28,15 @@
 
 #include <asm/firmware.h>
 #include <asm/lv1call.h>
+#include <asm/ps3stor.h>
 
 #include "platform.h"
-#include "storage.h"
 
 
 extern struct dma_mapping_ops ps3_sb_dma_ops;	// FIXME
 
 #ifdef DEBUG
-static const char *ps3_stor_dev_type(enum ps3_dev_type dev_type)
+static const char *ps3stor_dev_type(enum ps3_dev_type dev_type)
 {
 	switch (dev_type) {
 	case PS3_DEV_TYPE_STOR_DISK:
@@ -56,16 +56,17 @@ static const char *ps3_stor_dev_type(enum ps3_dev_type dev_type)
 	}
 }
 #else
-static inline const char *ps3_stor_dev_type(enum ps3_dev_type dev_type)
+static inline const char *ps3stor_dev_type(enum ps3_dev_type dev_type)
 {
     return NULL;
 }
 #endif /* DEBUG */
 
-#define NOTIFICATION_DEVID ((u64)(-1L))
+#define NOTIFICATION_DEVID	((u64)(-1L))
+#define NOTIFICATION_TIMEOUT	HZ
 
-static u64 ps3_stor_wait_for_completion(u64 devid, u64 tag,
-					unsigned int timeout)
+static u64 ps3stor_wait_for_completion(u64 devid, u64 tag,
+				       unsigned int timeout)
 {
 	unsigned int retries = 0;
 	u64 res = -1, status;
@@ -85,8 +86,8 @@ static u64 ps3_stor_wait_for_completion(u64 devid, u64 tag,
 	return res;
 }
 
-static int ps3_stor_probe_notification(struct ps3_storage_device *dev,
-				       enum ps3_dev_type dev_type)
+static int ps3stor_probe_notification(struct ps3_storage_device *dev,
+				      enum ps3_dev_type dev_type)
 {
 	int error = -ENODEV, res;
 	u64 *buf;
@@ -120,7 +121,8 @@ static int ps3_stor_probe_notification(struct ps3_storage_device *dev,
 	}
 
 	/* wait for completion in one second */
-	res = ps3_stor_wait_for_completion(NOTIFICATION_DEVID, dev->tag, HZ);
+	res = ps3stor_wait_for_completion(NOTIFICATION_DEVID, dev->tag,
+					  NOTIFICATION_TIMEOUT);
 	if (res) {
 		/* write not completed */
 		printk(KERN_ERR "%s:%u: write not completed %d\n", __func__,
@@ -133,8 +135,8 @@ static int ps3_stor_probe_notification(struct ps3_storage_device *dev,
 		memset(buf, 0, 512);
 		lv1_storage_read(NOTIFICATION_DEVID, 0, 0, 1, 0, lpar,
 				 &dev->tag);
-		res = ps3_stor_wait_for_completion(NOTIFICATION_DEVID,
-						   dev->tag, HZ);
+		res = ps3stor_wait_for_completion(NOTIFICATION_DEVID, dev->tag,
+						  NOTIFICATION_TIMEOUT);
 		if (res) {
 			/* read not completed */
 			printk(KERN_ERR "%s:%u: read not completed %d\n",
@@ -165,19 +167,87 @@ fail_free:
 	return error;
 }
 
-static irqreturn_t ps3_stor_probe_interrupt(int irq, void *data)
+/**
+ *	ps3stor_interrupt - common interrupt routine for storage drivers
+ *	@irq: IRQ number
+ *	@data: Pointer to a struct ps3_storage_device
+ */
+irqreturn_t ps3stor_interrupt(int irq, void *data)
 {
 	struct ps3_storage_device *dev = data;
 
 	dev->lv1_res = lv1_storage_get_async_status(dev->sbd.did.dev_id,
 						    &dev->lv1_tag,
 						    &dev->lv1_status);
-	complete(&dev->irq_done);
+	/*
+	 * lv1_status = -1 may mean that ATAPI transport completed OK, but
+	 * ATAPI command itself resulted CHECK CONDITION
+	 * so, upper layer should issue REQUEST_SENSE to check the sense data
+	 */
 
+	if (dev->lv1_tag != dev->tag)
+		dev_err(&dev->sbd.core,
+			"%s:%u: tag mismatch, got %lx, expected %lx\n",
+			__func__, __LINE__, dev->lv1_tag, dev->tag);
+	if (dev->lv1_res)
+		dev_err(&dev->sbd.core, "%s:%u: res=%d status=0x%lx\n",
+			__func__, __LINE__, dev->lv1_res, dev->lv1_status);
+	else
+		complete(&dev->irq_done);
 	return IRQ_HANDLED;
 }
+EXPORT_SYMBOL_GPL(ps3stor_interrupt);
 
-static int ps3_stor_probe_access(struct ps3_storage_device *dev)
+/**
+ *	ps3stor_read_write_sectors - read/write from/to a storage device
+ *	@dev: Pointer to a struct ps3_storage_device
+ *	@lpar: HV logical partition address
+ *	@start_sector: First sector to read/write
+ *	@sectors: Number of sectors to read/write
+ *	@write: Flag indicating write (non-zero) or read (zero)
+ *
+ *	Returns 0 for success, -1 in case of failure to submit the command, or
+ *	an LV1 status value in case of other errors
+ */
+u64 ps3stor_read_write_sectors(struct ps3_storage_device *dev, u64 lpar,
+			       u64 start_sector, u64 sectors, int write)
+{
+	unsigned int idx = ffs(dev->accessible_regions)-1;
+	unsigned int region_id = dev->regions[idx].id;
+	const char *op = write ? "write" : "read";
+	int res;
+
+	dev_dbg(&dev->sbd.core, "%s:%u: %s %lu sectors starting at %lu\n",
+		__func__, __LINE__, op, sectors, start_sector);
+
+	init_completion(&dev->irq_done);
+	res = write ? lv1_storage_write(dev->sbd.did.dev_id, region_id,
+					start_sector, sectors, 0, lpar,
+					&dev->tag)
+		    : lv1_storage_read(dev->sbd.did.dev_id, region_id,
+				       start_sector, sectors, 0, lpar,
+				       &dev->tag);
+	if (res) {
+		dev_err(&dev->sbd.core, "%s:%u: %s failed %d\n", __func__,
+			__LINE__, op, res);
+		return -1;
+	}
+
+	wait_for_completion(&dev->irq_done);
+	if (dev->lv1_status) {
+		dev_err(&dev->sbd.core, "%s:%u: %s failed 0x%lx\n", __func__,
+			__LINE__, op, dev->lv1_status);
+		return dev->lv1_status;
+	}
+
+	dev_dbg(&dev->sbd.core, "%s:%u: %s completed\n", __func__, __LINE__,
+		op);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(ps3stor_read_write_sectors);
+
+static int ps3stor_probe_access(struct ps3_storage_device *dev)
 {
 	int res, error;
 	unsigned int irq, i;
@@ -194,24 +264,12 @@ static int ps3_stor_probe_access(struct ps3_storage_device *dev)
 		return 0;
 	}
 
-	/*
-	 * 1. open the device
-	 * 2. register irq for the device
-	 * 3. connect irq
-	 * 4. map dma region
-	 * 5. do read
-	 * 6. umap dma region
-	 * 7. disconnect irq
-	 * 8. unregister irq
-	 * 9. close the device
-	 */
-
-	res = lv1_open_device(dev->sbd.did.bus_id, dev->sbd.did.dev_id, 0);
-	if (res) {
+	error = ps3_open_hv_device(&dev->sbd.did);
+	if (error) {
 		printk(KERN_ERR "%s:%u: open device %u:%u failed %d\n",
 		       __func__, __LINE__, dev->sbd.did.bus_id,
-		       dev->sbd.did.dev_id, res);
-		return -ENODEV;
+		       dev->sbd.did.dev_id, error);
+		return error;
 	}
 
 	error = ps3_sb_event_receive_port_setup(PS3_BINDING_CPU_ANY,
@@ -224,8 +282,8 @@ static int ps3_stor_probe_access(struct ps3_storage_device *dev)
 		goto fail_close_device;
 	}
 
-	error = request_irq(irq, ps3_stor_probe_interrupt, IRQF_DISABLED,
-			    "ps3_stor_probe", dev);
+	error = request_irq(irq, ps3stor_interrupt, IRQF_DISABLED,
+			    "ps3stor-probe", dev);
 	if (error) {
 		printk(KERN_ERR "%s:%u: request_irq failed %d\n", __func__,
 		       __LINE__, error);
@@ -316,12 +374,12 @@ fail_event_receive_port_destroy:
 	ps3_sb_event_receive_port_destroy(&dev->sbd.did, dev->sbd.interrupt_id,
 					  irq);
 fail_close_device:
-	lv1_close_device(dev->sbd.did.bus_id, dev->sbd.did.dev_id);
+	ps3_close_hv_device(&dev->sbd.did);
 
 	return error;
 }
 
-static int ps3_stor_probe_dev(struct ps3_repository_device *repo)
+static int ps3stor_probe_dev(struct ps3_repository_device *repo)
 {
 	int error;
 	u64 port, blk_size, num_blocks;
@@ -336,23 +394,22 @@ static int ps3_stor_probe_dev(struct ps3_repository_device *repo)
 	error = ps3_repository_read_dev_id(repo->bus_index, repo->dev_index,
 					   &repo->did.dev_id);
 	if (error) {
-		pr_debug("%s:%u: read_dev_id failed %d\n", __func__, __LINE__,
-			 error);
+		printk(KERN_ERR "%s:%u: read_dev_id failed %d\n", __func__,
+		       __LINE__, error);
 		return -ENODEV;
 	}
 
 	error = ps3_repository_read_dev_type(repo->bus_index, repo->dev_index,
 					     &dev_type);
 	if (error) {
-		pr_debug("%s:%u: read_dev_type failed %d\n", __func__,
-			__LINE__, error);
+		printk(KERN_ERR "%s:%u: read_dev_type failed %d\n", __func__,
+		       __LINE__, error);
 		return -ENODEV;
 	}
 
 	pr_debug("%s:%u: index %u:%u: id %u:%u dev_type %u (%s)\n", __func__,
-		 __LINE__, repo->bus_index, repo->dev_index,
-		 repo->did.bus_id, repo->did.dev_id, dev_type,
-		 ps3_stor_dev_type(dev_type));
+		 __LINE__, repo->bus_index, repo->dev_index, repo->did.bus_id,
+		 repo->did.dev_id, dev_type, ps3stor_dev_type(dev_type));
 
 	switch (dev_type) {
 	case PS3_DEV_TYPE_STOR_DISK:
@@ -376,8 +433,8 @@ static int ps3_stor_probe_dev(struct ps3_repository_device *repo)
 						  &blk_size, &num_blocks,
 						  &num_regions);
 	if (error) {
-		pr_debug("%s:%u: _read_stor_dev_info failed %d\n", __func__,
-			 __LINE__, error);
+		printk(KERN_ERR "%s:%u: _read_stor_dev_info failed %d\n",
+		       __func__, __LINE__, error);
 		return -ENODEV;
 	}
 	pr_debug("%s:%u: index %u:%u: port %lu blk_size %lu num_blocks %lu "
@@ -394,16 +451,14 @@ static int ps3_stor_probe_dev(struct ps3_repository_device *repo)
 	dev->sbd.match_id = match_id;
 	dev->sbd.did = repo->did;
 	dev->sbd.d_region = &dev->dma;
-	dev->port = port;
 	dev->blk_size = blk_size;
-	dev->num_blocks = num_blocks;
 	dev->num_regions = num_regions;
 
 	error = ps3_repository_find_interrupt(repo,
 					      PS3_INTERRUPT_TYPE_EVENT_PORT,
 					      &dev->sbd.interrupt_id);
 	if (error) {
-		pr_debug("%s:%u: find_interrupt failed %d\n", __func__,
+		printk(KERN_ERR "%s:%u: find_interrupt failed %d\n", __func__,
 			__LINE__, error);
 		goto cleanup;
 	}
@@ -435,10 +490,10 @@ static int ps3_stor_probe_dev(struct ps3_repository_device *repo)
 #endif
 
 	/* FIXME Do we really need this? I guess for kboot only? */
-	error = ps3_stor_probe_notification(dev, dev_type);
+	error = ps3stor_probe_notification(dev, dev_type);
 	if (error) {
-		pr_debug("%s:%u: probe_notification failed %d\n", __func__,
-			 __LINE__, error);
+		printk(KERN_ERR "%s:%u: probe_notification failed %d\n",
+		       __func__, __LINE__, error);
 		goto cleanup;
 	}
 
@@ -451,8 +506,9 @@ static int ps3_stor_probe_dev(struct ps3_repository_device *repo)
 							    &id, &start,
 							    &size);
 		if (error) {
-			pr_debug("%s:%u: read_stor_dev_region failed %d\n",
-				 __func__, __LINE__, error);
+			printk(KERN_ERR
+			       "%s:%u: read_stor_dev_region failed %d\n",
+			       __func__, __LINE__, error);
 			goto cleanup;
 		}
 		pr_debug("%s:%u: region %u: id %u start %lu size %lu\n",
@@ -467,10 +523,10 @@ static int ps3_stor_probe_dev(struct ps3_repository_device *repo)
 	// FIXME Perhaps we should do the probing in each storage driver
 	//       itself?
 	dev->sbd.core.archdata.dma_ops = &ps3_sb_dma_ops;
-	error = ps3_stor_probe_access(dev);
+	error = ps3stor_probe_access(dev);
 	if (error) {
-		pr_debug("%s:%u: probe_access failed %d\n", __func__, __LINE__,
-			 error);
+		printk(KERN_ERR "%s:%u: probe_access failed %d\n", __func__,
+		       __LINE__, error);
 		goto cleanup;
 	}
 
@@ -479,8 +535,8 @@ static int ps3_stor_probe_dev(struct ps3_repository_device *repo)
 
 	error = ps3_system_bus_device_register(&dev->sbd, PS3_IOBUS_SB);
 	if (error) {
-		pr_debug("%s:%u: ps3_system_register failed %d\n", __func__,
-			 __LINE__, error);
+		printk(KERN_ERR "%s:%u: ps3_system_register failed %d\n",
+		       __func__, __LINE__, error);
 		goto cleanup;
 	}
 	return 0;
@@ -490,7 +546,7 @@ cleanup:
 	return -ENODEV;
 }
 
-static int ps3_storage_thread(void *data)
+static int ps3stor_thread(void *data)
 {
 	struct ps3_repository_device *repo = data;
 	int error;
@@ -515,13 +571,10 @@ static int ps3_storage_thread(void *data)
 				 __func__, __LINE__, n, n - repo->dev_index);
 
 			while (repo->dev_index < n && !error) {
-				error = ps3_stor_probe_dev(repo);
+				error = ps3stor_probe_dev(repo);
 				repo->dev_index++;
 			}
 
-			if (error)
-				pr_debug("%s:%u: ps3_stor_probe_dev failed %d\n",
-					 __func__, __LINE__, error);
 			ms = 250;
 		}
 
@@ -536,13 +589,11 @@ static int ps3_storage_thread(void *data)
 }
 
 
-static int __init ps3_storage_init(void)
+static int __init ps3stor_init(void)
 {
 	int error;
 	static struct ps3_repository_device repo;
 	struct task_struct *task;
-
-	pr_debug("%s:%u\n", __func__, __LINE__);
 
 	if (!firmware_has_feature(FW_FEATURE_PS3_LV1))
 		return -ENODEV;
@@ -567,13 +618,13 @@ static int __init ps3_storage_init(void)
 	pr_debug("%s:%u: Storage bus has id %u\n", __func__, __LINE__,
 		 repo.did.bus_id);
 
-	task = kthread_run(ps3_storage_thread, &repo, "ps3stor-probe");
+	task = kthread_run(ps3stor_thread, &repo, "ps3stor-probe");
 	BUG_ON(IS_ERR(task));
 
 	return 0;
 }
 
-postcore_initcall(ps3_storage_init);
+postcore_initcall(ps3stor_init);
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("PS3 Storage Bus Driver");

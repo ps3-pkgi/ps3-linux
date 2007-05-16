@@ -187,14 +187,14 @@ enum ps3_sys_manager_cmd {
 };
 
 /**
- * ps3_sm_power_pressed - Poweroff helper.
+ * ps3_sm_force_power_off - Poweroff helper.
  *
  * A global variable used to force a poweroff when the power button has
  * been pressed irrespective of how init handles the ctrl_alt_del signal.
  *
  */
 
-static unsigned int ps3_sm_power_pressed;
+static unsigned int ps3_sm_force_power_off;
 
 /**
  * ps3_sys_manager_write - Helper to write a two part message to the vuart.
@@ -395,7 +395,7 @@ static int ps3_sys_manager_handle_event(struct ps3_vuart_port_device *dev)
 	case PS3_SM_EVENT_POWER_PRESSED:
 		dev_dbg(&dev->core, "%s:%d: POWER_PRESSED\n",
 			__func__, __LINE__);
-		ps3_sm_power_pressed = 1;
+		ps3_sm_force_power_off = 1;
 		wmb();
 		ctrl_alt_del();
 		break;
@@ -406,7 +406,7 @@ static int ps3_sys_manager_handle_event(struct ps3_vuart_port_device *dev)
 	case PS3_SM_EVENT_RESET_PRESSED:
 		dev_dbg(&dev->core, "%s:%d: RESET_PRESSED\n",
 			__func__, __LINE__);
-		ps3_sm_power_pressed = 0;
+		ps3_sm_force_power_off = 0;
 		wmb();
 		ctrl_alt_del();
 		break;
@@ -587,7 +587,7 @@ void ps3_sys_manager_restart(void)
 
 	/* Check if we got here via a power button event. */
 
-	if(ps3_sm_power_pressed) {
+	if(ps3_sm_force_power_off) {
 		dev_dbg(&dev->core, "%s:%d: forcing poweroff\n",
 			__func__, __LINE__);
 		ps3_sys_manager_power_off();
