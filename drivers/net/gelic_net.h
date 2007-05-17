@@ -209,7 +209,12 @@ struct gelic_net_descr_chain {
 
 struct gelic_net_card {
 	struct net_device *netdev;
-	u64 irq_status __attribute__((aligned(8)));
+	/*
+	 * hypervisor requires irq_status should be
+	 * 8 bytes aligned, but u64 member is
+	 * always disposed in that manner
+	 */
+	u64 irq_status;
 	u64 ghiintmask;
 
 	struct ps3_system_bus_device *dev;

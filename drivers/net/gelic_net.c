@@ -677,14 +677,14 @@ static int gelic_net_prepare_tx_descr_v(struct gelic_net_card *card,
 	if (gelic_net_get_descr_status(descr) != GELIC_NET_DESCR_NOT_IN_USE)
 		dev_err(ctodev(card),"descr is not free!\n"); /* XXX will be removed */
 
-	buf[1] = dma_map_single(ctodev(card), (u8*)skb->data + GELIC_NET_VLAN_POS,
+	buf[1] = dma_map_single(ctodev(card), skb->data + GELIC_NET_VLAN_POS,
 			     skb->len - GELIC_NET_VLAN_POS,
 			     DMA_BIDIRECTIONAL);
 
 	if (!buf[1]) {
 		dev_err(ctodev(card),
 			"dma map 2 failed (%p, %i). Dropping packet\n",
-			(u8*)skb->data + GELIC_NET_VLAN_POS,
+			skb->data + GELIC_NET_VLAN_POS,
 			skb->len - GELIC_NET_VLAN_POS);
 		dma_unmap_single(ctodev(card), buf[0], vlan_len,
 				 DMA_BIDIRECTIONAL);
@@ -822,10 +822,11 @@ static int gelic_net_pass_skb_up(struct gelic_net_descr *descr,
 	skb->dev = netdev;
 	skb_put(skb, descr->valid_size);
 	descr->skb = NULL;
-	/* the card seems to add 2 bytes of junk in front
-	 * of the ethernet frame */
-#define GELIC_NET_MISALIGN		2
-	skb_pull(skb, GELIC_NET_MISALIGN);
+	/*
+	 * the card put 2 bytes vlan tag in front
+	 * of the ethernet frame
+	 */
+	skb_pull(skb, 2);
 	skb->protocol = eth_type_trans(skb, netdev);
 
 	/* checksum offload */
@@ -867,13 +868,14 @@ static int gelic_net_decode_one_descr(struct gelic_net_card *card)
 	u32 cmd_status;
 
 	descr = chain->tail;
-	cmd_status = chain->tail->dmac_cmd_status;
-	status = cmd_status >> GELIC_NET_DESCR_IND_PROC_SHIFT;
+
+	status = gelic_net_get_descr_status(descr);
+
 	if (status == GELIC_NET_DESCR_CARDOWNED)
-		goto no_decode;
+		return 0;
 	if (status == GELIC_NET_DESCR_NOT_IN_USE) {
 		dev_err(ctodev(card), "%s:free descriptor?\n", __func__);
-		goto no_decode;
+		return 0;
 	}
 
 	if ((status == GELIC_NET_DESCR_RESPONSE_ERROR) ||
@@ -911,9 +913,6 @@ refill:
 		gelic_net_enable_rxdmac(card);
 	}
 	return result;
-
-no_decode:
-	return 0;
 }
 
 /**
@@ -1370,7 +1369,7 @@ static int gelic_net_setup_netdev(struct gelic_net_card *card)
 		return -EINVAL;
 	}
 	v1 <<= 16;
-	memcpy(addr.sa_data, (u8*)&v1, ETH_ALEN);
+	memcpy(addr.sa_data, &v1, ETH_ALEN);
 	memcpy(netdev->dev_addr, addr.sa_data, ETH_ALEN);
 	dev_info(ctodev(card), "MAC addr %02x:%02x:%02x:%02x:%02x:%02x\n",
 		 netdev->dev_addr[0], netdev->dev_addr[1],
