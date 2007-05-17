@@ -97,15 +97,18 @@ struct ps3_dma_region_ops;
  */
 
 struct ps3_dma_region {
-	const struct ps3_dma_region_ops * region_ops;
+	/* device variables (set by ps3_dma_region_init) */
+	const struct ps3_dma_region_ops *region_ops;
 	struct ps3_device_id did;
+	unsigned char ioid;
 	enum ps3_dma_page_size page_size;
 	enum ps3_dma_region_type region_type;
-	unsigned long bus_addr;
 	unsigned long len;
 	unsigned long offset;
-	unsigned char ioid;
  	//unsigned long iopte_flag;
+
+	/* driver variables  (set by ps3_dma_region_create) */
+	unsigned long bus_addr;
 	struct {
 		spinlock_t lock;
 		struct list_head head;

@@ -660,10 +660,12 @@ fail_alloc:
 
 static int dma_sb_region_create(struct ps3_dma_region* r)
 {
-	u64 len;
 	int result;
 
+	pr_info(" -> %s:%d:\n", __func__, __LINE__);
+
 	BUG_ON(!r);
+
 	if(!r->did.bus_id) {
 		pr_info("%s:%d: %u:%u no dma\n", __func__, __LINE__,
 			r->did.bus_id, r->did.dev_id);
@@ -672,13 +674,17 @@ static int dma_sb_region_create(struct ps3_dma_region* r)
 
 	DBG("%s:%u: len = 0x%lx, page_size = %u, offset = 0x%lx\n", __func__,
 	    __LINE__, r->len, r->page_size, r->offset);
+
+	BUG_ON(!r->len);
+	BUG_ON(!r->page_size);
+	BUG_ON(!r->region_ops);
+
 	INIT_LIST_HEAD(&r->chunk_list.head);
 	spin_lock_init(&r->chunk_list.lock);
 
-	len = roundup_pow_of_two(r->len);
 	result = lv1_allocate_device_dma_region(r->did.bus_id, r->did.dev_id,
-		len, r->page_size, r->region_type, &r->bus_addr);
-	dma_dump_region(r);
+		roundup_pow_of_two(r->len), r->page_size, r->region_type,
+		&r->bus_addr);
 
 	if (result) {
 		DBG("%s:%d: lv1_allocate_device_dma_region failed: %s\n",
@@ -725,6 +731,7 @@ static int dma_sb_region_free(struct ps3_dma_region* r)
 	struct dma_chunk *tmp;
 
 	BUG_ON(!r);
+
 	if(!r->did.bus_id) {
 		pr_info("%s:%d: %u:%u no dma\n", __func__, __LINE__,
 			r->did.bus_id, r->did.dev_id);
@@ -740,10 +747,10 @@ static int dma_sb_region_free(struct ps3_dma_region* r)
 		r->bus_addr);
 
 	if (result)
-		DBG("%s:%d: lv1_release_io_segment failed: %s\n",
+		DBG("%s:%d: lv1_free_device_dma_region failed: %s\n",
 			__func__, __LINE__, ps3_result(result));
 
-	r->len = r->bus_addr = 0;
+	r->bus_addr = 0;
 
 	return result;
 }
@@ -765,7 +772,7 @@ static int dma_ioc0_region_free(struct ps3_dma_region* r)
 		DBG("%s:%d: lv1_free_device_dma_region failed: %s\n",
 			__func__, __LINE__, ps3_result(result));
 
-	r->len = r->bus_addr = 0;
+	r->bus_addr = 0;
 	DBG("%s: end\n", __func__);
 
 	return result;
@@ -1006,7 +1013,7 @@ static int dma_sb_region_create_linear(struct ps3_dma_region *r)
 		BUG_ON(result);
 	}
 
-	if (r->offset+r->len > map.rm.size) {
+	if (r->offset + r->len > map.rm.size) {
 		/* Map (part of) 2nd RAM chunk */
 		virt_addr = USE_LPAR_ADDR ? map.r1.base : map.rm.size;
 		len = r->len;
@@ -1045,7 +1052,7 @@ static int dma_sb_region_free_linear(struct ps3_dma_region *r)
 		BUG_ON(result);
 	}
 
-	if (r->offset+r->len > map.rm.size) {
+	if (r->offset + r->len > map.rm.size) {
 		/* Unmap (part of) 2nd RAM chunk */
 		lpar_addr = map.r1.base;
 		len = r->len;

@@ -2,14 +2,14 @@ Status of the system-bus re-work
 
 o=working
 x=not working
-
+NA=no support planned
 				1st	shut	2nd	insmod	rmmod
 				boot	down	boot
 
 CONFIG_GELIC_NET		o	o	o
 CONFIG_FB_PS3			o	o(2)	o
-CONFIG_USB_EHCI_HCD		o	o	o
-CONFIG_USB_OHCI_HCD		o	o	o
+CONFIG_USB_EHCI_HCD		o	o	o	o(5)	o
+CONFIG_USB_OHCI_HCD		o	o	o	o(5)	o
 CONFIG_PS3_VUART		o	o	o
 CONFIG_PS3_STORAGE		o	o	o	o	x(4)
 CONFIG_PS3_FLASH		o	o	o	o	o
@@ -17,7 +17,7 @@ CONFIG_PS3_DISK			o	o	o	o	o
 CONFIG_PS3_ROM			o	o	o
 CONFIG_SND_PS3			o	o	o
 CONFIG_SPU_FS			o	o	o
-CONFIG_PS3_STORAGE_OLD		o	o	o
+CONFIG_PS3_STORAGE_OLD		o	o	o	NA	NA
 
 -- commands --
 
@@ -33,5 +33,22 @@ power button	o
 
 (2) fbcon trouble, temp fix: ps3-hack-fbcon-shutdown.diff
 (3) not working, WIP
-(4) ps3_storage_bus loaded as 'permanent'.
+(4) CONFIG_PS3_STORAGE is loaded as 'permanent'.
+(5) modprobe binding trouble
+	# lsmod
+	Module                  Size  Used by
+	usbcore               172328  1
+	# modprobe usbhid
+	# lsmod
+	Module                  Size  Used by
+	usbhid                 37616  0
+	usbcore               172328  2 usbhid
+	# modprobe ehci_hcd
+	# lsmod
+	Module                  Size  Used by
+	usb_storage            52364  1
+	ehci_hcd               59044  0
+	usbhid                 37616  0
+	usbcore               172328  4 usb_storage,ehci_hcd,usbhid
+
 --------------------------------------------------------------------------------
