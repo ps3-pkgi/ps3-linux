@@ -670,6 +670,7 @@ static int ps3_sys_manager_remove(struct ps3_vuart_port_device *dev)
 static void ps3_sys_manager_shutdown(struct ps3_vuart_port_device *dev)
 {
 	dev_dbg(&dev->core, "%s:%d\n", __func__, __LINE__);
+	return 0;
 }
 
 static struct ps3_vuart_port_driver ps3_sys_manager = {

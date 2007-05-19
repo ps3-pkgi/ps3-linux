@@ -59,9 +59,6 @@ struct ps3_device_id {
 	unsigned int dev_id;
 };
 
-int ps3_open_hv_device(struct ps3_device_id *did);
-int ps3_close_hv_device(struct ps3_device_id *did);
-
 /* dma routines */
 
 enum ps3_dma_page_size {
@@ -328,6 +325,7 @@ enum ps3_match_id {
 	PS3_MATCH_ID_STOR_ROM,
 	PS3_MATCH_ID_STOR_FLASH,
 	PS3_MATCH_ID_SOUND,
+	PS3_MATCH_ID_GPU,
 };
 
 /**
@@ -344,15 +342,18 @@ struct ps3_system_bus_device {
 	struct device core;
 };
 
-static inline void ps3_system_bus_device_init(struct ps3_system_bus_device * dev,
-		enum ps3_match_id match_id,
-		struct ps3_dma_region * d_region,
-		struct ps3_mmio_region * m_region)
+static inline void ps3_system_bus_device_init(
+	struct ps3_system_bus_device *dev, enum ps3_match_id match_id,
+	struct ps3_dma_region * d_region, struct ps3_mmio_region * m_region)
 {
 	dev->match_id = match_id;
 	dev->m_region = m_region;
 	dev->d_region = d_region;
 };
+
+int ps3_open_hv_device(struct ps3_system_bus_device *dev);
+int ps3_close_hv_device(struct ps3_system_bus_device *dev);
+
 /**
  * struct ps3_system_bus_driver - a driver for a device on the system bus
  */

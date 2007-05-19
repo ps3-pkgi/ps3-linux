@@ -756,7 +756,7 @@ static int ps3rom_probe(struct ps3_system_bus_device *_dev)
 		goto fail_free_priv;
 	}
 
-	error = ps3_open_hv_device(&dev->sbd.did);
+	error = ps3_open_hv_device(&dev->sbd);
 	if (error) {
 		dev_err(&dev->sbd.core,
 			"%s:%u: ps3_open_hv_device failed %d\n", __func__,
@@ -854,7 +854,7 @@ fail_sb_event_receive_port_destroy:
 	ps3_sb_event_receive_port_destroy(&dev->sbd.did, dev->sbd.interrupt_id,
 					  dev->irq);
 fail_close_device:
-	ps3_close_hv_device(&dev->sbd.did);
+	ps3_close_hv_device(&dev->sbd);
 fail_free_bounce:
 	kfree(dev->bounce_buf);
 fail_free_priv:
@@ -892,7 +892,7 @@ static int ps3rom_remove(struct ps3_system_bus_device *_dev)
 			"%s:%u: destroy event receive port failed %d\n",
 			__func__, __LINE__, error);
 
-	error = ps3_close_hv_device(&dev->sbd.did);
+	error = ps3_close_hv_device(&dev->sbd);
 	if (error)
 		dev_err(&dev->sbd.core,
 			"%s:%u: ps3_close_hv_device failed %d\n", __func__,

@@ -89,7 +89,7 @@ static int ps3_ohci_probe(struct ps3_system_bus_device *dev)
 		goto fail_start;
 	}
 
-	result = ps3_open_hv_device(&dev->did);
+	result = ps3_open_hv_device(dev);
 
 	if (result) {
 		dev_dbg(&dev->core, "%s:%d: lv1_open_device failed: %s\n",
@@ -189,7 +189,7 @@ fail_irq:
 fail_mmio_region:
 	ps3_dma_region_free(dev->d_region);
 fail_dma_region:
-	ps3_close_hv_device(&dev->did);
+	ps3_close_hv_device(dev);
 fail_open:
 fail_start:
 	return result;
@@ -222,7 +222,7 @@ static int ps3_ohci_remove (struct ps3_system_bus_device *dev)
 	ps3_free_mmio_region(dev->m_region);
 
 	ps3_dma_region_free(dev->d_region);
-	ps3_close_hv_device(&dev->did);
+	ps3_close_hv_device(dev);
 
 	return 0;
 }

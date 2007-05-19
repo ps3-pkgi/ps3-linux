@@ -1484,7 +1484,7 @@ static int ps3_gelic_driver_probe (struct ps3_system_bus_device *dev)
 	ps3_system_bus_set_driver_data(dev, card);
 	card->dev = dev;
 
-	result = ps3_open_hv_device(&dev->did);
+	result = ps3_open_hv_device(dev);
 
 	if (result) {
 		dev_dbg(&dev->core, "ps3_open_hv_device failed\n");
@@ -1530,7 +1530,7 @@ fail_setup_netdev:
 fail_status_indicator:
 	ps3_dma_region_free(dev->d_region);
 fail_dma_region:
-	ps3_close_hv_device(&dev->did);
+	ps3_close_hv_device(dev);
 fail_open:
 	ps3_system_bus_set_driver_data(dev, NULL);
 	free_netdev(card->netdev);
@@ -1564,7 +1564,7 @@ static int ps3_gelic_driver_remove (struct ps3_system_bus_device *dev)
 
 	ps3_dma_region_free(dev->d_region);
 
-	ps3_close_hv_device(&dev->did);
+	ps3_close_hv_device(dev);
 
 	return 0;
 }

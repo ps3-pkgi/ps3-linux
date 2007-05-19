@@ -145,6 +145,8 @@ struct ps3fb_priv {
 };
 static struct ps3fb_priv ps3fb;
 
+static struct ps3_system_bus_device fake_dev; //FIXME: need to put ps3fb on system-bus
+
 struct ps3fb_res_table {
 	u32 xres;
 	u32 yres;
@@ -1123,7 +1125,7 @@ void ps3fb_cleanup(void)
 	if (status)
 		DPRINTK("lv1_gpu_memory_free failed: %d\n", status);
 
-	ps3av_dev_close();
+	ps3_close_hv_device(&fake_dev);
 }
 
 static int ps3fb_remove(struct platform_device *dev)
@@ -1206,6 +1208,7 @@ EXPORT_SYMBOL_GPL(ps3fb_set_sync);
 static int __init ps3fb_init(void)
 {
 	int error;
+
 #ifndef MODULE
 	int mode;
 	char *option = NULL;
@@ -1217,9 +1220,11 @@ static int __init ps3fb_init(void)
 	if (!ps3fb_videomemory.address)
 		goto err;
 
-	error = ps3av_dev_open();
+	//FIXME: shouldn't this be in ps3fb_probe?
+	ps3_system_bus_device_init(&fake_dev, PS3_MATCH_ID_GPU, NULL, NULL);
+	error = ps3_open_hv_device(&fake_dev);
 	if (error) {
-		printk(KERN_ERR "%s: ps3av_dev_open failed\n", __func__);
+		printk(KERN_ERR "%s: ps3_open_hv_device failed\n", __func__);
 		goto err;
 	}
 

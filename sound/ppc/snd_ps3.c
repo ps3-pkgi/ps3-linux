@@ -824,7 +824,8 @@ static int __init snd_ps3_driver_probe(struct ps3_system_bus_device * dev)
 
 	the_card.ps3_dev = dev;
 
-	ret = ps3av_dev_open();
+	ret = ps3_open_hv_device(dev);
+
 	if (ret)
 		return -ENXIO;
 
@@ -971,7 +972,7 @@ clean_mmio:
 clean_dev_map:
 	lv1_gpu_device_unmap(2);
 clean_open:
-	ps3av_dev_close();
+	ps3_close_hv_device(dev);
 	/*
 	 * there is no destructor function to pcm.
 	 * midlayer automatically releases if the card removed
@@ -980,14 +981,11 @@ clean_open:
 }; /* snd_ps3_probe */
 
 /* called when module removal */
-static int snd_ps3_driver_remove(struct ps3_system_bus_device * device)
+static int snd_ps3_driver_remove(struct ps3_system_bus_device *dev)
 {
 	int ret;
 
-	if (!firmware_has_feature(FW_FEATURE_PS3_LV1))
-		return -ENXIO;
-
-	if (device->match_id != PS3_MATCH_ID_SOUND)
+	if (dev->match_id != PS3_MATCH_ID_SOUND)
 		return -ENXIO;
 
 	ret = snd_ctl_remove(the_card.card, the_card.vol_control);
@@ -1000,18 +998,18 @@ static int snd_ps3_driver_remove(struct ps3_system_bus_device * device)
 	if (ret)
 		printk("%s: ctl freecard=%d\n", __func__,ret);
 
-	dma_free_coherent(&the_card.ps3_dev->core,
+	dma_free_coherent(&dev->core,
 			  PAGE_SIZE,
 			  the_card.null_buffer_start_vaddr,
 			  the_card.null_buffer_start_dma_addr);
 
-	ps3_dma_region_free(the_card.ps3_dev->d_region);
+	ps3_dma_region_free(dev->d_region);
 
 	snd_ps3_free_irq();
 	snd_ps3_unmap_mmio();
 
 	lv1_gpu_device_unmap(2);
-	ps3av_dev_close();
+	ps3_close_hv_device(dev);
 	return 0;
 } /* snd_ps3_remove */
 

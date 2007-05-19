@@ -125,7 +125,7 @@ int ps3stor_probe_access(struct ps3_storage_device *dev)
 	dma_addr_t dma;
 	u64 lpar;
 
-	error = ps3_open_hv_device(&dev->sbd.did);
+	error = ps3_open_hv_device(&dev->sbd);
 	if (error) {
 		dev_err(&dev->sbd.core, "%s:%u: open device %u:%u failed %d\n",
 			__func__, __LINE__, dev->sbd.did.bus_id,
@@ -245,7 +245,7 @@ fail_event_receive_port_destroy:
 	ps3_sb_event_receive_port_destroy(&dev->sbd.did, dev->sbd.interrupt_id,
 					  irq);
 fail_close_device:
-	ps3_close_hv_device(&dev->sbd.did);
+	ps3_close_hv_device(&dev->sbd);
 
 	return error;
 }

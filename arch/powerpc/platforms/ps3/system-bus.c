@@ -32,68 +32,197 @@
 
 #include "platform.h"
 
+static struct device ps3_system_bus = {
+        .bus_id         = "ps3_system",
+};
+
 // FIXME: need device usage counters!
 struct {
-	int id_11; // usb 0
-	int id_12; // usb 1
+	struct mutex mutex;
+	int sb_11; // usb 0
+	int sb_12; // usb 1
+	int gpu;
 } static usage_hack;
 
-int ps3_open_hv_device(struct ps3_device_id *did)
+static int ps3_open_hv_device_sb(struct ps3_system_bus_device *dev)
 {
 	int result;
 
-	BUG_ON(!did->bus_id); // now just for sb devices.
+	BUG_ON(!dev->did.bus_id);
+	mutex_lock(&usage_hack.mutex);
 
-	// FIXME: hacks for dev usage counts.
-
-	if(did->bus_id == 1 && did->dev_id == 1) {
-		usage_hack.id_11++;
-		if (usage_hack.id_11 > 1)
-			return 0;
+	if(dev->did.bus_id == 1 && dev->did.dev_id == 1) {
+		usage_hack.sb_11++;
+		if (usage_hack.sb_11 > 1) {
+			result = 0;
+			goto done;
+		}
 	}
 
-	if(did->bus_id == 1 && did->dev_id == 2) {
-		usage_hack.id_12++;
-		if (usage_hack.id_12 > 1)
-			return 0;
+	if(dev->did.bus_id == 1 && dev->did.dev_id == 2) {
+		usage_hack.sb_12++;
+		if (usage_hack.sb_12 > 1) {
+			result = 0;
+			goto done;
+		}
 	}
 
-	result = lv1_open_device(did->bus_id, did->dev_id, 0);
+	result = lv1_open_device(dev->did.bus_id, dev->did.dev_id, 0);
 
-  	if (result) {
-  		pr_debug("%s:%d: lv1_open_device failed: %s\n", __func__,
+	if (result) {
+		pr_debug("%s:%d: lv1_open_device failed: %s\n", __func__,
 			__LINE__, ps3_result(result));
 			result = -EPERM;
 	}
 
+done:
+	mutex_unlock(&usage_hack.mutex);
 	return result;
 }
-EXPORT_SYMBOL_GPL(ps3_open_hv_device);
 
-int ps3_close_hv_device(struct ps3_device_id *did)
+static int ps3_close_hv_device_sb(struct ps3_system_bus_device *dev)
 {
 	int result;
 
-	BUG_ON(!did->bus_id); // now just for sb devices.
+	BUG_ON(!dev->did.bus_id);
+	mutex_lock(&usage_hack.mutex);
 
-	// FIXME: hacks for dev usage counts.
-
-	if(did->bus_id == 1 && did->dev_id == 1) {
-		usage_hack.id_11--;
-		if (usage_hack.id_11)
-			return 0;
+	if(dev->did.bus_id == 1 && dev->did.dev_id == 1) {
+		usage_hack.sb_11--;
+		if (usage_hack.sb_11) {
+			result = 0;
+			goto done;
+		}
 	}
 
-	if(did->bus_id == 1 && did->dev_id == 2) {
-		usage_hack.id_12--;
-		if (usage_hack.id_12)
-			return 0;
+	if(dev->did.bus_id == 1 && dev->did.dev_id == 2) {
+		usage_hack.sb_12--;
+		if (usage_hack.sb_12) {
+			result = 0;
+			goto done;
+		}
 	}
 
-	result = lv1_close_device(did->bus_id, did->dev_id);
+	result = lv1_close_device(dev->did.bus_id, dev->did.dev_id);
 	BUG_ON(result);
 
+done:
+	mutex_unlock(&usage_hack.mutex);
 	return result;
+}
+
+static int ps3_open_hv_device_gpu(struct ps3_system_bus_device *dev)
+{
+	int result;
+
+	mutex_lock(&usage_hack.mutex);
+
+	usage_hack.gpu++;
+	if (usage_hack.gpu > 1) {
+		result = 0;
+		goto done;
+	}
+
+	result = lv1_gpu_open(0);
+
+	if (result) {
+		pr_debug("%s:%d: lv1_gpu_open failed: %s\n", __func__,
+			__LINE__, ps3_result(result));
+			result = -EPERM;
+	}
+
+done:
+	mutex_unlock(&usage_hack.mutex);
+	return result;
+}
+
+static int ps3_close_hv_device_gpu(struct ps3_system_bus_device *dev)
+{
+	int result;
+
+	mutex_lock(&usage_hack.mutex);
+
+	usage_hack.gpu--;
+	if (usage_hack.gpu) {
+		result = 0;
+		goto done;
+	}
+
+	result = lv1_gpu_close();
+	BUG_ON(result);
+
+done:
+	mutex_unlock(&usage_hack.mutex);
+	return result;
+}
+
+int ps3_open_hv_device(struct ps3_system_bus_device *dev)
+{
+	BUG_ON(!dev);
+	pr_debug("%s:%d: match_id: %u\n", __func__, __LINE__, dev->match_id);
+
+	switch(dev->match_id) {
+	case PS3_MATCH_ID_EHCI:
+	case PS3_MATCH_ID_OHCI:
+	case PS3_MATCH_ID_GELIC:
+	case PS3_MATCH_ID_STOR_DISK:
+	case PS3_MATCH_ID_STOR_ROM:
+	case PS3_MATCH_ID_STOR_FLASH:
+		return ps3_open_hv_device_sb(dev);
+	case PS3_MATCH_ID_AV_SETTINGS:
+	case PS3_MATCH_ID_GPU:
+		return ps3_open_hv_device_gpu(dev);
+	case PS3_MATCH_ID_SOUND:
+	case PS3_MATCH_ID_SYSTEM_MANAGER:
+		pr_debug("%s:%d: unsupported match_id: %u\n", __func__,
+			__LINE__, dev->match_id);
+		pr_debug("%s:%d: bus_id: %u\n", __func__,
+			__LINE__, dev->did.bus_id);
+		BUG();
+		return -EINVAL;
+	default:
+		break;
+	}
+
+	pr_debug("%s:%d: unknown match_id: %u\n", __func__, __LINE__,
+		dev->match_id);
+	BUG();
+	return -ENODEV;
+}
+EXPORT_SYMBOL_GPL(ps3_open_hv_device);
+
+int ps3_close_hv_device(struct ps3_system_bus_device *dev)
+{
+	BUG_ON(!dev);
+	pr_debug("%s:%d: match_id: %u\n", __func__, __LINE__, dev->match_id);
+
+	switch(dev->match_id) {
+	case PS3_MATCH_ID_EHCI:
+	case PS3_MATCH_ID_OHCI:
+	case PS3_MATCH_ID_GELIC:
+	case PS3_MATCH_ID_STOR_DISK:
+	case PS3_MATCH_ID_STOR_ROM:
+	case PS3_MATCH_ID_STOR_FLASH:
+		return ps3_close_hv_device_sb(dev);
+	case PS3_MATCH_ID_AV_SETTINGS:
+	case PS3_MATCH_ID_GPU:
+		return ps3_close_hv_device_gpu(dev);
+	case PS3_MATCH_ID_SOUND:
+	case PS3_MATCH_ID_SYSTEM_MANAGER:
+		pr_debug("%s:%d: unsupported match_id: %u\n", __func__,
+			__LINE__, dev->match_id);
+		pr_debug("%s:%d: bus_id: %u\n", __func__,
+			__LINE__, dev->did.bus_id);
+		BUG();
+		return -EINVAL;
+	default:
+		break;
+	}
+
+	pr_debug("%s:%d: unknown match_id: %u\n", __func__, __LINE__,
+		dev->match_id);
+	BUG();
+	return -ENODEV;
 }
 EXPORT_SYMBOL_GPL(ps3_close_hv_device);
 
@@ -297,47 +426,12 @@ static void ps3_system_bus_shutdown(struct device *_dev)
 	dev_dbg(&dev->core, " <- %s:%d\n", __func__, __LINE__);
 }
 
-static int ps3_system_bus_uevent(struct device *_dev, char **envp,
-				 int num_envp, char *buffer, int buffer_size)
-{
-	struct ps3_system_bus_device *dev = to_ps3_system_bus_device(_dev);
-	int i=0, length = 0;
-
-	if (add_uevent_var(envp, num_envp, &i, buffer, buffer_size,
-			   &length, "MODALIAS=ps3:%d",
-			   dev->match_id))
-		return -ENOMEM;
-
-	envp[i] = NULL;
-	return 0;
-}
-
-static ssize_t modalias_show(struct device *_dev, struct device_attribute *a,
-			     char *buf)
-{
-	struct ps3_system_bus_device *dev = to_ps3_system_bus_device(_dev);
-        int len = snprintf(buf, PAGE_SIZE, "ps3:%d\n", dev->match_id);
-
-        return (len >= PAGE_SIZE) ? (PAGE_SIZE - 1) : len;
-}
-
-static struct device_attribute ps3_system_bus_dev_attrs[] = {
-        __ATTR_RO(modalias),
-        __ATTR_NULL,
-};
-
-static struct device ps3_system_bus = {
-	.bus_id         = "ps3_system",
-};
-
 struct bus_type ps3_system_bus_type = {
 	.name = "ps3_system_bus",
 	.match = ps3_system_bus_match,
 	.probe = ps3_system_bus_probe,
 	.remove = ps3_system_bus_remove,
 	.shutdown = ps3_system_bus_shutdown,
-	.uevent = ps3_system_bus_uevent,
-	.dev_attrs = ps3_system_bus_dev_attrs,
 };
 
 static int __init ps3_system_bus_init(void)
@@ -347,11 +441,16 @@ static int __init ps3_system_bus_init(void)
 	if (!firmware_has_feature(FW_FEATURE_PS3_LV1))
 		return -ENODEV;
 
-	printk(" -> %s:%d\n", __func__, __LINE__);
+ 	printk(" -> %s:%d\n", __func__, __LINE__);
+
+	mutex_init(&usage_hack.mutex);
+
 	result = device_register(&ps3_system_bus);
 	BUG_ON(result);
+
 	result = bus_register(&ps3_system_bus_type);
 	BUG_ON(result);
+
 	printk(" <- %s:%d\n", __func__, __LINE__);
 	return result;
 }
