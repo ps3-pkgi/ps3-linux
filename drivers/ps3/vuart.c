@@ -338,13 +338,6 @@ static int ps3_vuart_raw_write(struct ps3_vuart_port_device *dev,
 {
 	int result;
 
-	dev_dbg(&dev->core, "%s:%d: port_number %u\n", __func__, __LINE__, dev->priv->port_number);
-	dev_dbg(&dev->core, "%s:%d: buf  %p\n", __func__, __LINE__, buf);
-	dev_dbg(&dev->core, "%s:%d: lpar %lx\n", __func__, __LINE__, ps3_mm_phys_to_lpar(__pa(buf)));
-
-	dev_dbg(&dev->core, "%s:%d: bytes %u\n", __func__, __LINE__, bytes);
-	dev_dbg(&dev->core, "%s:%d: &bytes_written  %p\n", __func__, __LINE__, bytes_written);
-
 	result = lv1_write_virtual_uart(dev->priv->port_number,
 		ps3_mm_phys_to_lpar(__pa(buf)), bytes, bytes_written);
 
@@ -965,8 +958,6 @@ static int ps3_vuart_probe(struct device *_dev)
 			goto fail_request_irq;
 		}
 	}
-
-	dev_dbg(&dev->core, "%s:%d\n", __func__, __LINE__);
 
 	/* clear stale pending interrupts */
 

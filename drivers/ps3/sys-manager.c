@@ -664,7 +664,6 @@ static int ps3_sys_manager_probe(struct ps3_vuart_port_device *dev)
 static int ps3_sys_manager_remove(struct ps3_vuart_port_device *dev)
 {
 	dev_dbg(&dev->core, "%s:%d\n", __func__, __LINE__);
-	ps3_sys_manager_register_ops(NULL); // need this???
 	return 0;
 }
 
