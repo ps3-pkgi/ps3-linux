@@ -116,7 +116,8 @@ struct map {
 };
 
 #define debug_dump_map(x) _debug_dump_map(x, __func__, __LINE__)
-static void _debug_dump_map(const struct map* m, const char* func, int line)
+static void __maybe_unused _debug_dump_map(const struct map* m,
+	const char* func, int line)
 {
 	DBG("%s:%d: map.total     = %lxh\n", func, line, m->total);
 	DBG("%s:%d: map.rm.size   = %lxh\n", func, line, m->rm.size);
@@ -366,8 +367,8 @@ static unsigned long dma_sb_lpar_to_bus(struct ps3_dma_region *r,
 }
 
 #define dma_dump_region(_a) _dma_dump_region(_a, __func__, __LINE__)
-static void _dma_dump_region(const struct ps3_dma_region *r, const char* func,
-	int line)
+static void  __maybe_unused _dma_dump_region(const struct ps3_dma_region *r,
+	const char* func, int line)
 {
 	DBG("%s:%d: dev        %u:%u\n", func, line, r->did.bus_id,
 		r->did.dev_id);

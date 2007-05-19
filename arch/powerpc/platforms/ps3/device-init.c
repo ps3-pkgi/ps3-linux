@@ -456,29 +456,30 @@ static int __devinit ps3_register_sound(void)
 	return result;
 }
 
-#ifdef CONFIG_PS3_SYS_MANAGER
-static int __devinit
-ps3_register_sys_manager (void)
+static int __devinit ps3_register_sys_manager(void)
 {
 	int result;
-	static struct ps3_vuart_port_device dev = {
-		.match_id = PS3_MATCH_ID_SYSTEM_MANAGER,
-	};
+	struct ps3_vuart_port_device *p;
 
 	pr_debug(" -> %s:%d\n", __func__, __LINE__);
 
-	result = ps3_vuart_port_device_register(&dev);
+	p = kzalloc(sizeof(*p), GFP_KERNEL);
+	if (!p)
+		return -ENOMEM;
+
+	p->match_id = PS3_MATCH_ID_SYSTEM_MANAGER;
+
+#if defined(CONFIG_PS3_SYS_MANAGER) || defined(CONFIG_PS3_SYS_MANAGER_MODULE)
+	result = ps3_vuart_port_device_register(p);
 
 	if (result)
 		pr_debug("%s:%d ps3_vuart_port_device_register failed\n",
 			__func__, __LINE__);
+#endif
 
 	pr_debug(" <- %s:%d\n", __func__, __LINE__);
 	return result;
 }
-#else
-static inline int ps3_register_sys_manager(void) { return 0; }
-#endif
 
 #ifdef DEBUG
 static const char *ps3stor_dev_type(enum ps3_dev_type dev_type)

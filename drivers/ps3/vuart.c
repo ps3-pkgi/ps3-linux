@@ -338,6 +338,13 @@ static int ps3_vuart_raw_write(struct ps3_vuart_port_device *dev,
 {
 	int result;
 
+	dev_dbg(&dev->core, "%s:%d: port_number %u\n", __func__, __LINE__, dev->priv->port_number);
+	dev_dbg(&dev->core, "%s:%d: buf  %p\n", __func__, __LINE__, buf);
+	dev_dbg(&dev->core, "%s:%d: lpar %lx\n", __func__, __LINE__, ps3_mm_phys_to_lpar(__pa(buf)));
+
+	dev_dbg(&dev->core, "%s:%d: bytes %u\n", __func__, __LINE__, bytes);
+	dev_dbg(&dev->core, "%s:%d: &bytes_written  %p\n", __func__, __LINE__, bytes_written);
+
 	result = lv1_write_virtual_uart(dev->priv->port_number,
 		ps3_mm_phys_to_lpar(__pa(buf)), bytes, bytes_written);
 
@@ -429,6 +436,7 @@ void ps3_vuart_clear_rx_bytes(struct ps3_vuart_port_device *dev,
 
 	dev->priv->stats.bytes_read -= bytes_waiting;
 }
+EXPORT_SYMBOL_GPL(ps3_vuart_clear_rx_bytes);
 
 /**
  * struct list_buffer - An element for a port device fifo buffer list.
@@ -511,6 +519,7 @@ int ps3_vuart_write(struct ps3_vuart_port_device *dev, const void* buf,
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(ps3_vuart_write);
 
 /**
  * ps3_vuart_queue_rx_bytes - Queue waiting bytes into the buffer list.
@@ -630,6 +639,7 @@ int ps3_vuart_read(struct ps3_vuart_port_device *dev, void* buf,
 	spin_unlock_irqrestore(&dev->priv->rx_list.lock, flags);
 	return 0;
 }
+EXPORT_SYMBOL_GPL(ps3_vuart_read);
 
 int ps3_vuart_read_async(struct ps3_vuart_port_device *dev, work_func_t func,
 	unsigned int bytes)
@@ -663,11 +673,13 @@ int ps3_vuart_read_async(struct ps3_vuart_port_device *dev, work_func_t func,
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(ps3_vuart_read_async);
 
 void ps3_vuart_cancel_async(struct ps3_vuart_port_device *dev)
 {
 	dev->priv->rx_list.work.trigger = 0;
 }
+EXPORT_SYMBOL_GPL(ps3_vuart_cancel_async);
 
 /**
  * ps3_vuart_handle_interrupt_tx - third stage transmit interrupt handler
@@ -954,6 +966,8 @@ static int ps3_vuart_probe(struct device *_dev)
 		}
 	}
 
+	dev_dbg(&dev->core, "%s:%d\n", __func__, __LINE__);
+
 	/* clear stale pending interrupts */
 
 	ps3_vuart_clear_rx_bytes(dev, 0);
@@ -1053,6 +1067,7 @@ static int ps3_vuart_remove(struct device *_dev)
 	if(!dev->core.driver) {
 		dev_dbg(&dev->core, "%s:%d: no driver bound\n", __func__,
 			__LINE__);
+		up(&vuart_bus_priv.probe_mutex);
 		return 0;
 	}
 
@@ -1077,7 +1092,6 @@ static int ps3_vuart_remove(struct device *_dev)
 	dev_dbg(&dev->core, " <- %s:%d\n", __func__, __LINE__);
 
 	up(&vuart_bus_priv.probe_mutex);
-
 	return 0;
 }
 
@@ -1106,6 +1120,7 @@ static void ps3_vuart_shutdown(struct device *_dev)
 	if(!dev->core.driver) {
 		dev_dbg(&dev->core, "%s:%d: no driver bound\n", __func__,
 			__LINE__);
+		up(&vuart_bus_priv.probe_mutex);
 		return;
 	}
 
@@ -1130,7 +1145,6 @@ static void ps3_vuart_shutdown(struct device *_dev)
 	dev_dbg(&dev->core, " <- %s:%d\n", __func__, __LINE__);
 
 	up(&vuart_bus_priv.probe_mutex);
-
 	return;
 }
 

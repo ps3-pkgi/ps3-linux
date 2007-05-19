@@ -66,26 +66,45 @@ struct ps3_sys_manager_header {
 	u32 request_tag;
 };
 
+#define dump_sm_header(_h) _dump_sm_header(_h, __func__, __LINE__)
+static void __maybe_unused _dump_sm_header(
+	const struct ps3_sys_manager_header* h, const char *func, int line)
+{
+	pr_debug("%s:%d: version:      %xh\n", func, line, h->version);
+	pr_debug("%s:%d: size:         %xh\n", func, line, h->size);
+	pr_debug("%s:%d: payload_size: %xh\n", func, line, h->payload_size);
+	pr_debug("%s:%d: service_id:   %xh\n", func, line, h->service_id);
+	pr_debug("%s:%d: request_tag:  %xh\n", func, line, h->request_tag);
+}
+
 /**
- * @PS3_SM_RX_MSG_LEN - System manager received message length.
+ * @PS3_SM_RX_MSG_LEN_MIN - Shortest received message length.
+ * @PS3_SM_RX_MSG_LEN_MAX - Longest received message length.
  *
- * Currently all messages received from the system manager are the same length
- * (16 bytes header + 16 bytes payload = 32 bytes).  This knowlege is used to
- * simplify the logic.
+ * Currently all messages received from the system manager are either
+ * (16 bytes header + 8 bytes payload = 24 bytes) or (16 bytes header
+ * + 16 bytes payload = 32 bytes).  This knowlege is used to simplify
+ * the logic.
  */
 
 enum {
-	PS3_SM_RX_MSG_LEN = 32,
+	PS3_SM_RX_MSG_LEN_MIN = 24,
+	PS3_SM_RX_MSG_LEN_MAX = 32,
 };
 
 /**
  * enum ps3_sys_manager_service_id - Message header service_id.
- * @PS3_SM_SERVICE_ID_REQUEST:      guest --> sys_manager.
- * @PS3_SM_SERVICE_ID_COMMAND:      guest <-- sys_manager.
- * @PS3_SM_SERVICE_ID_RESPONSE:     guest --> sys_manager.
- * @PS3_SM_SERVICE_ID_SET_ATTR:     guest --> sys_manager.
- * @PS3_SM_SERVICE_ID_EXTERN_EVENT: guest <-- sys_manager.
- * @PS3_SM_SERVICE_ID_SET_NEXT_OP:  guest --> sys_manager.
+ * @PS3_SM_SERVICE_ID_REQUEST:       guest --> sys_manager.
+ * @PS3_SM_SERVICE_ID_REQUEST_ERROR: guest <-- sys_manager.
+ * @PS3_SM_SERVICE_ID_COMMAND:       guest <-- sys_manager.
+ * @PS3_SM_SERVICE_ID_RESPONSE:      guest --> sys_manager.
+ * @PS3_SM_SERVICE_ID_SET_ATTR:      guest --> sys_manager.
+ * @PS3_SM_SERVICE_ID_EXTERN_EVENT:  guest <-- sys_manager.
+ * @PS3_SM_SERVICE_ID_SET_NEXT_OP:   guest --> sys_manager.
+ *
+ * PS3_SM_SERVICE_ID_REQUEST_ERROR is returned for invalid data values in a
+ * a PS3_SM_SERVICE_ID_REQUEST message.  It also seems to be returned when
+ * a REQUEST message is sent at the wrong time.
  */
 
 enum ps3_sys_manager_service_id {
@@ -95,6 +114,7 @@ enum ps3_sys_manager_service_id {
 	PS3_SM_SERVICE_ID_COMMAND = 3,
 	PS3_SM_SERVICE_ID_EXTERN_EVENT = 4,
 	PS3_SM_SERVICE_ID_SET_NEXT_OP = 5,
+	PS3_SM_SERVICE_ID_REQUEST_ERROR = 6,
 	PS3_SM_SERVICE_ID_SET_ATTR = 8,
 };
 
@@ -228,12 +248,7 @@ static int ps3_sys_manager_write(struct ps3_vuart_port_device *dev,
 static int ps3_sys_manager_send_attr(struct ps3_vuart_port_device *dev,
 	enum ps3_sys_manager_attr attr)
 {
-	static const struct ps3_sys_manager_header header = {
-		.version = 1,
-		.size = 16,
-		.payload_size = 16,
-		.service_id = PS3_SM_SERVICE_ID_SET_ATTR,
-	};
+	struct ps3_sys_manager_header header;
 	struct {
 		u8 version;
 		u8 reserved_1[3];
@@ -243,6 +258,12 @@ static int ps3_sys_manager_send_attr(struct ps3_vuart_port_device *dev,
 	BUILD_BUG_ON(sizeof(payload) != 8);
 
 	dev_dbg(&dev->core, "%s:%d: %xh\n", __func__, __LINE__, attr);
+
+	memset(&header, 0, sizeof(header));
+	header.version = 1;
+	header.size = 16;
+	header.payload_size = 16;
+	header.service_id = PS3_SM_SERVICE_ID_SET_ATTR;
 
 	memset(&payload, 0, sizeof(payload));
 	payload.version = 1;
@@ -261,12 +282,7 @@ static int ps3_sys_manager_send_next_op(struct ps3_vuart_port_device *dev,
 	enum ps3_sys_manager_next_op op,
 	enum ps3_sys_manager_wake_source wake_source)
 {
-	static const struct ps3_sys_manager_header header = {
-		.version = 1,
-		.size = 16,
-		.payload_size = 16,
-		.service_id = PS3_SM_SERVICE_ID_SET_NEXT_OP,
-	};
+	struct ps3_sys_manager_header header;
 	struct {
 		u8 version;
 		u8 type;
@@ -279,6 +295,12 @@ static int ps3_sys_manager_send_next_op(struct ps3_vuart_port_device *dev,
 	BUILD_BUG_ON(sizeof(payload) != 16);
 
 	dev_dbg(&dev->core, "%s:%d: (%xh)\n", __func__, __LINE__, op);
+
+	memset(&header, 0, sizeof(header));
+	header.version = 1;
+	header.size = 16;
+	header.payload_size = 16;
+	header.service_id = PS3_SM_SERVICE_ID_SET_NEXT_OP;
 
 	memset(&payload, 0, sizeof(payload));
 	payload.version = 3;
@@ -304,26 +326,28 @@ static int ps3_sys_manager_send_next_op(struct ps3_vuart_port_device *dev,
 static int ps3_sys_manager_send_request_shutdown(
 	struct ps3_vuart_port_device *dev)
 {
-	static const struct ps3_sys_manager_header header = {
-		.version = 1,
-		.size = 16,
-		.payload_size = 16,
-		.service_id = PS3_SM_SERVICE_ID_REQUEST,
-	};
+	struct ps3_sys_manager_header header;
 	struct {
 		u8 version;
 		u8 type;
 		u8 gos_id;
 		u8 reserved_1[13];
-	} static const payload = {
-		.version = 1,
-		.type = 1, /* shutdown */
-		.gos_id = 0, /* self */
-	};
+	} payload;
 
 	BUILD_BUG_ON(sizeof(payload) != 16);
 
 	dev_dbg(&dev->core, "%s:%d\n", __func__, __LINE__);
+
+	memset(&header, 0, sizeof(header));
+	header.version = 1;
+	header.size = 16;
+	header.payload_size = 16;
+	header.service_id = PS3_SM_SERVICE_ID_REQUEST;
+
+	memset(&payload, 0, sizeof(payload));
+	payload.version = 1;
+	payload.type = 1; /* shutdown */
+	payload.gos_id = 0; /* self */
 
 	return ps3_sys_manager_write(dev, &header, &payload);
 }
@@ -339,12 +363,7 @@ static int ps3_sys_manager_send_request_shutdown(
 static int ps3_sys_manager_send_response(struct ps3_vuart_port_device *dev,
 	u64 status)
 {
-	static const struct ps3_sys_manager_header header = {
-		.version = 1,
-		.size = 16,
-		.payload_size = 16,
-		.service_id = PS3_SM_SERVICE_ID_RESPONSE,
-	};
+	struct ps3_sys_manager_header header;
 	struct {
 		u8 version;
 		u8 reserved_1[3];
@@ -356,6 +375,12 @@ static int ps3_sys_manager_send_response(struct ps3_vuart_port_device *dev,
 
 	dev_dbg(&dev->core, "%s:%d: (%s)\n", __func__, __LINE__,
 		(status ? "nak" : "ack"));
+
+	memset(&header, 0, sizeof(header));
+	header.version = 1;
+	header.size = 16;
+	header.payload_size = 16;
+	header.service_id = PS3_SM_SERVICE_ID_RESPONSE;
 
 	memset(&payload, 0, sizeof(payload));
 	payload.version = 1;
@@ -383,7 +408,7 @@ static int ps3_sys_manager_handle_event(struct ps3_vuart_port_device *dev)
 	BUILD_BUG_ON(sizeof(event) != 16);
 
 	result = ps3_vuart_read(dev, &event, sizeof(event));
-	BUG_ON(result);
+	BUG_ON(result && "need to retry here");
 
 	if (event.version != 1) {
 		dev_dbg(&dev->core, "%s:%d: unsupported event version (%u)\n",
@@ -397,7 +422,7 @@ static int ps3_sys_manager_handle_event(struct ps3_vuart_port_device *dev)
 			__func__, __LINE__);
 		ps3_sm_force_power_off = 1;
 		wmb();
-		ctrl_alt_del();
+		kill_cad_pid(SIGINT, 1); /* ctrl_alt_del */
 		break;
 	case PS3_SM_EVENT_POWER_RELEASED:
 		dev_dbg(&dev->core, "%s:%d: POWER_RELEASED (%u ms)\n",
@@ -408,7 +433,7 @@ static int ps3_sys_manager_handle_event(struct ps3_vuart_port_device *dev)
 			__func__, __LINE__);
 		ps3_sm_force_power_off = 0;
 		wmb();
-		ctrl_alt_del();
+		kill_cad_pid(SIGINT, 1); /* ctrl_alt_del */
 		break;
 	case PS3_SM_EVENT_RESET_RELEASED:
 		dev_dbg(&dev->core, "%s:%d: RESET_RELEASED (%u ms)\n",
@@ -451,6 +476,7 @@ static int ps3_sys_manager_handle_cmd(struct ps3_vuart_port_device *dev)
 	dev_dbg(&dev->core, "%s:%d\n", __func__, __LINE__);
 
 	result = ps3_vuart_read(dev, &cmd, sizeof(cmd));
+	BUG_ON(result && "need to retry here");
 
 	if(result)
 		return result;
@@ -474,6 +500,7 @@ static int ps3_sys_manager_handle_cmd(struct ps3_vuart_port_device *dev)
 /**
  * ps3_sys_manager_handle_msg - First stage msg handler.
  *
+ * Can be called directly to manually poll vuart and pump message handler.
  */
 
 static int ps3_sys_manager_handle_msg(struct ps3_vuart_port_device *dev)
@@ -490,12 +517,17 @@ static int ps3_sys_manager_handle_msg(struct ps3_vuart_port_device *dev)
 	if (header.version != 1) {
 		dev_dbg(&dev->core, "%s:%d: unsupported header version (%u)\n",
 			__func__, __LINE__, header.version);
+		dump_sm_header(&header);
 		goto fail_header;
 	}
 
 	BUILD_BUG_ON(sizeof(header) != 16);
-	BUG_ON(header.size != 16);
-	BUG_ON(header.payload_size != 16);
+
+	if(header.size != 16 || (header.payload_size != 8
+		&& header.payload_size != 16)) {
+		dump_sm_header(&header);
+		BUG();
+	}
 
 	switch (header.service_id) {
 	case PS3_SM_SERVICE_ID_EXTERN_EVENT:
@@ -504,6 +536,11 @@ static int ps3_sys_manager_handle_msg(struct ps3_vuart_port_device *dev)
 	case PS3_SM_SERVICE_ID_COMMAND:
 		dev_dbg(&dev->core, "%s:%d: COMMAND\n", __func__, __LINE__);
 		return ps3_sys_manager_handle_cmd(dev);
+	case PS3_SM_SERVICE_ID_REQUEST_ERROR:
+		dev_dbg(&dev->core, "%s:%d: REQUEST_ERROR\n", __func__,
+			__LINE__);
+		dump_sm_header(&header);
+		break;
 	default:
 		dev_dbg(&dev->core, "%s:%d: unknown service_id (%u)\n",
 			__func__, __LINE__, header.service_id);
@@ -522,7 +559,7 @@ fail_id:
 /**
  * ps3_sys_manager_work - Asynchronous read handler.
  *
- * Signaled when a complete message arrives at the vuart port.
+ * Signaled when PS3_SM_RX_MSG_LEN_MIN bytes arrive at the vuart port.
  */
 
 static void ps3_sys_manager_work(struct work_struct *work)
@@ -530,28 +567,23 @@ static void ps3_sys_manager_work(struct work_struct *work)
 	struct ps3_vuart_port_device *dev = ps3_vuart_work_to_port_device(work);
 
 	ps3_sys_manager_handle_msg(dev);
-	ps3_vuart_read_async(dev, ps3_sys_manager_work, PS3_SM_RX_MSG_LEN);
+	ps3_vuart_read_async(dev, ps3_sys_manager_work, PS3_SM_RX_MSG_LEN_MIN);
 }
 
-struct {
-	struct ps3_vuart_port_device *dev;
-} static drv_priv;
-
 /**
- * ps3_sys_manager_power_off - The final platform machine_power_off routine.
+ * ps3_sys_manager_final_power_off - The final platform machine_power_off routine.
  *
  * This routine never returns.  The routine disables asynchronous vuart reads
  * then spins calling ps3_sys_manager_handle_msg() to receive and acknowledge
  * the shutdown command sent from the system manager.  Soon after the
  * acknowledgement is sent the lpar is destroyed by the HV.  This routine
- * should only be called from ps3_power_off().
+ * should only be called from ps3_power_off() through
+ * ps3_sys_manager_ops.power_off.
  */
 
-void ps3_sys_manager_power_off(void)
+static void ps3_sys_manager_final_power_off(struct ps3_vuart_port_device *dev)
 {
-	struct ps3_vuart_port_device *dev = drv_priv.dev;
-
-	BUG_ON(!drv_priv.dev);
+	BUG_ON(!dev);
 
 	dev_dbg(&dev->core, "%s:%d\n", __func__, __LINE__);
 
@@ -568,20 +600,18 @@ void ps3_sys_manager_power_off(void)
 }
 
 /**
- * ps3_sys_manager_restart - The final platform machine_restart routine.
+ * ps3_sys_manager_final_restart - The final platform machine_restart routine.
  *
  * This routine never returns.  The routine disables asynchronous vuart reads
  * then spins calling ps3_sys_manager_handle_msg() to receive and acknowledge
  * the shutdown command sent from the system manager.  Soon after the
  * acknowledgement is sent the lpar is destroyed by the HV.  This routine
- * should only be called from ps3_restart().
+ * should only be called from ps3_restart() through ps3_sys_manager_ops.restart.
  */
 
-void ps3_sys_manager_restart(void)
+static void ps3_sys_manager_final_restart(struct ps3_vuart_port_device *dev)
 {
-	struct ps3_vuart_port_device *dev = drv_priv.dev;
-
-	BUG_ON(!drv_priv.dev);
+	BUG_ON(!dev);
 
 	dev_dbg(&dev->core, "%s:%d\n", __func__, __LINE__);
 
@@ -590,7 +620,7 @@ void ps3_sys_manager_restart(void)
 	if(ps3_sm_force_power_off) {
 		dev_dbg(&dev->core, "%s:%d: forcing poweroff\n",
 			__func__, __LINE__);
-		ps3_sys_manager_power_off();
+		ps3_sys_manager_final_power_off(dev);
 	}
 
 	ps3_vuart_cancel_async(dev);
@@ -609,17 +639,23 @@ void ps3_sys_manager_restart(void)
 static int ps3_sys_manager_probe(struct ps3_vuart_port_device *dev)
 {
 	int result;
+	struct ps3_sys_manager_ops ops;
 
 	dev_dbg(&dev->core, "%s:%d\n", __func__, __LINE__);
 
-	BUG_ON(drv_priv.dev);
-	drv_priv.dev = dev;
+	ops.power_off = ps3_sys_manager_final_power_off;
+	ops.restart = ps3_sys_manager_final_restart;
+	ops.dev = dev;
+
+	/* ps3_sys_manager_register_ops copies ops. */
+
+	ps3_sys_manager_register_ops(&ops);
 
 	result = ps3_sys_manager_send_attr(dev, PS3_SM_ATTR_ALL);
 	BUG_ON(result);
 
 	result = ps3_vuart_read_async(dev, ps3_sys_manager_work,
-		PS3_SM_RX_MSG_LEN);
+		PS3_SM_RX_MSG_LEN_MIN);
 	BUG_ON(result);
 
 	return result;
@@ -627,12 +663,14 @@ static int ps3_sys_manager_probe(struct ps3_vuart_port_device *dev)
 
 static int ps3_sys_manager_remove(struct ps3_vuart_port_device *dev)
 {
+	dev_dbg(&dev->core, "%s:%d\n", __func__, __LINE__);
+	ps3_sys_manager_register_ops(NULL); // need this???
 	return 0;
 }
 
 static void ps3_sys_manager_shutdown(struct ps3_vuart_port_device *dev)
 {
-	ps3_sys_manager_remove(dev);
+	dev_dbg(&dev->core, "%s:%d\n", __func__, __LINE__);
 }
 
 static struct ps3_vuart_port_driver ps3_sys_manager = {
@@ -654,3 +692,4 @@ static int __init ps3_sys_manager_init(void)
 }
 
 module_init(ps3_sys_manager_init);
+/* Module remove not supported. */
