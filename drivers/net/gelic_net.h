@@ -51,7 +51,7 @@
 #define GELIC_NET_RXBUF_ALIGN           128
 #define GELIC_NET_RX_CSUM_DEFAULT       1 /* hw chksum */
 #define GELIC_NET_WATCHDOG_TIMEOUT      5*HZ
-#define GELIC_NET_NAPI_WEIGHT           64
+#define GELIC_NET_NAPI_WEIGHT           (GELIC_NET_RX_DESCRIPTORS)
 #define GELIC_NET_BROADCAST_ADDR        0xffffffffffffL
 #define GELIC_NET_VLAN_POS              (VLAN_ETH_ALEN * 2)
 #define GELIC_NET_VLAN_MAX              4
@@ -77,6 +77,7 @@ enum gelic_net_int1_status {
  /* descriptor data_status bits */
 #define GELIC_NET_RXIPCHK                 29
 #define GELIC_NET_TCPUDPIPCHK             28
+#define GELIC_NET_TXDESC_TAIL             0
 #define GELIC_NET_DATA_STATUS_CHK_MASK    (1 << GELIC_NET_RXIPCHK | \
                                            1 << GELIC_NET_TCPUDPIPCHK)
 
@@ -95,6 +96,7 @@ enum gelic_net_int1_status {
 
 #define GELIC_NET_DESCR_IND_PROC_SHIFT    28
 #define GELIC_NET_DESCR_IND_PROC_MASKO    0x0fffffff
+
 
 /* ignore ipsec ans multicast */
 #define GELIC_NET_DATA_ERROR_MASK         0xfdefbfff

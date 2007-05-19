@@ -29,6 +29,7 @@
  */
 
 #define DEBUG 1
+#undef GELIC_RING_CHAIN
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -52,13 +53,9 @@
 #define GELIC_NET_DRV_NAME "Gelic Network Driver"
 #define GELIC_NET_DRV_VERSION "1.0"
 
-
 MODULE_AUTHOR("SCE Inc.");
 MODULE_DESCRIPTION("Gelic Network driver");
 MODULE_LICENSE("GPL");
-
-static int rx_descriptors = GELIC_NET_RX_DESCRIPTORS;
-static int tx_descriptors = GELIC_NET_TX_DESCRIPTORS;
 
 static inline struct device * ctodev(struct gelic_net_card * card)
 {
@@ -85,7 +82,14 @@ static int gelic_net_set_irq_mask(struct gelic_net_card *card, u64 mask)
 			 "lv1_net_set_interrupt_mask failed %d\n", status);
 	return status;
 }
-
+static inline void gelic_net_rx_irq_on(struct gelic_net_card *card)
+{
+	gelic_net_set_irq_mask(card, card->ghiintmask | GELIC_NET_RXINT);
+}
+static inline void gelic_net_rx_irq_off(struct gelic_net_card *card)
+{
+	gelic_net_set_irq_mask(card, card->ghiintmask & ~GELIC_NET_RXINT);
+}
 /**
  * gelic_net_get_descr_status -- returns the status of a descriptor
  * @descr: descriptor to look at
@@ -120,7 +124,7 @@ static void gelic_net_set_descr_status(struct gelic_net_descr *descr,
 	/* clean the upper 4 bits */
 	cmd_status &= GELIC_NET_DESCR_IND_PROC_MASKO;
 	/* add the status to it */
-	cmd_status |= ((u32)status)<<GELIC_NET_DESCR_IND_PROC_SHIFT;
+	cmd_status |= ((u32)status) << GELIC_NET_DESCR_IND_PROC_SHIFT;
 	/* and write it back */
 	descr->dmac_cmd_status = cmd_status;
 	wmb();
@@ -192,8 +196,13 @@ static int gelic_net_init_chain(struct gelic_net_card *card,
 	chain->head = start_descr;
 	chain->tail = start_descr;
 
+
+#ifdef GELIC_RING_CHAIN
+	(descr - 1)->next_descr_addr = start_descr->bus_addr;
+#else
 	/* do not chain last hw descriptor */
 	(descr - 1)->next_descr_addr = 0;
+#endif
 	return 0;
 
 iommu_error:
@@ -232,7 +241,8 @@ static int gelic_net_prepare_rx_descr(struct gelic_net_card *card,
 	/* and we need to have it 128 byte aligned, therefore we allocate a
 	 * bit more */
 	/* allocate an skb */
-	descr->skb = dev_alloc_skb(bufsize + GELIC_NET_RXBUF_ALIGN - 1);
+	descr->skb = netdev_alloc_skb(card->netdev,
+		bufsize + GELIC_NET_RXBUF_ALIGN - 1);
 	if (!descr->skb) {
 		if (net_ratelimit())
 			dev_info(ctodev(card),
@@ -254,6 +264,7 @@ static int gelic_net_prepare_rx_descr(struct gelic_net_card *card,
 			     GELIC_NET_MAX_MTU,
 			     DMA_BIDIRECTIONAL);
 	descr->buf_addr = buf;
+	wmb();
 	if (!buf) {
 		dev_kfree_skb_any(descr->skb);
 		dev_info(ctodev(card),
@@ -356,7 +367,8 @@ static void gelic_net_release_tx_descr(struct gelic_net_card *card,
 	struct sk_buff *skb;
 
 
-	if ((descr->data_status & 0x00000001) == 1) { /* end of frame */
+	if (descr->data_status & (1 << GELIC_NET_TXDESC_TAIL)) {
+		/* 2nd descriptor */
 		skb = descr->skb;
 		dma_unmap_single(ctodev(card), descr->buf_addr, skb->len,
 				 DMA_BIDIRECTIONAL);
@@ -374,7 +386,6 @@ static void gelic_net_release_tx_descr(struct gelic_net_card *card,
 	descr->data_status = 0;
 	descr->data_error = 0;
 	descr->skb = NULL;
-	//card->tx_chain.tail = card->tx_chain.tail->next;
 
 	/* set descr status */
 	descr->dmac_cmd_status = GELIC_NET_DMAC_CMDSTAT_NOT_IN_USE;
@@ -572,7 +583,7 @@ static int gelic_net_stop(struct net_device *netdev)
 static struct gelic_net_descr *
 gelic_net_get_next_tx_descr(struct gelic_net_card *card)
 {
-	if (card->tx_chain.head == NULL)
+	if (!card->tx_chain.head)
 		return NULL;
 	/*  see if we can two consecutive free descrs */
 	if (card->tx_chain.tail != card->tx_chain.head->next &&
@@ -751,7 +762,7 @@ static int gelic_net_xmit(struct sk_buff *skb, struct net_device *netdev)
 	spin_lock_irqsave(&card->tx_dma_lock, flags);
 
 	gelic_net_release_tx_chain(card, 0);
-	if (skb == NULL)
+	if (!skb)
 		goto kick;
 	descr = gelic_net_get_next_tx_descr(card);
 	if (!descr) {
@@ -808,7 +819,7 @@ static int gelic_net_pass_skb_up(struct gelic_net_descr *descr,
 		dev_dbg(ctodev(card), "error in received descriptor found,"\
 			"data_status=x%08x, data_error=x%08x\n",
 			data_status, data_error);
-	/* prepare skb, unmap descriptor */
+	/* unmap skb buffer */
 	skb = descr->skb;
 	dma_unmap_single(ctodev(card), descr->buf_addr, GELIC_NET_MAX_MTU,
 			 DMA_BIDIRECTIONAL);
@@ -820,7 +831,11 @@ static int gelic_net_pass_skb_up(struct gelic_net_descr *descr,
 	}
 
 	skb->dev = netdev;
-	skb_put(skb, descr->valid_size);
+	skb_put(skb, descr->valid_size? descr->valid_size : descr->result_size);
+	if (!descr->valid_size)
+		dev_info(ctodev(card), "buffer full %x %x %x\n",
+			 descr->result_size, descr->buf_size, descr->dmac_cmd_status);
+
 	descr->skb = NULL;
 	/*
 	 * the card put 2 bytes vlan tag in front
@@ -839,12 +854,12 @@ static int gelic_net_pass_skb_up(struct gelic_net_descr *descr,
 	} else
 		skb->ip_summed = CHECKSUM_NONE;
 
-	/* pass skb up to stack */
-	netif_receive_skb(skb);
-
 	/* update netdevice statistics */
 	card->netdev_stats.rx_packets++;
 	card->netdev_stats.rx_bytes += skb->len;
+
+	/* pass skb up to stack */
+	netif_receive_skb(skb);
 
 	return 1;
 }
@@ -861,20 +876,16 @@ static int gelic_net_pass_skb_up(struct gelic_net_descr *descr,
 static int gelic_net_decode_one_descr(struct gelic_net_card *card)
 {
 	enum gelic_net_descr_status status;
-	struct gelic_net_descr *descr;
 	struct gelic_net_descr_chain *chain = &card->rx_chain;
+	struct gelic_net_descr *descr = chain->tail;
 	int result = 0;
-	int kick = 0;
-	u32 cmd_status;
-
-	descr = chain->tail;
 
 	status = gelic_net_get_descr_status(descr);
 
 	if (status == GELIC_NET_DESCR_CARDOWNED)
 		return 0;
 	if (status == GELIC_NET_DESCR_NOT_IN_USE) {
-		dev_err(ctodev(card), "%s:free descriptor?\n", __func__);
+		gelic_net_enable_rxdmac(card);
 		return 0;
 	}
 
@@ -896,22 +907,20 @@ static int gelic_net_decode_one_descr(struct gelic_net_card *card)
 
 	/* ok, we've got a packet in descr */
 	result = gelic_net_pass_skb_up(descr, card); /* 1: skb_up sccess */
-	if (cmd_status & GELIC_NET_DMAC_CMDSTAT_CHAIN_END)
-		kick = 1;
 
 refill:
+#ifndef GELIC_RING_CHAIN
 	descr->next_descr_addr = 0; /* unlink the descr */
-	wmb();
-	gelic_net_set_descr_status(descr, GELIC_NET_DESCR_NOT_IN_USE);
+#endif
 	/* change the descriptor state: */
-	gelic_net_prepare_rx_descr(card, descr); /* refill one desc */
+	gelic_net_set_descr_status(descr, GELIC_NET_DESCR_NOT_IN_USE);
+
+	/* refill one desc */
+	gelic_net_prepare_rx_descr(card, descr);
 	chain->head = descr;
 	chain->tail = descr->next;
 	descr->prev->next_descr_addr = descr->bus_addr;
-	if (kick) {
-		wmb();
-		gelic_net_enable_rxdmac(card);
-	}
+
 	return result;
 }
 
@@ -944,15 +953,9 @@ static int gelic_net_poll(struct net_device *netdev, int *budget)
 	}
 	netdev->quota -= packets_done;
 	*budget -= packets_done;
-	if (no_more_packets == 1) {
+	if (no_more_packets) {
 		netif_rx_complete(netdev);
-
-		/* one more check */
-		while (1) {
-			if (!gelic_net_decode_one_descr(card))
-				break;
-		};
-
+		gelic_net_rx_irq_on(card);
 		return 0;
 	} else
 		return 1;
@@ -1005,8 +1008,10 @@ static irqreturn_t gelic_net_interrupt(int irq, void *ptr)
 	if (!status)
 		return IRQ_NONE;
 
-	if (status & GELIC_NET_RXINT)
+	if (status & GELIC_NET_RXINT) {
+		gelic_net_rx_irq_off(card);
 		netif_rx_schedule(netdev);
+	}
 
 	if (status & GELIC_NET_TXINT) {
 		spin_lock_irqsave(&card->tx_dma_lock, flags);
@@ -1095,10 +1100,11 @@ static int gelic_net_open(struct net_device *netdev)
 	gelic_net_open_device(card);
 
 	if (gelic_net_init_chain(card, &card->tx_chain,
-			card->descr, tx_descriptors))
+			card->descr, GELIC_NET_TX_DESCRIPTORS))
 		goto alloc_tx_failed;
 	if (gelic_net_init_chain(card, &card->rx_chain,
-			card->descr + tx_descriptors, rx_descriptors))
+				 card->descr + GELIC_NET_RX_DESCRIPTORS,
+				 GELIC_NET_RX_DESCRIPTORS))
 		goto alloc_rx_failed;
 
 	/* head of chain */
@@ -1112,9 +1118,7 @@ static int gelic_net_open(struct net_device *netdev)
 	card->tx_dma_progress = 0;
 	card->ghiintmask = GELIC_NET_RXINT | GELIC_NET_TXINT;
 #ifdef CONFIG_GELIC_WIRELESS
-	card->ghiintmask = card->ghiintmask |
-				GELICW_DEVICE_CMD_COMP |
-				GELICW_DEVICE_EVENT_RECV;
+	card->ghiintmask |= GELICW_DEVICE_CMD_COMP | GELICW_DEVICE_EVENT_RECV;
 #endif
 	gelic_net_set_irq_mask(card, card->ghiintmask);
 	gelic_net_enable_rxdmac(card);
@@ -1435,8 +1439,8 @@ static struct gelic_net_card * gelic_net_alloc_card(void)
 	size_t alloc_size;
 
 	alloc_size = sizeof (*card) +
-		sizeof (struct gelic_net_descr) * rx_descriptors +
-		sizeof (struct gelic_net_descr) * tx_descriptors;
+		sizeof (struct gelic_net_descr) * GELIC_NET_RX_DESCRIPTORS +
+		sizeof (struct gelic_net_descr) * GELIC_NET_RX_DESCRIPTORS;
 	/*
 	 * we assume private data is allocated 32 bytes (or more) aligned
 	 * so that gelic_net_descr should be 32 bytes aligned.
