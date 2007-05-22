@@ -43,10 +43,6 @@
 
 #define KERNEL_SECTOR_SIZE	512
 
-// FIXME SCSI uses H=64, S=32. Can we still repartition disks partitioned using
-//       the old driver?
-#define PS3DISK_HEADS		255
-#define PS3DISK_SECTORS		63
 
 #define PS3DISK_NAME		"ps3d%c"
 
@@ -70,21 +66,11 @@ static int ps3disk_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static int ps3disk_getgeo(struct block_device *bdev, struct hd_geometry *geo)
-{
-	geo->heads = PS3DISK_HEADS;
-	geo->sectors = PS3DISK_SECTORS;
-	geo->cylinders = min(65535UL,
-			     get_capacity(bdev->bd_disk) /
-			     (PS3DISK_HEADS * PS3DISK_SECTORS));
-	return 0;
-}
 
 
 static struct block_device_operations ps3disk_fops = {
 	.owner		= THIS_MODULE,
 	.open		= ps3disk_open,
-	.getgeo		= ps3disk_getgeo,
 };
 
 static void ps3disk_scatter_gather(struct ps3_storage_device *dev,
@@ -202,7 +188,7 @@ static void ps3disk_request(request_queue_t *q)
 
 static unsigned long ps3disk_mask;
 
-static int ps3disk_probe(struct ps3_system_bus_device *_dev)
+static int __devinit ps3disk_probe(struct ps3_system_bus_device *_dev)
 {
 	struct ps3_storage_device *dev = to_ps3_storage_device(&_dev->core);
 	struct ps3disk_private *priv;

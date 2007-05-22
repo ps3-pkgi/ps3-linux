@@ -2157,6 +2157,7 @@ static int fbcon_switch(struct vc_data *vc)
 		fbcon_update_softback(vc);
 	}
 
+printk("fbcon_switch: logo_shown = %d\n", logo_shown);
 	if (logo_shown >= 0) {
 		struct vc_data *conp2 = vc_cons[logo_shown].d;
 
@@ -3351,6 +3352,7 @@ void fbcon_exit(void)
 
 	fbcon_has_exited = 1;
 }
+EXPORT_SYMBOL_GPL(fbcon_exit);
 
 static int __init fb_console_init(void)
 {

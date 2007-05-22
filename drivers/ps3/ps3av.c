@@ -1,32 +1,30 @@
 /*
- * Copyright (C) 2006 Sony Computer Entertainment Inc.
- * Copyright 2006, 2007 Sony Corporation
+ *  PS3 AV backend support.
  *
- * AV backend support for PS3
+ *  Copyright (C) 2007 Sony Computer Entertainment Inc.
+ *  Copyright 2007 Sony Corp.
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License as published
- * by the Free Software Foundation; version 2 of the License.
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; version 2 of the License.
  *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License along
- * with this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
-
+#define DEBUG
+#include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/notifier.h>
-#include <linux/reboot.h>
-#include <linux/kernel.h>
 #include <linux/ioctl.h>
 
 #include <asm/firmware.h>
-#include <asm/lv1call.h>
 #include <asm/ps3av.h>
 #include <asm/ps3.h>
 
@@ -55,6 +53,7 @@ static struct ps3av {
 	u32 audio_port;
 	int ps3av_mode;
 	int ps3av_mode_old;
+	void (*flip_ctl)(int on);
 } ps3av;
 
 static struct ps3_vuart_port_device ps3av_dev = {
@@ -842,46 +841,21 @@ int ps3av_audio_mute(int mute)
 
 EXPORT_SYMBOL_GPL(ps3av_audio_mute);
 
-int ps3av_dev_open(void)
+void ps3av_register_flip_ctl(void (*flip_ctl)(int on))
 {
-	int status = 0;
-
 	mutex_lock(&ps3av.mutex);
-	if (!ps3av.open_count++) {
-		status = lv1_gpu_open(0);
-		if (status) {
-			printk(KERN_ERR "%s: lv1_gpu_open failed %d\n",
-			       __func__, status);
-			ps3av.open_count--;
-		}
-	}
+	ps3av.flip_ctl = flip_ctl;
 	mutex_unlock(&ps3av.mutex);
-
-	return status;
 }
+EXPORT_SYMBOL_GPL(ps3av_register_flip_ctl);
 
-EXPORT_SYMBOL_GPL(ps3av_dev_open);
-
-int ps3av_dev_close(void)
+void ps3av_flip_ctl(int on)
 {
-	int status = 0;
-
 	mutex_lock(&ps3av.mutex);
-	if (ps3av.open_count <= 0) {
-		printk(KERN_ERR "%s: GPU already closed\n", __func__);
-		status = -1;
-	} else if (!--ps3av.open_count) {
-		status = lv1_gpu_close();
-		if (status)
-			printk(KERN_WARNING "%s: lv1_gpu_close failed %d\n",
-			       __func__, status);
-	}
+	if (ps3av.flip_ctl)
+		ps3av.flip_ctl(on);
 	mutex_unlock(&ps3av.mutex);
-
-	return status;
 }
-
-EXPORT_SYMBOL_GPL(ps3av_dev_close);
 
 static int ps3av_probe(struct ps3_vuart_port_device *dev)
 {
@@ -997,3 +971,7 @@ static void __exit ps3av_module_exit(void)
 
 subsys_initcall(ps3av_module_init);
 module_exit(ps3av_module_exit);
+
+MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("PS3 AV Settings Driver");
+MODULE_AUTHOR("Sony Computer Entertainment Inc.");

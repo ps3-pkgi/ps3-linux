@@ -296,7 +296,7 @@ static struct miscdevice ps3flash_misc = {
 	.fops	= &ps3flash_fops,
 };
 
-static int ps3flash_probe(struct ps3_system_bus_device *_dev)
+static int __devinit ps3flash_probe(struct ps3_system_bus_device *_dev)
 {
 	struct ps3_storage_device *dev = to_ps3_storage_device(&_dev->core);
 	struct ps3flash_private *priv;

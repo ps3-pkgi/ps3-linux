@@ -303,7 +303,7 @@ static int ps3fb_mode;
 module_param(ps3fb_mode, bool, 0);
 
 static char *mode_option __initdata;
-
+int mode_hack; // FIXME: do something with this...
 
 static int ps3fb_get_res_table(u32 xres, u32 yres)
 {
@@ -853,35 +853,6 @@ static irqreturn_t ps3fb_vsync_interrupt(int irq, void *ptr)
 	return IRQ_HANDLED;
 }
 
-#ifndef MODULE
-static int __init ps3fb_setup(char *options)
-{
-	char *this_opt;
-	int mode = 0;
-
-	if (!options || !*options)
-		return 0;	/* no options */
-
-	while ((this_opt = strsep(&options, ",")) != NULL) {
-		if (!*this_opt)
-			continue;
-		if (!strncmp(this_opt, "mode:", 5))
-			mode = simple_strtoul(this_opt + 5, NULL, 0);
-		else
-			mode_option = this_opt;
-	}
-	return mode;
-}
-#endif	/* MODULE */
-
-    /*
-     *  Initialisation
-     */
-
-static void ps3fb_platform_release(struct device *device)
-{
-	/* This is called when the reference count goes to zero. */
-}
 
 static int ps3fb_vsync_settings(struct gpu_driver_info *dinfo, void *dev)
 {
@@ -974,6 +945,43 @@ static struct fb_fix_screeninfo ps3fb_fix __initdata = {
 	.accel =	FB_ACCEL_NONE,
 };
 
+static void ps3fb_platform_release(struct device *device)
+{
+	printk("%s:%u\n need this???", __func__, __LINE__);
+}
+
+static int ps3fb_set_sync(void)
+{
+	int status;
+
+#ifdef HEAD_A
+	status = lv1_gpu_context_attribute(0x0,
+					   L1GPU_CONTEXT_ATTRIBUTE_DISPLAY_SYNC,
+					   0, L1GPU_DISPLAY_SYNC_VSYNC, 0, 0);
+	if (status) {
+		printk(KERN_ERR
+		       "%s: lv1_gpu_context_attribute DISPLAY_SYNC failed: %d\n",
+		       __func__, status);
+		return -1;
+	}
+#endif
+#ifdef HEAD_B
+	status = lv1_gpu_context_attribute(0x0,
+					   L1GPU_CONTEXT_ATTRIBUTE_DISPLAY_SYNC,
+					   1, L1GPU_DISPLAY_SYNC_VSYNC, 0, 0);
+
+	if (status) {
+		printk(KERN_ERR
+		       "%s: lv1_gpu_context_attribute DISPLAY_MODE failed: %d\n",
+		       __func__, status);
+		return -1;
+	}
+#endif
+	return 0;
+}
+
+//EXPORT_SYMBOL_GPL(ps3fb_set_sync);
+
 static int __init ps3fb_probe(struct platform_device *dev)
 {
 	struct fb_info *info;
@@ -989,6 +997,38 @@ static int __init ps3fb_probe(struct platform_device *dev)
 	struct task_struct *task;
 
 	printk(" -> %s:%u\n", __func__, __LINE__);
+
+	dev->dev.release = ps3fb_platform_release; // need this???
+
+	ps3_system_bus_device_init(&fake_dev, PS3_MATCH_ID_GFX, NULL, NULL);
+
+	status = ps3_open_hv_device(&fake_dev);
+
+	if (status) {
+		printk(KERN_ERR "%s: ps3_open_hv_device failed\n", __func__);
+		goto err;
+	}
+
+	ps3fb_mode = ps3av_get_mode();
+	DPRINTK("ps3av_mode:%d\n", ps3fb_mode);
+
+	if (mode_hack)
+		ps3fb_mode = mode_hack;
+
+	if (ps3fb_mode > 0) {
+		u32 xres, yres;
+		ps3av_video_mode2res(ps3fb_mode, &xres, &yres);
+		ps3fb.res_index = ps3fb_get_res_table(xres, yres);
+		DPRINTK("res_index:%d\n", ps3fb.res_index);
+	} else
+		ps3fb.res_index = GPU_RES_INDEX;
+
+	atomic_set(&ps3fb.f_count, -1);	/* fbcon opens ps3fb */
+	atomic_set(&ps3fb.ext_flip, 0);	/* for flip with vsync */
+	init_waitqueue_head(&ps3fb.wait_vsync);
+	ps3fb.num_frames = 1;
+
+	ps3fb_set_sync();
 
 	/* get gpu context handle */
 	status = lv1_gpu_memory_allocate(DDR_SIZE, 0, 0, 0, 0,
@@ -1101,11 +1141,34 @@ err:
 	return retval;
 }
 
-void ps3fb_cleanup(void)
+static int ps3fb_remove(struct platform_device *dev)
+{
+	BUG();
+	return 0;
+}
+
+extern void fbcon_exit(void);
+extern void vt_console_stop(void);
+
+static void ps3fb_shutdown(struct platform_device *dev)
 {
 	int status;
+	struct fb_info *info = platform_get_drvdata(dev);
 
 	printk(" -> %s:%d\n", __func__, __LINE__);
+
+	vt_console_stop();
+	fbcon_exit();
+
+	ps3fb_flip_ctl(0); /* flip off */
+	ps3fb.dinfo->irq.mask = 0;
+
+	if (info) {
+		unregister_framebuffer(info);
+		fb_dealloc_cmap(&info->cmap);
+		framebuffer_release(info);
+	}
+
 	if (ps3fb.task) {
 		struct task_struct *task = ps3fb.task;
 		ps3fb.task = NULL;
@@ -1126,37 +1189,6 @@ void ps3fb_cleanup(void)
 		DPRINTK("lv1_gpu_memory_free failed: %d\n", status);
 
 	ps3_close_hv_device(&fake_dev);
-}
-
-static int ps3fb_remove(struct platform_device *dev)
-{
-	struct fb_info *info = platform_get_drvdata(dev);
-
-	printk(" -> %s:%d\n", __func__, __LINE__);
-
-	if (info) {
-		unregister_framebuffer(info);
-		fb_dealloc_cmap(&info->cmap);
-		framebuffer_release(info);
-	}
-	ps3fb_cleanup();
-	printk(" <- %s:%d\n", __func__, __LINE__);
-	return 0;
-}
-
-extern void fbcon_exit(void);
-extern void vt_console_stop(void);
-
-static void ps3fb_shutdown(struct platform_device *dev)
-{
-	printk(" -> %s:%d\n", __func__, __LINE__);
-
-	vt_console_stop();
-	fbcon_exit();
-
-	ps3fb_flip_ctl(0); /* flip off */
-	ps3fb.dinfo->irq.mask = 0;
-	ps3fb_remove(dev);
 	printk(" <- %s:%d\n", __func__, __LINE__);
 }
 
@@ -1167,100 +1199,55 @@ static struct platform_driver ps3fb_driver = {
 	.driver = { .name = "ps3fb" }
 };
 
-static struct platform_device ps3fb_device = {
-	.name	= "ps3fb",
-	.id	= 0,
-	.dev	= { .release = ps3fb_platform_release }
-};
-
-int ps3fb_set_sync(void)
+#ifndef MODULE
+static int __init ps3fb_setup(void)
 {
-	int status;
+	char *this_opt;
+	int mode = 0;
+	char *options;
 
-#ifdef HEAD_A
-	status = lv1_gpu_context_attribute(0x0,
-					   L1GPU_CONTEXT_ATTRIBUTE_DISPLAY_SYNC,
-					   0, L1GPU_DISPLAY_SYNC_VSYNC, 0, 0);
-	if (status) {
-		printk(KERN_ERR
-		       "%s: lv1_gpu_context_attribute DISPLAY_SYNC failed: %d\n",
-		       __func__, status);
-		return -1;
-	}
-#endif
-#ifdef HEAD_B
-	status = lv1_gpu_context_attribute(0x0,
-					   L1GPU_CONTEXT_ATTRIBUTE_DISPLAY_SYNC,
-					   1, L1GPU_DISPLAY_SYNC_VSYNC, 0, 0);
+	if (fb_get_options("ps3fb", &options))
+		return -ENXIO;
 
-	if (status) {
-		printk(KERN_ERR
-		       "%s: lv1_gpu_context_attribute DISPLAY_MODE failed: %d\n",
-		       __func__, status);
-		return -1;
+	if (!options || !*options)
+		return 0;	/* no options */
+
+	while ((this_opt = strsep(&options, ",")) != NULL) {
+		if (!*this_opt)
+			continue;
+		if (!strncmp(this_opt, "mode:", 5))
+			mode_hack = simple_strtoul(this_opt + 5, NULL, 0);
+		else
+			mode_option = this_opt;
 	}
-#endif
 	return 0;
 }
-
-EXPORT_SYMBOL_GPL(ps3fb_set_sync);
+#endif	/* MODULE */
 
 static int __init ps3fb_init(void)
 {
 	int error;
 
-#ifndef MODULE
-	int mode;
-	char *option = NULL;
+	printk(" -> %s:%d\n", __func__, __LINE__);
 
-	if (fb_get_options("ps3fb", &option))
-		goto err;
+#ifndef MODULE
+	error = ps3fb_setup();
+	if (error)
+		return error;
 #endif
 
 	if (!ps3fb_videomemory.address)
-		goto err;
-
-	//FIXME: shouldn't this be in ps3fb_probe?
-	ps3_system_bus_device_init(&fake_dev, PS3_MATCH_ID_GPU, NULL, NULL);
-	error = ps3_open_hv_device(&fake_dev);
-	if (error) {
-		printk(KERN_ERR "%s: ps3_open_hv_device failed\n", __func__);
-		goto err;
-	}
-
-	ps3fb_mode = ps3av_get_mode();
-	DPRINTK("ps3av_mode:%d\n", ps3fb_mode);
-#ifndef MODULE
-	mode = ps3fb_setup(option);	/* check boot option */
-	if (mode)
-		ps3fb_mode = mode;
-#endif
-	if (ps3fb_mode > 0) {
-		u32 xres, yres;
-		ps3av_video_mode2res(ps3fb_mode, &xres, &yres);
-		ps3fb.res_index = ps3fb_get_res_table(xres, yres);
-		DPRINTK("res_index:%d\n", ps3fb.res_index);
-	} else
-		ps3fb.res_index = GPU_RES_INDEX;
-
-	atomic_set(&ps3fb.f_count, -1);	/* fbcon opens ps3fb */
-	atomic_set(&ps3fb.ext_flip, 0);	/* for flip with vsync */
-	init_waitqueue_head(&ps3fb.wait_vsync);
-	ps3fb.num_frames = 1;
+		return -ENXIO;
 
 	error = platform_driver_register(&ps3fb_driver);
-	if (!error) {
-		error = platform_device_register(&ps3fb_device);
-		if (error)
-			platform_driver_unregister(&ps3fb_driver);
+	if (error) {
+		printk(KERN_ERR "%s: platform_driver_register failed: %d\n",
+		       __func__, error);
 	}
 
-	ps3fb_set_sync();
+	printk(" <- %s:%d\n", __func__, __LINE__);
 
 	return error;
-
-err:
-	return -ENXIO;
 }
 
 module_init(ps3fb_init);
@@ -1268,11 +1255,17 @@ module_init(ps3fb_init);
 #ifdef MODULE
 static void __exit ps3fb_exit(void)
 {
-	platform_device_unregister(&ps3fb_device);
+	printk(" -> %s:%d\n", __func__, __LINE__);
 	platform_driver_unregister(&ps3fb_driver);
+	printk(" <- %s:%d\n", __func__, __LINE__);
 }
 
+/*
+FIXME: need to fix fbcon to support remove
 module_exit(ps3fb_exit);
+*/
+#endif /* MODULE */
 
 MODULE_LICENSE("GPL");
-#endif				/* MODULE */
+MODULE_DESCRIPTION("PS3 GPU Frame Buffer Driver");
+MODULE_AUTHOR("Sony Computer Entertainment Inc.");

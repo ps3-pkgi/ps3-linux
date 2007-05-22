@@ -848,8 +848,31 @@ static int __devinit ps3_register_storage_devices(void)
 	return 0;
 }
 
-static int __init
-ps3_register_known_devices (void)
+#include <linux/platform_device.h>
+static int __devinit ps3_register_fb(void)
+{
+	int result;
+	static struct platform_device dev = {
+		.name   = "ps3fb",
+		.id     = 0,
+	};
+
+	pr_debug(" -> %s:%d\n", __func__, __LINE__);
+
+	result = platform_device_register(&dev);
+
+	if (result) {
+		pr_debug("%s:%d platform_device_register failed\n",
+			__func__, __LINE__);
+		goto fail;
+	}
+
+fail:
+	pr_debug(" <- %s:%d\n", __func__, __LINE__);
+	return result;
+}
+
+static int __init ps3_register_known_devices(void)
 {
 	int result;
 
@@ -860,6 +883,7 @@ ps3_register_known_devices (void)
 
 	//ps3_repository_dump_bus_info();
 
+	result = ps3_register_fb();
 	result = ps3_register_ohci_0();
 	result = ps3_register_ehci_0();
 	result = ps3_register_ohci_1();
