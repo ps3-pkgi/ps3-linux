@@ -755,7 +755,8 @@ static int ps3stor_probe_dev(struct ps3_repository_device *repo)
 
 	error = ps3_system_bus_device_register(&dev->sbd, PS3_IOBUS_SB);
 	if (error) {
-		printk(KERN_ERR "%s:%u: ps3_system_register failed %d\n",
+		printk(KERN_ERR
+		       "%s:%u: ps3_system_bus_device_register failed %d\n",
 		       __func__, __LINE__, error);
 		goto cleanup;
 	}
@@ -848,28 +849,31 @@ static int __devinit ps3_register_storage_devices(void)
 	return 0;
 }
 
-#include <linux/platform_device.h>
 static int __devinit ps3_register_fb(void)
 {
-	int result;
-	static struct platform_device dev = {
-		.name   = "ps3fb",
-		.id     = 0,
-	};
+	int error;
+	struct ps3_system_bus_device *dev;
+
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
+	if (!dev)
+		return -ENOMEM;
+
+	ps3_system_bus_device_init(dev, PS3_MATCH_ID_GFX, NULL, NULL);
 
 	pr_debug(" -> %s:%d\n", __func__, __LINE__);
 
-	result = platform_device_register(&dev);
-
-	if (result) {
-		pr_debug("%s:%d platform_device_register failed\n",
-			__func__, __LINE__);
-		goto fail;
+	error = ps3_system_bus_device_register(dev, PS3_IOBUS_IOC0);
+	if (error) {
+		printk(KERN_ERR
+		       "%s:%u: ps3_system_bus_device_register failed %d\n",
+		       __func__, __LINE__, error);
+		goto cleanup;
 	}
+	return 0;
 
-fail:
-	pr_debug(" <- %s:%d\n", __func__, __LINE__);
-	return result;
+cleanup:
+	kfree(dev);
+	return -ENODEV;
 }
 
 static int __init ps3_register_known_devices(void)

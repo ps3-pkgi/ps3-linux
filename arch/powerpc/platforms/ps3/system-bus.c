@@ -432,12 +432,43 @@ static void ps3_system_bus_shutdown(struct device *_dev)
 	dev_dbg(&dev->core, " <- %s:%d\n", __func__, __LINE__);
 }
 
+static int ps3_system_bus_uevent(struct device *_dev, char **envp,
+				 int num_envp, char *buffer, int buffer_size)
+{
+	struct ps3_system_bus_device *dev = to_ps3_system_bus_device(_dev);
+	int i=0, length = 0;
+
+	if (add_uevent_var(envp, num_envp, &i, buffer, buffer_size,
+			   &length, "MODALIAS=ps3:%d",
+			   dev->match_id))
+		return -ENOMEM;
+
+	envp[i] = NULL;
+	return 0;
+}
+
+static ssize_t modalias_show(struct device *_dev, struct device_attribute *a,
+			     char *buf)
+{
+	struct ps3_system_bus_device *dev = to_ps3_system_bus_device(_dev);
+        int len = snprintf(buf, PAGE_SIZE, "ps3:%d\n", dev->match_id);
+
+        return (len >= PAGE_SIZE) ? (PAGE_SIZE - 1) : len;
+}
+
+static struct device_attribute ps3_system_bus_dev_attrs[] = {
+        __ATTR_RO(modalias),
+        __ATTR_NULL,
+};
+
 struct bus_type ps3_system_bus_type = {
 	.name = "ps3_system_bus",
 	.match = ps3_system_bus_match,
+	.uevent = ps3_system_bus_uevent,
 	.probe = ps3_system_bus_probe,
 	.remove = ps3_system_bus_remove,
 	.shutdown = ps3_system_bus_shutdown,
+	.dev_attrs = ps3_system_bus_dev_attrs,
 };
 
 static int __init ps3_system_bus_init(void)

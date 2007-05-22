@@ -229,6 +229,7 @@ static struct ps3_system_bus_driver ps3_ehci_driver = {
 	.match_id = PS3_MATCH_ID_EHCI,
 	.core = {
 		.name = "ps3-ehci-driver",
+		.owner = THIS_MODULE,
 	},
 	.probe = ps3_ehci_probe,
 	.remove = ps3_ehci_remove,

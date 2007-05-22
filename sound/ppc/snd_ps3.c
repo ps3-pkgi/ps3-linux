@@ -1020,6 +1020,7 @@ static struct ps3_system_bus_driver snd_ps3_bus_driver_info = {
 	.shutdown = snd_ps3_driver_remove,
 	.core = {
 		.name = SND_PS3_DRIVER_NAME,
+		.owner = THIS_MODULE,
 	},
 };
 

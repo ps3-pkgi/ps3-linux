@@ -907,6 +907,7 @@ static int ps3rom_remove(struct ps3_system_bus_device *_dev)
 static struct ps3_system_bus_driver ps3rom = {
 	.match_id	= PS3_MATCH_ID_STOR_ROM,
 	.core.name	= DEVICE_NAME,
+	.core.owner	= THIS_MODULE,
 	.probe		= ps3rom_probe,
 	.remove		= ps3rom_remove
 };
