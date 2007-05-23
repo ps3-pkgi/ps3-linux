@@ -438,6 +438,8 @@ static int __devinit ps3_register_sound(void)
 		struct ps3_mmio_region m_region;
 	} *p;
 
+	pr_debug(" -> %s:%d\n", __func__, __LINE__);
+
 	p = kzalloc(sizeof(*p), GFP_KERNEL);
 	if (!p)
 		return -ENOMEM;
@@ -446,13 +448,14 @@ static int __devinit ps3_register_sound(void)
 				   &p->d_region,
 				   &p->m_region);
 
-#warning need device specific data here
+#warning need to get the device specific data here
 
 	result = ps3_system_bus_device_register(&p->dev, PS3_IOBUS_IOC0);
 
 	if (result)
 		kfree(p);
 
+	pr_debug(" <- %s:%d\n", __func__, __LINE__);
 	return result;
 }
 

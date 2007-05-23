@@ -748,6 +748,8 @@ static int snd_ps3_allocate_irq(void)
 	u64 lpar_addr, lpar_size;
 	u64 * mapped;
 
+	// FIXME: move this to device_init (H/W probe)
+
 	/* get irq outlet */
 	ret = lv1_gpu_device_map(1, &lpar_addr, &lpar_size);
 	if (ret) {

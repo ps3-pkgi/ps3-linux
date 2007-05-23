@@ -10,8 +10,8 @@ CONFIG_USB_EHCI_HCD		o	o	o	o(5)	o
 CONFIG_USB_OHCI_HCD		o	o	o	o(5)	o
 CONFIG_GELIC_NET		o	o	o	
 CONFIG_FB_PS3			o	o(2)	o	o	x(6)
-CONFIG_SND_PS3			o	o	o	?
-CONFIG_PS3_PS3AV		o	o	o	
+CONFIG_SND_PS3			o	o	o	o	o
+CONFIG_PS3_PS3AV		o	o	o	?
 CONFIG_PS3_SYS_MANAGER		o	o	o	o	NA(4)
 CONFIG_PS3_VUART		o	o	o	
 CONFIG_PS3_FLASH		o	o	o	o(5)	o
