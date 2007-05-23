@@ -701,12 +701,6 @@ static inline void ps3av_cmd_av_monitor_info_dump(const struct ps3av_pkt_av_get_
 extern int ps3av_cmd_video_get_monitor_info(struct ps3av_pkt_av_get_monitor_info *,
 					    u32);
 
-struct ps3_vuart_port_device;
-extern int ps3av_vuart_write(struct ps3_vuart_port_device *dev,
-			     const void *buf, unsigned long size);
-extern int ps3av_vuart_read(struct ps3_vuart_port_device *dev, void *buf,
-			    unsigned long size, int timeout);
-
 extern int ps3av_set_video_mode(u32, int);
 extern int ps3av_set_audio_mode(u32, u32, u32, u32, u32);
 extern int ps3av_get_auto_mode(int);

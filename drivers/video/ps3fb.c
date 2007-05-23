@@ -1189,10 +1189,13 @@ static struct ps3_system_bus_driver ps3fb_driver = {
 	.shutdown	= ps3fb_shutdown,
 };
 
-#ifndef MODULE
 static int __init ps3fb_setup(void)
 {
 	char *options, *this_opt;
+
+#ifdef MODULE
+	return 0;
+#endif
 
 	if (fb_get_options(DEVICE_NAME, &options))
 		return -ENXIO;
@@ -1210,9 +1213,6 @@ static int __init ps3fb_setup(void)
 	}
 	return 0;
 }
-#else
-#define ps3fb_setup()	0
-#endif	/* MODULE */
 
 static int __init ps3fb_init(void)
 {

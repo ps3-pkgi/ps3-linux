@@ -469,7 +469,6 @@ int fb_prepare_logo(struct fb_info *info, int rotate)
 
 	/* Return if no suitable logo was found */
 	fb_logo.logo = fb_find_logo(depth);
-printk("fb_prepare_logo: fb_logo.logo = 0x%p\n", fb_logo.logo);
 
 	if (!fb_logo.logo) {
 		return 0;
@@ -517,7 +516,6 @@ static int fb_show_logo_line(struct fb_info *info, int rotate,
 	unsigned char *logo_new = NULL, *logo_rotate = NULL;
 	struct fb_image image;
 
-printk("fb_show_logo_line: logo = 0x%p, logo->data = 0x%p\n", logo, logo ? logo->data : NULL);
 	/* Return if the frame buffer is not mapped or suspended */
 	if (logo == NULL || info->state != FBINFO_STATE_RUNNING ||
 	    info->flags & FBINFO_MODULE)

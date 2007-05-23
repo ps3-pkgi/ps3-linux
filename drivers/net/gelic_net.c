@@ -1557,11 +1557,11 @@ static int ps3_gelic_driver_remove (struct ps3_system_bus_device *dev)
 	wait_event(card->waitq,
 		   atomic_read(&card->tx_timeout_task_counter) == 0);
 
-	unregister_netdev(card->netdev);
-	free_netdev(card->netdev);
-
 	lv1_net_set_interrupt_status_indicator(bus_id(card), dev_id(card),
 					       0 , 0);
+
+	unregister_netdev(card->netdev);
+	free_netdev(card->netdev);
 
 	ps3_system_bus_set_driver_data(dev, NULL);
 

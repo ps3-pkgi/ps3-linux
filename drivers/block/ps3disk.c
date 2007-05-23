@@ -18,7 +18,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#define DEBUG
+//#define DEBUG
 
 #include <linux/dma-mapping.h>
 #include <linux/blkdev.h>
@@ -27,7 +27,6 @@
 #include <linux/interrupt.h>
 #include <linux/kthread.h>
 
-#include <asm/lv1call.h>
 #include <asm/ps3stor.h>
 
 
@@ -45,6 +44,8 @@
 
 
 #define PS3DISK_NAME		"ps3d%c"
+
+#define LV1_STORAGE_ATA_HDDOUT		(0x23)
 
 
 struct ps3disk_private {
@@ -111,12 +112,12 @@ static void ps3disk_handle_request_sg(struct ps3_storage_device *dev,
 	struct ps3disk_private *priv = ps3disk_priv(dev);
 	int uptodate = 1;
 	int write = rq_data_dir(req);
+	const char *op = write ? "write" : "read";
 	u64 res;
 
 #ifdef DEBUG
 	unsigned int n = 0;
 	struct bio *bio;
-	const char *op = write ? "write" : "read";
 	rq_for_each_bio(bio, req)
 		n++;
 	dev_dbg(&dev->sbd.core,
@@ -132,9 +133,11 @@ static void ps3disk_handle_request_sg(struct ps3_storage_device *dev,
 					 req->sector*priv->blocking_factor,
 					 req->nr_sectors*priv->blocking_factor,
 					 write);
-	if (res)
+	if (res) {
+		dev_err(&dev->sbd.core, "%s:%u: %s failed 0x%lx\n", __func__,
+			__LINE__, op, res);
 		uptodate = 0;
-	else if (!write)
+	} else if (!write)
 		ps3disk_scatter_gather(dev, req, 0);
 
 	spin_lock_irq(&priv->lock);
@@ -179,6 +182,37 @@ static int ps3disk_thread(void *data)
 	return 0;
 }
 
+static int ps3disk_sync_cache(struct ps3_storage_device *dev)
+{
+	int res;
+
+	dev_dbg(&dev->sbd.core, "%s:%u: sync cache\n", __func__, __LINE__);
+
+	res = ps3stor_send_command(dev, LV1_STORAGE_ATA_HDDOUT, 0, 0, 0, 0);
+	if (res) {
+		dev_err(&dev->sbd.core, "%s:%u: sync cache failed 0x%lx\n",
+			__func__, __LINE__, dev->lv1_status);
+		return -EIO;
+	}
+	return 0;
+}
+
+static int ps3disk_issue_flush(request_queue_t *q, struct gendisk *gendisk,
+			       sector_t *sector)
+{
+	struct ps3_storage_device *dev = q->queuedata;
+	return ps3disk_sync_cache(dev);
+}
+
+static void ps3disk_prepare_flush(request_queue_t *q, struct request *req)
+{
+	// FIXME Is this the correct thing to do?
+	struct ps3_storage_device *dev = q->queuedata;
+	ps3disk_sync_cache(dev);
+	memset(req->cmd, 0, sizeof(req->cmd));
+	req->cmd_type = REQ_TYPE_FLUSH;
+}
+
 static void ps3disk_request(request_queue_t *q)
 {
 	struct ps3_storage_device *dev = q->queuedata;
@@ -192,18 +226,11 @@ static int __devinit ps3disk_probe(struct ps3_system_bus_device *_dev)
 {
 	struct ps3_storage_device *dev = to_ps3_storage_device(&_dev->core);
 	struct ps3disk_private *priv;
-	int res, error;
+	int error;
 	unsigned int devidx;
 	struct request_queue *queue;
 	struct gendisk *gendisk;
 	struct task_struct *task;
-
-	error = ps3stor_probe_access(dev);
-	if (error) {
-		dev_err(&dev->sbd.core, "%s:%u: No accessible regions found\n",
-			__func__, __LINE__);
-		return error;
-	}
 
 	if (dev->blk_size < KERNEL_SECTOR_SIZE) {
 		dev_err(&dev->sbd.core,
@@ -237,62 +264,16 @@ static int __devinit ps3disk_probe(struct ps3_system_bus_device *_dev)
 		goto fail_free_priv;
 	}
 
-	error = ps3_open_hv_device(&dev->sbd);
-	if (error) {
-		dev_err(&dev->sbd.core,
-			"%s:%u: ps3_open_hv_device failed %d\n", __func__,
-			__LINE__, error);
+	error = ps3stor_setup(dev, DEVICE_NAME);
+	if (error)
 		goto fail_free_bounce;
-	}
-
-	error = ps3_sb_event_receive_port_setup(PS3_BINDING_CPU_ANY,
-						&dev->sbd.did,
-						dev->sbd.interrupt_id,
-						&dev->irq);
-	if (error) {
-		dev_err(&dev->sbd.core,
-			"%s:%u: ps3_sb_event_receive_port_setup failed %d\n",
-		       __func__, __LINE__, error);
-		goto fail_close_device;
-	}
-
-	error = request_irq(dev->irq, ps3stor_interrupt, IRQF_DISABLED,
-			    DEVICE_NAME, dev);
-	if (error) {
-		dev_err(&dev->sbd.core, "%s:%u: request_irq failed %d\n",
-			__func__, __LINE__, error);
-		goto fail_sb_event_receive_port_destroy;
-	}
-
-	dev->bounce_lpar = ps3_mm_phys_to_lpar(__pa(dev->bounce_buf));
-
-	dev->sbd.d_region = &dev->dma_region;
-	ps3_dma_region_init(&dev->dma_region, &dev->sbd.did, PS3_DMA_4K,
-			    PS3_DMA_OTHER, dev->bounce_buf, dev->bounce_size,
-			    PS3_IOBUS_SB);
-	res = ps3_dma_region_create(&dev->dma_region);
-	if (res) {
-		dev_err(&dev->sbd.core, "%s:%u: cannot create DMA region\n",
-			__func__, __LINE__);
-		error = -ENOMEM;
-		goto fail_free_irq;
-	}
-
-	dev->bounce_dma = dma_map_single(&dev->sbd.core, dev->bounce_buf,
-					 dev->bounce_size, DMA_BIDIRECTIONAL);
-	if (!dev->bounce_dma) {
-		dev_err(&dev->sbd.core, "%s:%u: map DMA region failed\n",
-			__func__, __LINE__);
-		error = -ENODEV;
-		goto fail_free_dma;
-	}
 
 	queue = blk_init_queue(ps3disk_request, &priv->lock);
 	if (!queue) {
 		dev_err(&dev->sbd.core, "%s:%u: blk_init_queue failed\n",
 			__func__, __LINE__);
 		error = -ENOMEM;
-		goto fail_unmap_dma;
+		goto fail_teardown;
 	}
 
 	priv->queue = queue;
@@ -305,7 +286,9 @@ static int __devinit ps3disk_probe(struct ps3_system_bus_device *_dev)
 	blk_queue_dma_alignment(queue, dev->blk_size-1);
 	blk_queue_hardsect_size(queue, dev->blk_size);
 
-	blk_queue_ordered(queue, 0, NULL);	// FIXME no barriers
+	blk_queue_issue_flush_fn(queue, ps3disk_issue_flush);
+	blk_queue_ordered(queue, QUEUE_ORDERED_DRAIN_FLUSH,
+			  ps3disk_prepare_flush);
 
 	blk_queue_max_phys_segments(queue, -1);
 	blk_queue_max_hw_segments(queue, -1);
@@ -345,18 +328,8 @@ fail_free_disk:
 	put_disk(priv->gendisk);
 fail_cleanup_queue:
 	blk_cleanup_queue(queue);
-fail_unmap_dma:
-	dma_unmap_single(&dev->sbd.core, dev->bounce_dma, dev->bounce_size,
-			 DMA_BIDIRECTIONAL);
-fail_free_dma:
-	ps3_dma_region_free(&dev->dma_region);
-fail_free_irq:
-	free_irq(dev->irq, dev);
-fail_sb_event_receive_port_destroy:
-	ps3_sb_event_receive_port_destroy(&dev->sbd.did, dev->sbd.interrupt_id,
-					  dev->irq);
-fail_close_device:
-	ps3_close_hv_device(&dev->sbd);
+fail_teardown:
+	ps3stor_teardown(dev);
 fail_free_bounce:
 	kfree(dev->bounce_buf);
 fail_free_priv:
@@ -370,38 +343,16 @@ static int ps3disk_remove(struct ps3_system_bus_device *_dev)
 {
 	struct ps3_storage_device *dev = to_ps3_storage_device(&_dev->core);
 	struct ps3disk_private *priv = ps3disk_priv(dev);
-	int error;
 
-	if (priv->thread)
-		kthread_stop(priv->thread);
-	if (priv->gendisk) {
-		__clear_bit(priv->gendisk->first_minor / PS3DISK_MINORS,
-			    &ps3disk_mask);
-		del_gendisk(priv->gendisk);
-		put_disk(priv->gendisk);
-	}
-	if (priv->queue)
-		blk_cleanup_queue(priv->queue);
-	dma_unmap_single(&dev->sbd.core, dev->bounce_dma, dev->bounce_size,
-			 DMA_BIDIRECTIONAL);
-	ps3_dma_region_free(&dev->dma_region);
-
-	free_irq(dev->irq, dev);
-
-	error = ps3_sb_event_receive_port_destroy(&dev->sbd.did,
-						  dev->sbd.interrupt_id,
-						  dev->irq);
-	if (error)
-		dev_err(&dev->sbd.core,
-			"%s:%u: destroy event receive port failed %d\n",
-			__func__, __LINE__, error);
-
-	error = ps3_close_hv_device(&dev->sbd);
-	if (error)
-		dev_err(&dev->sbd.core,
-			"%s:%u: ps3_close_hv_device failed %d\n", __func__,
-			__LINE__, error);
-
+	kthread_stop(priv->thread);
+	__clear_bit(priv->gendisk->first_minor / PS3DISK_MINORS,
+		    &ps3disk_mask);
+	del_gendisk(priv->gendisk);
+	put_disk(priv->gendisk);
+	blk_cleanup_queue(priv->queue);
+	dev_notice(&dev->sbd.core, "Synchronizing disk cache\n");
+	ps3disk_sync_cache(dev);
+	ps3stor_teardown(dev);
 	kfree(dev->bounce_buf);
 	kfree(priv);
 	return 0;
@@ -441,7 +392,7 @@ static void __exit ps3disk_exit(void)
 {
 	unregister_blkdev(ps3disk_major, DEVICE_NAME);
 
-	return ps3_system_bus_driver_unregister(&ps3disk);
+	ps3_system_bus_driver_unregister(&ps3disk);
 }
 
 module_init(ps3disk_init);

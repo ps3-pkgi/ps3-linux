@@ -18,7 +18,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#define DEBUG
+//#define DEBUG
 
 #include <linux/cdrom.h>
 #include <linux/interrupt.h>
@@ -29,7 +29,6 @@
 #include <scsi/scsi_device.h>
 #include <scsi/scsi_host.h>
 
-#include <asm/lv1call.h>
 #include <asm/ps3stor.h>
 
 
@@ -266,9 +265,6 @@ static int ps3rom_queuecommand(struct scsi_cmnd *cmd,
 	spin_unlock_irq(&priv->lock);
 	wake_up_process(priv->thread);
 	return 0;
-
-
-	return -1;
 }
 
 /*
@@ -411,35 +407,12 @@ static inline unsigned int cdda_raw_len(const struct scsi_cmnd *cmd)
 static u64 ps3rom_send_atapi_command(struct ps3_storage_device *dev,
 				     struct lv1_atapi_cmnd_block *cmd)
 {
-	int res;
-	u64 lpar;
-
 	dev_dbg(&dev->sbd.core, "%s:%u: send ATAPI command 0x%02x (%s)\n",
 		__func__, __LINE__, cmd->pkt[0], scsi_command(cmd->pkt[0]));
 
-	init_completion(&dev->irq_done);
-
-	lpar = ps3_mm_phys_to_lpar(__pa(cmd));
-	res = lv1_storage_send_device_command(dev->sbd.did.dev_id,
-					      LV1_STORAGE_SEND_ATAPI_COMMAND,
-					      lpar, sizeof(*cmd), cmd->buffer,
-					      cmd->arglen, &dev->tag);
-	if (res) {
-		dev_err(&dev->sbd.core,
-			"%s:%u: send_device_command failed %d\n", __func__,
-			__LINE__, res);
-		return -1;
-	}
-
-	wait_for_completion(&dev->irq_done);
-	if (dev->lv1_status)
-		dev_dbg(&dev->sbd.core, "%s:%u: ATAPI command failed 0x%lx\n",
-			__func__, __LINE__, dev->lv1_status);
-	else
-		dev_dbg(&dev->sbd.core, "%s:%u: ATAPI command completed\n",
-			__func__, __LINE__);
-
-	return dev->lv1_status;
+	return ps3stor_send_command(dev, LV1_STORAGE_SEND_ATAPI_COMMAND,
+				    ps3_mm_phys_to_lpar(__pa(cmd)),
+				    sizeof(*cmd), cmd->buffer, cmd->arglen);
 }
 
 static void ps3rom_atapi_request(struct ps3_storage_device *dev,
@@ -728,12 +701,9 @@ static int __devinit ps3rom_probe(struct ps3_system_bus_device *_dev)
 {
 	struct ps3_storage_device *dev = to_ps3_storage_device(&_dev->core);
 	struct ps3rom_private *priv;
-	int res, error;
+	int error;
 	struct Scsi_Host *host;
 	struct task_struct *task;
-
-	/* special case: CD-ROM is assumed always accessible */
-	dev->accessible_regions = 1;
 
 	if (dev->blk_size != CD_FRAMESIZE) {
 		dev_err(&dev->sbd.core,
@@ -756,62 +726,16 @@ static int __devinit ps3rom_probe(struct ps3_system_bus_device *_dev)
 		goto fail_free_priv;
 	}
 
-	error = ps3_open_hv_device(&dev->sbd);
-	if (error) {
-		dev_err(&dev->sbd.core,
-			"%s:%u: ps3_open_hv_device failed %d\n", __func__,
-			__LINE__, error);
+	error = ps3stor_setup(dev, DEVICE_NAME);
+	if (error)
 		goto fail_free_bounce;
-	}
-
-	error = ps3_sb_event_receive_port_setup(PS3_BINDING_CPU_ANY,
-						&dev->sbd.did,
-						dev->sbd.interrupt_id,
-						&dev->irq);
-	if (error) {
-		dev_err(&dev->sbd.core,
-			"%s:%u: ps3_sb_event_receive_port_setup failed %d\n",
-		       __func__, __LINE__, error);
-		goto fail_close_device;
-	}
-
-	error = request_irq(dev->irq, ps3stor_interrupt, IRQF_DISABLED,
-			    DEVICE_NAME, dev);
-	if (error) {
-		dev_err(&dev->sbd.core, "%s:%u: request_irq failed %d\n",
-			__func__, __LINE__, error);
-		goto fail_sb_event_receive_port_destroy;
-	}
-
-	dev->bounce_lpar = ps3_mm_phys_to_lpar(__pa(dev->bounce_buf));
-
-	dev->sbd.d_region = &dev->dma_region;
-	ps3_dma_region_init(&dev->dma_region, &dev->sbd.did, PS3_DMA_4K,
-			    PS3_DMA_OTHER, dev->bounce_buf,
-			    dev->bounce_size, PS3_IOBUS_SB);
-	res = ps3_dma_region_create(&dev->dma_region);
-	if (res) {
-		dev_err(&dev->sbd.core, "%s:%u: cannot create DMA region\n",
-			__func__, __LINE__);
-		error = -ENOMEM;
-		goto fail_free_irq;
-	}
-
-	dev->bounce_dma = dma_map_single(&dev->sbd.core, dev->bounce_buf,
-					 dev->bounce_size, DMA_BIDIRECTIONAL);
-	if (!dev->bounce_dma) {
-		dev_err(&dev->sbd.core, "%s:%u: map DMA region failed\n",
-			__func__, __LINE__);
-		error = -ENODEV;
-		goto fail_free_dma;
-	}
 
 	host = scsi_host_alloc(&ps3rom_host_template,
 			       sizeof(struct ps3_system_bus_device *));
 	if (!host) {
 		dev_err(&dev->sbd.core, "%s:%u: scsi_host_alloc failed\n",
 			__func__, __LINE__);
-		goto fail_unmap_dma;
+		goto fail_teardown;
 	}
 
 	priv->host = host;
@@ -843,18 +767,8 @@ fail_remove_host:
 	scsi_remove_host(host);
 fail_host_put:
 	scsi_host_put(host);
-fail_unmap_dma:
-	dma_unmap_single(&dev->sbd.core, dev->bounce_dma, dev->bounce_size,
-			 DMA_BIDIRECTIONAL);
-fail_free_dma:
-	ps3_dma_region_free(&dev->dma_region);
-fail_free_irq:
-	free_irq(dev->irq, dev);
-fail_sb_event_receive_port_destroy:
-	ps3_sb_event_receive_port_destroy(&dev->sbd.did, dev->sbd.interrupt_id,
-					  dev->irq);
-fail_close_device:
-	ps3_close_hv_device(&dev->sbd);
+fail_teardown:
+	ps3stor_teardown(dev);
 fail_free_bounce:
 	kfree(dev->bounce_buf);
 fail_free_priv:
@@ -866,38 +780,11 @@ static int ps3rom_remove(struct ps3_system_bus_device *_dev)
 {
 	struct ps3_storage_device *dev = to_ps3_storage_device(&_dev->core);
 	struct ps3rom_private *priv = ps3rom_priv(dev);
-	int error;
 
-	dev_dbg(&dev->sbd.core, "%s:%u\n", __func__, __LINE__);
-
-	if (priv->host) {
-		scsi_remove_host(priv->host);
-		scsi_host_put(priv->host);
-	}
-
-	if (priv->thread)
-		kthread_stop(priv->thread);
-
-	dma_unmap_single(&dev->sbd.core, dev->bounce_dma, dev->bounce_size,
-			 DMA_BIDIRECTIONAL);
-	ps3_dma_region_free(&dev->dma_region);
-
-	free_irq(dev->irq, dev);
-
-	error = ps3_sb_event_receive_port_destroy(&dev->sbd.did,
-						  dev->sbd.interrupt_id,
-						  dev->irq);
-	if (error)
-		dev_err(&dev->sbd.core,
-			"%s:%u: destroy event receive port failed %d\n",
-			__func__, __LINE__, error);
-
-	error = ps3_close_hv_device(&dev->sbd);
-	if (error)
-		dev_err(&dev->sbd.core,
-			"%s:%u: ps3_close_hv_device failed %d\n", __func__,
-			__LINE__, error);
-
+	scsi_remove_host(priv->host);
+	scsi_host_put(priv->host);
+	kthread_stop(priv->thread);
+	ps3stor_teardown(dev);
 	kfree(dev->bounce_buf);
 	kfree(priv);
 	return 0;
@@ -920,7 +807,7 @@ static int __init ps3rom_init(void)
 
 static void __exit ps3rom_exit(void)
 {
-	return ps3_system_bus_driver_unregister(&ps3rom);
+	ps3_system_bus_driver_unregister(&ps3rom);
 }
 
 module_init(ps3rom_init);
