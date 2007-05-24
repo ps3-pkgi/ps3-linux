@@ -725,32 +725,6 @@ static int ps3stor_probe_dev(struct ps3_repository_device *repo)
 		goto cleanup;
 	}
 
-#if defined(CONFIG_PS3_STORAGE_OLD) || defined(CONFIG_PS3_STORAGE_OLD_MODULE)
-	switch (match_id) {
-#if defined(CONFIG_PS3_DISK) || defined(CONFIG_PS3_DISK_MODULE)
-	case PS3_MATCH_ID_STOR_DISK:
-		break;
-#endif
-#if defined(CONFIG_PS3_ROM) || defined(CONFIG_PS3_ROM_MODULE)
-	case PS3_MATCH_ID_STOR_ROM:
-		break;
-#endif
-#if defined(CONFIG_PS3_FLASH) || defined(CONFIG_PS3_FLASH_MODULE)
-	case PS3_MATCH_ID_STOR_FLASH:
-		break;
-#endif
-
-	default:
-		/*
-		 * FIXME As this driver conflicts with the old storage driver,
-		 *	 we cannot do a full probe here
-		 */
-		printk(KERN_ERR
-		       "Ignoring storage device, let the old driver handle it\n");
-		goto cleanup;
-	}
-#endif
-
 	/* FIXME Do we really need this? I guess for kboot only? */
 	error = ps3stor_probe_notification(dev, dev_type);
 	if (error) {

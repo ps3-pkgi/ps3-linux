@@ -1,5 +1,5 @@
 /*
- * PS3 Storage Bus
+ * PS3 Storage Devices
  *
  * Copyright (C) 2007 Sony Computer Entertainment Inc.
  * Copyright 2007 Sony Corp.

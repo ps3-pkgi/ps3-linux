@@ -18,8 +18,6 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-//#define DEBUG
-
 #include <linux/cdrom.h>
 #include <linux/interrupt.h>
 #include <linux/kthread.h>

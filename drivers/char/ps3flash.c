@@ -18,8 +18,6 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-//#define DEBUG
-
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
 #include <linux/miscdevice.h>
@@ -29,7 +27,6 @@
 
 
 #define DEVICE_NAME		"ps3flash"
-
 
 #define FLASH_BLOCK_SIZE	(256*1024)
 

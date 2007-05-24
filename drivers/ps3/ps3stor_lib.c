@@ -18,8 +18,6 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#define DEBUG
-
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
 
@@ -298,8 +296,8 @@ EXPORT_SYMBOL_GPL(ps3stor_read_write_sectors);
  *	Returns 0 for success, -1 in case of failure to submit the command, or
  *	an LV1 status value in case of other errors
  */
-extern u64 ps3stor_send_command(struct ps3_storage_device *dev, u64 cmd,
-				u64 arg1, u64 arg2, u64 arg3, u64 arg4)
+u64 ps3stor_send_command(struct ps3_storage_device *dev, u64 cmd, u64 arg1,
+			 u64 arg2, u64 arg3, u64 arg4)
 {
 	int res;
 

@@ -861,7 +861,7 @@ struct vuart_bus_priv {
 
 static irqreturn_t ps3_vuart_irq_handler(int irq, void *_private)
 {
-	struct vuart_bus_priv *bus_priv = (struct vuart_bus_priv *)_private;
+	struct vuart_bus_priv *bus_priv = _private;
 
 	BUG_ON(!bus_priv);
 
@@ -1260,7 +1260,7 @@ static void ps3_vuart_port_release_device(struct device *_dev)
 
 	dev_dbg(&dev->core, " <- %s:%d\n", __func__, __LINE__);
 #else
-	device_unregister(&dev->core); //here, or in ps3_vuart_remove???
+	device_unregister(_dev); //here, or in ps3_vuart_remove???
 #endif
 }
 

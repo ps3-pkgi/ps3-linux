@@ -681,15 +681,15 @@ int ps3fb_wait_for_vsync(u32 crtc)
 
 EXPORT_SYMBOL_GPL(ps3fb_wait_for_vsync);
 
-void ps3fb_flip_ctl(int on)
+void ps3fb_flip_ctl(int on, void *data)
 {
+	struct ps3fb_priv *priv = data;
 	if (on)
-		atomic_dec_if_positive(&ps3fb.ext_flip);
+		atomic_dec_if_positive(&priv->ext_flip);
 	else
-		atomic_inc(&ps3fb.ext_flip);
+		atomic_inc(&priv->ext_flip);
 }
 
-EXPORT_SYMBOL_GPL(ps3fb_flip_ctl);
 
     /*
      * ioctl
@@ -973,8 +973,6 @@ static int ps3fb_set_sync(void)
 	return 0;
 }
 
-//EXPORT_SYMBOL_GPL(ps3fb_set_sync);
-
 static int __devinit ps3fb_probe(struct ps3_system_bus_device *dev)
 {
 	struct fb_info *info;
@@ -1104,6 +1102,7 @@ static int __devinit ps3fb_probe(struct ps3_system_bus_device *dev)
 	}
 
 	ps3fb.task = task;
+	ps3av_register_flip_ctl(ps3fb_flip_ctl, &ps3fb);
 
 	printk(" <- %s:%u\n", __func__, __LINE__);
 	return 0;
@@ -1133,8 +1132,8 @@ static int __devexit ps3fb_remove(struct ps3_system_bus_device *dev)
 	return 0;
 }
 
-extern void fbcon_exit(void);
-extern void vt_console_stop(void);
+extern void fbcon_exit(void);		// FIXME
+extern void vt_console_stop(void);	// FIXME
 
 static int ps3fb_shutdown(struct ps3_system_bus_device *dev)
 {
@@ -1146,7 +1145,7 @@ static int ps3fb_shutdown(struct ps3_system_bus_device *dev)
 	vt_console_stop();
 	fbcon_exit();
 
-	ps3fb_flip_ctl(0); /* flip off */
+	ps3fb_flip_ctl(0, &ps3fb);	/* flip off */
 	ps3fb.dinfo->irq.mask = 0;
 
 	if (info) {
@@ -1155,6 +1154,7 @@ static int ps3fb_shutdown(struct ps3_system_bus_device *dev)
 		framebuffer_release(info);
 	}
 
+	ps3av_register_flip_ctl(NULL, NULL);
 	if (ps3fb.task) {
 		struct task_struct *task = ps3fb.task;
 		ps3fb.task = NULL;
