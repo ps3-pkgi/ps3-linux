@@ -38,27 +38,6 @@ struct ps3_vuart_work {
 };
 
 /**
- * struct ps3_vuart_port_priv - private vuart device data.
- */
-
-struct ps3_vuart_port_priv {
-	unsigned int port_number;
-	u64 interrupt_mask;
-
-	struct {
-		spinlock_t lock;
-		struct list_head head;
-	} tx_list;
-	struct {
-		struct ps3_vuart_work work;
-		unsigned long bytes_held;
-		spinlock_t lock;
-		struct list_head head;
-	} rx_list;
-	struct ps3_vuart_stats stats;
-};
-
-/**
  * struct ps3_vuart_port_driver - a driver for a device on a vuart port
  */
 

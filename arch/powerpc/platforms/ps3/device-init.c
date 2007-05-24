@@ -484,6 +484,31 @@ static int __devinit ps3_register_sys_manager(void)
 	return result;
 }
 
+static int __devinit ps3_register_av(void)
+{
+	int result;
+	struct ps3_vuart_port_device *p;
+
+	pr_debug(" -> %s:%d\n", __func__, __LINE__);
+
+	p = kzalloc(sizeof(*p), GFP_KERNEL);
+	if (!p)
+		return -ENOMEM;
+
+	p->match_id = PS3_MATCH_ID_AV_SETTINGS;
+
+#if defined(CONFIG_PS3_PS3AV) || defined(CONFIG_PS3_PS3AV_MODULE)
+	result = ps3_vuart_port_device_register(p);
+
+	if (result)
+		pr_debug("%s:%d ps3_vuart_port_device_register failed\n",
+			__func__, __LINE__);
+#endif
+
+	pr_debug(" <- %s:%d\n", __func__, __LINE__);
+	return result;
+}
+
 #ifdef DEBUG
 static const char *ps3stor_dev_type(enum ps3_dev_type dev_type)
 {
@@ -890,14 +915,15 @@ static int __init ps3_register_known_devices(void)
 
 	//ps3_repository_dump_bus_info();
 
+	result = ps3_register_av();
 	result = ps3_register_fb();
 	result = ps3_register_ohci_0();
 	result = ps3_register_ehci_0();
 	result = ps3_register_ohci_1();
 	result = ps3_register_ehci_1();
-	result = ps3_register_sound();
 
 	result = ps3_register_sys_manager();
+	result = ps3_register_sound();
 	result = ps3_register_gelic();
 	result = ps3_register_storage_devices();
 
