@@ -1016,3 +1016,4 @@ module_exit(ps3av_module_exit);
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("PS3 AV Settings Driver");
 MODULE_AUTHOR("Sony Computer Entertainment Inc.");
+MODULE_ALIAS_PS3(PS3_MATCH_ID_AV_SETTINGS);

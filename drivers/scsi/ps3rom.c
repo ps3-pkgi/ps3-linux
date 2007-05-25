@@ -814,3 +814,4 @@ module_exit(ps3rom_exit);
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("PS3 ROM Storage Driver");
 MODULE_AUTHOR("Sony Corporation");
+MODULE_ALIAS_PS3(PS3_MATCH_ID_STOR_ROM);

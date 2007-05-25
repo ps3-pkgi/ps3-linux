@@ -42,7 +42,7 @@ struct ps3_vuart_work {
  */
 
 struct ps3_vuart_port_driver {
-	enum ps3_match_id match_id;
+	unsigned int match_id;
 	struct device_driver core;
 	int (*probe)(struct ps3_vuart_port_device *);
 	int (*remove)(struct ps3_vuart_port_device *);

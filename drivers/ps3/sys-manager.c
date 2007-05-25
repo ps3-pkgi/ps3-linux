@@ -692,3 +692,5 @@ static int __init ps3_sys_manager_init(void)
 
 module_init(ps3_sys_manager_init);
 /* Module remove not supported. */
+
+MODULE_ALIAS_PS3(PS3_MATCH_ID_SYSTEM_MANAGER);

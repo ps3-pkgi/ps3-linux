@@ -110,7 +110,7 @@ static void __attribute__ ((unused)) _dump_ports_bmp(
 	pr_debug("%s:%d: ports_bmp: %016lxh\n", func, line, bmp->status);
 }
 
-static int ps3_vuart_match_id_to_port(enum ps3_match_id match_id,
+static int ps3_vuart_match_id_to_port(unsigned int match_id,
 	unsigned int *port_number)
 {
 	switch(match_id) {
@@ -1002,7 +1002,7 @@ static int ps3_vuart_probe(struct device *_dev)
 	result = ps3_vuart_match_id_to_port(dev->match_id, &port_number);
 
 	if (result) {
-		dev_dbg(&dev->core, "%s:%d: unknown match_id (%d)\n",
+		dev_dbg(&dev->core, "%s:%d: unknown match_id (%u)\n",
 			__func__, __LINE__, dev->match_id);
 		result = -EINVAL;
 		goto fail_match;
@@ -1118,7 +1118,7 @@ static int ps3_vuart_remove(struct device *_dev)
 
 	down(&vuart_bus_priv.probe_mutex);
 
-	dev_dbg(&dev->core, " -> %s:%d: match_id %d\n", __func__, __LINE__,
+	dev_dbg(&dev->core, " -> %s:%d: match_id %u\n", __func__, __LINE__,
 		dev->match_id);
 
 	if(!dev->core.driver) {
@@ -1170,7 +1170,7 @@ static void ps3_vuart_shutdown(struct device *_dev)
 
 	down(&vuart_bus_priv.probe_mutex);
 
-	dev_dbg(&dev->core, " -> %s:%d: match_id %d\n", __func__, __LINE__,
+	dev_dbg(&dev->core, " -> %s:%d: match_id %u\n", __func__, __LINE__,
 		dev->match_id);
 
 	if(!dev->core.driver) {

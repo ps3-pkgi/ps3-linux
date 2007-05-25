@@ -648,7 +648,7 @@ static int ps3stor_probe_dev(struct ps3_repository_device *repo)
 	unsigned int num_regions, i;
 	struct ps3_storage_device *dev;
 	enum ps3_dev_type dev_type;
-	enum ps3_match_id match_id;
+	unsigned int match_id;
 
 	pr_info("%s:%u: Probing new storage device %u\n", __func__, __LINE__,
 		 repo->dev_index);

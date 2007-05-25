@@ -1303,3 +1303,5 @@ static void __exit snd_ps3_exit(void)
 	ps3_system_bus_driver_unregister(&snd_ps3_bus_driver_info);
 	pr_debug("%s:end\n", __func__);
 }
+
+MODULE_ALIAS_PS3(PS3_MATCH_ID_SOUND);

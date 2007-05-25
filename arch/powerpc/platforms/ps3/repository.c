@@ -182,7 +182,6 @@ int ps3_repository_read_bus_id(unsigned int bus_index, unsigned int *bus_id)
 	*bus_id = v1;
 	return result;
 }
-EXPORT_SYMBOL_GPL(ps3_repository_read_bus_id);
 
 int ps3_repository_read_bus_type(unsigned int bus_index,
 	enum ps3_bus_type *bus_type)
@@ -198,7 +197,6 @@ int ps3_repository_read_bus_type(unsigned int bus_index,
 	*bus_type = v1;
 	return result;
 }
-EXPORT_SYMBOL_GPL(ps3_repository_read_bus_type);
 
 int ps3_repository_read_bus_num_dev(unsigned int bus_index,
 	unsigned int *num_dev)
@@ -214,7 +212,6 @@ int ps3_repository_read_bus_num_dev(unsigned int bus_index,
 	*num_dev = v1;
 	return result;
 }
-EXPORT_SYMBOL_GPL(ps3_repository_read_bus_num_dev);
 
 int ps3_repository_read_dev_str(unsigned int bus_index,
 	unsigned int dev_index, const char *dev_str, u64 *value)
@@ -242,7 +239,6 @@ int ps3_repository_read_dev_id(unsigned int bus_index, unsigned int dev_index,
 	*dev_id = v1;
 	return result;
 }
-EXPORT_SYMBOL_GPL(ps3_repository_read_dev_id);
 
 int ps3_repository_read_dev_type(unsigned int bus_index,
 	unsigned int dev_index, enum ps3_dev_type *dev_type)
@@ -259,7 +255,6 @@ int ps3_repository_read_dev_type(unsigned int bus_index,
 	*dev_type = v1;
 	return result;
 }
-EXPORT_SYMBOL_GPL(ps3_repository_read_dev_type);
 
 int ps3_repository_read_dev_intr(unsigned int bus_index,
 	unsigned int dev_index, unsigned int intr_index,
@@ -279,7 +274,6 @@ int ps3_repository_read_dev_intr(unsigned int bus_index,
 	*interrupt_id = v2;
 	return result;
 }
-EXPORT_SYMBOL_GPL(ps3_repository_read_dev_intr);
 
 int ps3_repository_read_dev_reg_type(unsigned int bus_index,
 	unsigned int dev_index, unsigned int reg_index,
@@ -650,7 +644,6 @@ int ps3_repository_find_device (enum ps3_bus_type bus_type,
 
 	return result;
 }
-EXPORT_SYMBOL_GPL(ps3_repository_find_device);
 
 int ps3_repository_find_interrupt(const struct ps3_repository_device *dev,
 	enum ps3_interrupt_type intr_type, unsigned int *interrupt_id)
@@ -689,7 +682,6 @@ int ps3_repository_find_interrupt(const struct ps3_repository_device *dev,
 
 	return result;
 }
-EXPORT_SYMBOL_GPL(ps3_repository_find_interrupt);
 
 int ps3_repository_find_reg(const struct ps3_repository_device *dev,
 	enum ps3_reg_type reg_type, u64 *bus_addr, u64 *len)
@@ -971,7 +963,6 @@ int ps3_repository_read_boot_dat_address(u64 *address)
 		0,
 		address, 0);
 }
-EXPORT_SYMBOL_GPL(ps3_repository_read_stor_dev_info);
 
 int ps3_repository_read_boot_dat_size(unsigned int *size)
 {
@@ -1038,7 +1029,6 @@ int ps3_repository_read_tb_freq(u64 node_id, u64 *tb_freq)
 		0,
 		tb_freq, 0);
 }
-EXPORT_SYMBOL_GPL(ps3_repository_read_stor_dev_region);
 
 int ps3_repository_read_be_tb_freq(unsigned int be_index, u64 *tb_freq)
 {

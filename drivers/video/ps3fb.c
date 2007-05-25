@@ -1237,3 +1237,4 @@ module_exit(ps3fb_exit);	/* FIXME: need to fix fbcon to support remove */
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("PS3 GPU Frame Buffer Driver");
 MODULE_AUTHOR("Sony Computer Entertainment Inc.");
+MODULE_ALIAS_PS3(PS3_MATCH_ID_GFX);

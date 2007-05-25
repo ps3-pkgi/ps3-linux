@@ -313,27 +313,32 @@ static inline const char* ps3_result(int result)
 #endif
 }
 
-/* system bus routines */
 
-enum ps3_match_id {
-	PS3_MATCH_ID_EHCI = 1,
-	PS3_MATCH_ID_OHCI,
-	PS3_MATCH_ID_GELIC,
-	PS3_MATCH_ID_AV_SETTINGS,
-	PS3_MATCH_ID_SYSTEM_MANAGER,
-	PS3_MATCH_ID_STOR_DISK,
-	PS3_MATCH_ID_STOR_ROM,
-	PS3_MATCH_ID_STOR_FLASH,
-	PS3_MATCH_ID_SOUND,
-	PS3_MATCH_ID_GFX,
-};
+/* system bus device match IDs */
+
+#define PS3_MATCH_ID_EHCI		 1
+#define PS3_MATCH_ID_OHCI		 2
+#define PS3_MATCH_ID_GELIC		 3
+#define PS3_MATCH_ID_AV_SETTINGS	 4
+#define PS3_MATCH_ID_SYSTEM_MANAGER	 5
+#define PS3_MATCH_ID_STOR_DISK		 6
+#define PS3_MATCH_ID_STOR_ROM		 7
+#define PS3_MATCH_ID_STOR_FLASH		 8
+#define PS3_MATCH_ID_SOUND		 9
+#define PS3_MATCH_ID_GFX		10
+
+#define MODULE_ALIAS_PS3(match_id)	\
+	MODULE_ALIAS("ps3:" __stringify(match_id))
+
+
+/* system bus routines */
 
 /**
  * struct ps3_system_bus_device - a device on the system bus
  */
 
 struct ps3_system_bus_device {
-	enum ps3_match_id match_id;
+	unsigned int match_id;
 	struct ps3_device_id did;
 	unsigned int interrupt_id;
 /*	struct iommu_table *iommu_table; -- waiting for Ben's cleanups */
@@ -343,7 +348,7 @@ struct ps3_system_bus_device {
 };
 
 static inline void ps3_system_bus_device_init(
-	struct ps3_system_bus_device *dev, enum ps3_match_id match_id,
+	struct ps3_system_bus_device *dev, unsigned int match_id,
 	struct ps3_dma_region * d_region, struct ps3_mmio_region * m_region)
 {
 	dev->match_id = match_id;
@@ -359,7 +364,7 @@ int ps3_close_hv_device(struct ps3_system_bus_device *dev);
  */
 
 struct ps3_system_bus_driver {
-	enum ps3_match_id match_id;
+	unsigned int match_id;
 	struct device_driver core;
 	int (*probe)(struct ps3_system_bus_device *);
 	int (*remove)(struct ps3_system_bus_device *);
@@ -414,7 +419,7 @@ struct ps3_vuart_port_priv;
  */
 
 struct ps3_vuart_port_device {
-	enum ps3_match_id match_id;
+	unsigned int match_id;
 	struct device core;
 	struct ps3_vuart_port_priv* priv; /* private driver variables */
 

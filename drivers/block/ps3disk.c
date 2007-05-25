@@ -399,4 +399,4 @@ module_exit(ps3disk_exit);
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("PS3 Disk Storage Driver");
 MODULE_AUTHOR("Sony Corporation");
-
+MODULE_ALIAS_PS3(PS3_MATCH_ID_STOR_DISK);

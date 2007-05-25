@@ -401,7 +401,7 @@ static void ps3_system_bus_shutdown(struct device *_dev)
 
 	BUG_ON(!dev);
 
-	dev_dbg(&dev->core, " -> %s:%d: match_id %d\n", __func__, __LINE__,
+	dev_dbg(&dev->core, " -> %s:%d: match_id %u\n", __func__, __LINE__,
 		dev->match_id);
 
 	if (!dev->core.driver) {
@@ -438,9 +438,8 @@ static int ps3_system_bus_uevent(struct device *_dev, char **envp,
 	struct ps3_system_bus_device *dev = to_ps3_system_bus_device(_dev);
 	int i=0, length = 0;
 
-	if (add_uevent_var(envp, num_envp, &i, buffer, buffer_size,
-			   &length, "MODALIAS=ps3:%d",
-			   dev->match_id))
+	if (add_uevent_var(envp, num_envp, &i, buffer, buffer_size, &length,
+			   "MODALIAS=ps3:%u", dev->match_id))
 		return -ENOMEM;
 
 	envp[i] = NULL;
@@ -451,7 +450,7 @@ static ssize_t modalias_show(struct device *_dev, struct device_attribute *a,
 			     char *buf)
 {
 	struct ps3_system_bus_device *dev = to_ps3_system_bus_device(_dev);
-        int len = snprintf(buf, PAGE_SIZE, "ps3:%d\n", dev->match_id);
+        int len = snprintf(buf, PAGE_SIZE, "ps3:%u\n", dev->match_id);
 
         return (len >= PAGE_SIZE) ? (PAGE_SIZE - 1) : len;
 }
