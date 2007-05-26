@@ -1304,4 +1304,4 @@ static void __exit snd_ps3_exit(void)
 	pr_debug("%s:end\n", __func__);
 }
 
-MODULE_ALIAS_PS3(PS3_MATCH_ID_SOUND);
+MODULE_ALIAS(PS3_MODULE_ALIAS_SOUND);

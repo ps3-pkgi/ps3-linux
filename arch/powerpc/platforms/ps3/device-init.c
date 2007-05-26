@@ -32,23 +32,25 @@
 
 #include "platform.h"
 
-static int __devinit
-ps3_register_gelic (void)
+static int __devinit ps3_register_gelic(void)
 {
 	int result;
-	struct ps3_system_bus_device *dev;
 	struct ps3_repository_device repo;
+	struct layout {
+		struct ps3_system_bus_device dev;
+		struct ps3_dma_region d_region;
+	} *p;
 
 	pr_debug(" -> %s:%d\n", __func__, __LINE__);
 
-	/* Puts the regions at the end of the system_bus_device. */
+	p = kzalloc(sizeof(struct layout), GFP_KERNEL);
 
-	dev = kzalloc(sizeof(struct ps3_system_bus_device)
-		+ sizeof(struct ps3_dma_region), GFP_KERNEL);
+	if (!p)
+		return -ENOMEM;
 
-	ps3_system_bus_device_init(dev,
+	ps3_system_bus_device_init(&p->dev,
 				   PS3_MATCH_ID_GELIC,
-				   NULL,
+				   &p->d_region,
 				   NULL);
 
 	result = ps3_repository_find_first_device(PS3_BUS_TYPE_SB,
@@ -60,10 +62,10 @@ ps3_register_gelic (void)
 		goto fail;
 	}
 
-	dev->did = repo.did;
+	p->dev.did = repo.did;
 
 	result = ps3_repository_find_interrupt(&repo,
-		PS3_INTERRUPT_TYPE_EVENT_PORT, &dev->interrupt_id);
+		PS3_INTERRUPT_TYPE_EVENT_PORT, &p->dev.interrupt_id);
 
 	if (result) {
 		pr_debug("%s:%d ps3_repository_find_interrupt failed\n",
@@ -71,7 +73,7 @@ ps3_register_gelic (void)
 		goto fail;
 	}
 
-	BUG_ON(dev->interrupt_id != 0);
+	BUG_ON(p->dev.interrupt_id != 0);
 
 	if (result) {
 		pr_debug("%s:%d ps3_repository_get_interrupt_id failed\n",
@@ -79,13 +81,10 @@ ps3_register_gelic (void)
 		goto fail;
 	}
 
-	dev->d_region = (struct ps3_dma_region *)((char*)dev
-		+ sizeof(struct ps3_system_bus_device));
-
-	ps3_dma_region_init(dev->d_region, &dev->did, PS3_DMA_64K,
+	ps3_dma_region_init(p->dev.d_region, &p->dev.did, PS3_DMA_64K,
 			    PS3_DMA_OTHER, NULL, 0, PS3_IOBUS_SB);
 
-	result = ps3_system_bus_device_register(dev, PS3_IOBUS_SB);
+	result = ps3_system_bus_device_register(&p->dev, PS3_IOBUS_SB);
 
 	if (result) {
 		pr_debug("%s:%d ps3_system_bus_device_register failed\n",
@@ -98,25 +97,20 @@ ps3_register_gelic (void)
 
 fail:
 #ifdef DEBUG
-	memset(dev, 0xad, sizeof(struct ps3_system_bus_device)
-		+ sizeof(struct ps3_dma_region));
+	memset(p, 0xad, sizeof(struct layout));
 #endif
-	kfree(dev);
+	kfree(p);
 	pr_debug(" <- %s:%d\n", __func__, __LINE__);
 	return result;
 }
 
-static int __devinit
-ps3_register_ohci_0 (void)
+static int __devinit ps3_register_ohci_0(void)
 {
 	int result;
 	struct ps3_repository_device repo;
 	u64 bus_addr;
 	u64 len;
-
-	/* Puts the regions at the end of the system_bus_device. */
-
-	struct ohci_layout {
+	struct layout {
 		struct ps3_system_bus_device dev;
 		struct ps3_dma_region d_region;
 		struct ps3_mmio_region m_region;
@@ -124,7 +118,10 @@ ps3_register_ohci_0 (void)
 
 	pr_debug(" -> %s:%d\n", __func__, __LINE__);
 
-	p = kzalloc(sizeof(struct ohci_layout), GFP_KERNEL);
+	p = kzalloc(sizeof(struct layout), GFP_KERNEL);
+
+	if (!p)
+		return -ENOMEM;
 
 	ps3_system_bus_device_init(&p->dev,
 				   PS3_MATCH_ID_OHCI,
@@ -175,24 +172,20 @@ ps3_register_ohci_0 (void)
 
 fail:
 #ifdef DEBUG
-	memset(p, 0xad, sizeof(struct ohci_layout));
+	memset(p, 0xad, sizeof(struct layout));
 #endif
 	kfree(p);
 	pr_debug(" <- %s:%d\n", __func__, __LINE__);
 	return result;
 }
 
-static int __devinit
-ps3_register_ohci_1 (void)
+static int __devinit ps3_register_ohci_1(void)
 {
 	int result;
 	struct ps3_repository_device repo;
 	u64 bus_addr;
 	u64 len;
-
-	/* Puts the regions at the end of the system_bus_device. */
-
-	struct ohci_layout {
+	struct layout {
 		struct ps3_system_bus_device dev;
 		struct ps3_dma_region d_region;
 		struct ps3_mmio_region m_region;
@@ -200,7 +193,10 @@ ps3_register_ohci_1 (void)
 
 	pr_debug(" -> %s:%d\n", __func__, __LINE__);
 
-	p = kzalloc(sizeof(struct ohci_layout), GFP_KERNEL);
+	p = kzalloc(sizeof(struct layout), GFP_KERNEL);
+
+	if (!p)
+		return -ENOMEM;
 
 	ps3_system_bus_device_init(&p->dev,
 				   PS3_MATCH_ID_OHCI,
@@ -260,24 +256,20 @@ ps3_register_ohci_1 (void)
 
 fail:
 #ifdef DEBUG
-	memset(p, 0xad, sizeof(struct ohci_layout));
+	memset(p, 0xad, sizeof(struct layout));
 #endif
 	kfree(p);
 	pr_debug(" <- %s:%d\n", __func__, __LINE__);
 	return result;
 }
 
-static int __devinit
-ps3_register_ehci_0 (void)
+static int __devinit ps3_register_ehci_0(void)
 {
 	int result;
 	struct ps3_repository_device repo;
 	u64 bus_addr;
 	u64 len;
-
-	/* Puts the regions at the end of the system_bus_device. */
-
-	struct ehci_layout {
+	struct layout {
 		struct ps3_system_bus_device dev;
 		struct ps3_dma_region d_region;
 		struct ps3_mmio_region m_region;
@@ -285,7 +277,10 @@ ps3_register_ehci_0 (void)
 
 	pr_debug(" -> %s:%d\n", __func__, __LINE__);
 
-	p = kzalloc(sizeof(struct ehci_layout), GFP_KERNEL);
+	p = kzalloc(sizeof(struct layout), GFP_KERNEL);
+
+	if (!p)
+		return -ENOMEM;
 
 	ps3_system_bus_device_init(&p->dev,
 				   PS3_MATCH_ID_EHCI,
@@ -336,24 +331,20 @@ ps3_register_ehci_0 (void)
 
 fail:
 #ifdef DEBUG
-	memset(p, 0xad, sizeof(struct ehci_layout));
+	memset(p, 0xad, sizeof(struct layout));
 #endif
 	kfree(p);
 	pr_debug(" <- %s:%d\n", __func__, __LINE__);
 	return result;
 }
 
-static int __devinit
-ps3_register_ehci_1 (void)
+static int __devinit ps3_register_ehci_1(void)
 {
 	int result;
 	struct ps3_repository_device repo;
 	u64 bus_addr;
 	u64 len;
-
-	/* Puts the regions at the end of the system_bus_device. */
-
-	struct ehci_layout {
+	struct layout {
 		struct ps3_system_bus_device dev;
 		struct ps3_dma_region d_region;
 		struct ps3_mmio_region m_region;
@@ -361,7 +352,10 @@ ps3_register_ehci_1 (void)
 
 	pr_debug(" -> %s:%d\n", __func__, __LINE__);
 
-	p = kzalloc(sizeof(struct ehci_layout), GFP_KERNEL);
+	p = kzalloc(sizeof(struct layout), GFP_KERNEL);
+
+	if (!p)
+		return -ENOMEM;
 
 	ps3_system_bus_device_init(&p->dev,
 				   PS3_MATCH_ID_EHCI,
@@ -421,7 +415,7 @@ ps3_register_ehci_1 (void)
 
 fail:
 #ifdef DEBUG
-	memset(p, 0xad, sizeof(struct ehci_layout));
+	memset(p, 0xad, sizeof(struct layout));
 #endif
 	kfree(p);
 	pr_debug(" <- %s:%d\n", __func__, __LINE__);
@@ -431,8 +425,7 @@ fail:
 static int __devinit ps3_register_sound(void)
 {
 	int result;
-
-	struct snd_ps3_layout {
+	struct layout {
 		struct ps3_system_bus_device dev;
 		struct ps3_dma_region d_region;
 		struct ps3_mmio_region m_region;
@@ -459,51 +452,27 @@ static int __devinit ps3_register_sound(void)
 	return result;
 }
 
-static int __devinit ps3_register_sys_manager(void)
+static int __devinit ps3_register_vuart_device(enum ps3_match_id match_id)
 {
 	int result;
-	struct ps3_vuart_port_device *p;
+	struct layout {
+		struct ps3_system_bus_device dev;
+	} *p;
 
 	pr_debug(" -> %s:%d\n", __func__, __LINE__);
 
-	p = kzalloc(sizeof(*p), GFP_KERNEL);
+	p = kzalloc(sizeof(struct layout), GFP_KERNEL);
+
 	if (!p)
 		return -ENOMEM;
 
-	p->match_id = PS3_MATCH_ID_SYSTEM_MANAGER;
+	ps3_system_bus_device_init(&p->dev, match_id, NULL, NULL);
 
-#if defined(CONFIG_PS3_SYS_MANAGER) || defined(CONFIG_PS3_SYS_MANAGER_MODULE)
-	result = ps3_vuart_port_device_register(p);
-
-	if (result)
-		pr_debug("%s:%d ps3_vuart_port_device_register failed\n",
-			__func__, __LINE__);
-#endif
-
-	pr_debug(" <- %s:%d\n", __func__, __LINE__);
-	return result;
-}
-
-static int __devinit ps3_register_av(void)
-{
-	int result;
-	struct ps3_vuart_port_device *p;
-
-	pr_debug(" -> %s:%d\n", __func__, __LINE__);
-
-	p = kzalloc(sizeof(*p), GFP_KERNEL);
-	if (!p)
-		return -ENOMEM;
-
-	p->match_id = PS3_MATCH_ID_AV_SETTINGS;
-
-#if defined(CONFIG_PS3_PS3AV) || defined(CONFIG_PS3_PS3AV_MODULE)
-	result = ps3_vuart_port_device_register(p);
+	result = ps3_system_bus_device_register(&p->dev, PS3_IOBUS_VUART);
 
 	if (result)
-		pr_debug("%s:%d ps3_vuart_port_device_register failed\n",
+		pr_debug("%s:%d ps3_system_bus_device_register failed\n",
 			__func__, __LINE__);
-#endif
 
 	pr_debug(" <- %s:%d\n", __func__, __LINE__);
 	return result;
@@ -648,7 +617,7 @@ static int ps3stor_probe_dev(struct ps3_repository_device *repo)
 	unsigned int num_regions, i;
 	struct ps3_storage_device *dev;
 	enum ps3_dev_type dev_type;
-	unsigned int match_id;
+	enum ps3_match_id match_id;
 
 	pr_info("%s:%u: Probing new storage device %u\n", __func__, __LINE__,
 		 repo->dev_index);
@@ -889,14 +858,15 @@ static int __init ps3_register_known_devices(void)
 
 	//ps3_repository_dump_bus_info();
 
-	result = ps3_register_av();
+	ps3_register_vuart_device(PS3_MATCH_ID_AV_SETTINGS);
+	ps3_register_vuart_device(PS3_MATCH_ID_SYSTEM_MANAGER);
+
 	result = ps3_register_fb();
 	result = ps3_register_ohci_0();
 	result = ps3_register_ehci_0();
 	result = ps3_register_ohci_1();
 	result = ps3_register_ehci_1();
 
-	result = ps3_register_sys_manager();
 	result = ps3_register_sound();
 	result = ps3_register_gelic();
 	result = ps3_register_storage_devices();

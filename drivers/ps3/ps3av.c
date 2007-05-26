@@ -42,7 +42,7 @@ static struct ps3av {
 	struct completion done;
 	struct workqueue_struct *wq;
 	int open_count;
-	struct ps3_vuart_port_device *dev;
+	struct ps3_system_bus_device *dev;
 
 	int region;
 	struct ps3av_pkt_av_get_hw_conf av_hw_conf;
@@ -184,7 +184,7 @@ static int ps3av_parse_event_packet(const struct ps3av_reply_hdr *hdr)
 
 #define POLLING_INTERVAL  25	/* in msec */
 
-static int ps3av_vuart_write(struct ps3_vuart_port_device *dev,
+static int ps3av_vuart_write(struct ps3_system_bus_device *dev,
 			     const void *buf, unsigned long size)
 {
 	int error;
@@ -194,7 +194,7 @@ static int ps3av_vuart_write(struct ps3_vuart_port_device *dev,
 	return error ? error : size;
 }
 
-static int ps3av_vuart_read(struct ps3_vuart_port_device *dev, void *buf,
+static int ps3av_vuart_read(struct ps3_system_bus_device *dev, void *buf,
 			    unsigned long size, int timeout)
 {
 	int error;
@@ -889,7 +889,7 @@ void ps3av_flip_ctl(int on)
 	mutex_unlock(&ps3av->mutex);
 }
 
-static int ps3av_probe(struct ps3_vuart_port_device *dev)
+static int ps3av_probe(struct ps3_system_bus_device *dev)
 {
 	int res;
 	u32 id;
@@ -950,7 +950,7 @@ fail:
 	return -ENOMEM;
 }
 
-static int ps3av_remove(struct ps3_vuart_port_device *dev)
+static int ps3av_remove(struct ps3_system_bus_device *dev)
 {
 	dev_dbg(&dev->core, " -> %s:%d\n", __func__, __LINE__);
 	if (ps3av) {
@@ -965,7 +965,7 @@ static int ps3av_remove(struct ps3_vuart_port_device *dev)
 	return 0;
 }
 
-static void ps3av_shutdown(struct ps3_vuart_port_device *dev)
+static void ps3av_shutdown(struct ps3_system_bus_device *dev)
 {
 	dev_dbg(&dev->core, " -> %s:%d\n", __func__, __LINE__);
 	ps3av_remove(dev);
@@ -973,9 +973,9 @@ static void ps3av_shutdown(struct ps3_vuart_port_device *dev)
 }
 
 static struct ps3_vuart_port_driver ps3av_driver = {
-	.match_id = PS3_MATCH_ID_AV_SETTINGS,
 	.core = {
-		.name = "ps3_av",
+		.match_id = PS3_MATCH_ID_AV_SETTINGS,
+		.core = {.name = "ps3_av",},
 	},
 	.probe = ps3av_probe,
 	.remove = ps3av_remove,
@@ -1016,4 +1016,4 @@ module_exit(ps3av_module_exit);
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("PS3 AV Settings Driver");
 MODULE_AUTHOR("Sony Computer Entertainment Inc.");
-MODULE_ALIAS_PS3(PS3_MATCH_ID_AV_SETTINGS);
+MODULE_ALIAS(PS3_MODULE_ALIAS_AV_SETTINGS);

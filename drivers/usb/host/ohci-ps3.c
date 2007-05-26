@@ -227,7 +227,7 @@ static int ps3_ohci_remove (struct ps3_system_bus_device *dev)
 	return 0;
 }
 
-MODULE_ALIAS_PS3(PS3_MATCH_ID_OHCI);
+MODULE_ALIAS(PS3_MODULE_ALIAS_OHCI);
 
 static struct ps3_system_bus_driver ps3_ohci_driver = {
 	.match_id = PS3_MATCH_ID_OHCI,
