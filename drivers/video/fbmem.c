@@ -418,6 +418,7 @@ static void fb_do_show_logo(struct fb_info *info, struct fb_image *image,
 	}
 }
 
+#ifdef CONFIG_FB
 void fb_append_extra_logo(const struct linux_logo *logo, unsigned int n)
 {
 	if (!n || fb_logo_ex_num == FB_LOGO_EX_NUM_MAX)
@@ -427,6 +428,7 @@ void fb_append_extra_logo(const struct linux_logo *logo, unsigned int n)
 	fb_logo_ex[fb_logo_ex_num].n = n;
 	fb_logo_ex_num++;
 }
+#endif
 
 int fb_prepare_logo(struct fb_info *info, int rotate)
 {
