@@ -21,7 +21,6 @@
 //#define DEBUG
 
 #include <linux/kernel.h>
-#include <linux/module.h>
 #include <linux/netdevice.h>
 #include <linux/if_vlan.h>
 #include <linux/completion.h>
@@ -30,10 +29,6 @@
 #include <asm/lv1call.h>
 
 #include "gelic_net.h"
-
-MODULE_AUTHOR("SCE Inc.");
-MODULE_DESCRIPTION("Gelic Wireless Extension");
-MODULE_LICENSE("GPL");
 
 static struct iw_handler_def gelicw_handler_def;
 
