@@ -474,11 +474,8 @@ static int spu_shutdown(struct sys_device *sysdev)
 {
 	struct spu *spu = container_of(sysdev, struct spu, sysdev);
 
-	// what else here???
-
 	spu_free_irqs(spu);
 	spu_destroy_spu(spu);
-	kfree(spu);
 	return 0;
 }
 
