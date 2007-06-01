@@ -1,4 +1,4 @@
-Status of the system-bus re-work
+* Status of the system-bus re-work
 
 o=working
 x=not working
@@ -36,3 +36,47 @@ power button	o
 (2) fbcon trouble, temp fix: ps3-hack-fbcon-shutdown.diff
 (3) need to fix fbcon to support remove
 (4) not working, WIP
+
+--------------------------------------------------------------------------------
+* Bus layout
+
+system-bus --+-- sb -------+-- usb0 --+-- ehci0
+             |             |          +-- ohci0
+             |             |
+             |             +-- usb1 --+-- ehci1
+             |             |          +-- ohci1
+             |             |
+             |             +-- gelic
+             |
+             +-- storage --+-- disk
+             |             +-- flash
+             |             +-- rom
+             |
+             +-- ioc0 -----+-- gfx
+             |             +-- sound
+             |
+             +-- vuart ----+-- av_settings
+                           +-- system_manager
+
+
+bus       | bus  | in   |
+name      | num  | repo |
+----------+------+------+---------------------------------------
+sb        | 04h  | yes  |
+storage   | 05h  | yes  |
+ioc0      | 81h  | no   |
+vuart     | 82h  | no   |
+----------+------+------+---------------------------------------
+
+device        | type   | irq  | dma | mmio |
+--------------+--------+------+-----+------+--------------------------
+usb0            sb_04
+usb1            sb_04
+gelic           sb_03
+disk            st_00
+flash           st_0e
+rom             st_05
+gfx
+sound
+av_settings     vu_00
+system_manager  vu_02

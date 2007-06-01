@@ -18,7 +18,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#define DEBUG
+#undef DEBUG
 
 #include <linux/kernel.h>
 #include <linux/netdevice.h>
@@ -508,9 +508,7 @@ static int gelicw_cmd_get_scan(struct gelic_wireless *w)
 	struct scan_desc *desc;
 	int i, j;
 	u8 *p;
-	struct gelicw_bss *bss;
 
-	lpar = ps3_mm_phys_to_lpar(__pa(w->data_buf));
 
 	/* get scan */
 	dev_dbg(wtodev(w), "GELICW_CMD_GET_SCAN\n");
@@ -526,18 +524,23 @@ static int gelicw_cmd_get_scan(struct gelic_wireless *w)
 	}
 	wait_for_completion_interruptible(&w->cmd_done);
 
+	lpar = ps3_mm_phys_to_lpar(__pa(w->data_buf));
 	status = lv1_net_control(bus_id(w), dev_id(w),
-			GELICW_GET_RES, w->cmd_tag, lpar, GELICW_DATA_BUF_SIZE,
+			GELICW_GET_RES, w->cmd_tag, lpar, PAGE_SIZE,
 			&res, &val);
 	w->cmd_tag = 0;
 	if (status || res) {
-		dev_dbg(wtodev(w), "GELICW_CMD_GET_SCAN res:%d,%ld\n", status, res);
+		dev_dbg(wtodev(w), "GELICW_CMD_GET_SCAN res:%d,%ld\n",
+			status, res);
 		return -EFAULT;
 	}
 
 	desc = (struct scan_desc *)w->data_buf;
-	for (i = 0; i < val/ sizeof(struct scan_desc) ; i++) {
-		bss = &w->bss_list[i];
+	for (i = 0;
+	     i < val / sizeof(struct scan_desc) && i < MAX_SCAN_BSS;
+	     i++) {
+		struct gelicw_bss *bss = &w->bss_list[i];
+
 		bss->rates_len = 0;
 		for (j = 0; j < MAX_RATES_LENGTH; j++)
 			if (desc[i].rate[j])
@@ -559,6 +562,7 @@ static int gelicw_cmd_get_scan(struct gelic_wireless *w)
 		bss->rssi = (u8)desc[i].rssi;
 		bss->capability = desc[i].capability;
 		bss->beacon_interval = desc[i].beacon_period;
+		memset(bss->essid, 0, sizeof(bss->essid));
 		memcpy(bss->essid, desc[i].essid, bss->essid_len);
 		p = (u8 *)&desc[i].bssid;
 		memcpy(bss->bssid, &p[2], ETH_ALEN);/* bssid:64bit in desc */
@@ -566,10 +570,10 @@ static int gelicw_cmd_get_scan(struct gelic_wireless *w)
 	}
 	w->num_bss_list = i;
 
-	if (!i)
-		return -1; /* no ap found */
-	else
+	if (w->num_bss_list)
 		return 0; /* ap found */
+	else
+		return -1; /* no ap found */
 }
 
 /* search bssid in bss list */
@@ -699,7 +703,7 @@ static int gelicw_cmd_set_scan(struct net_device *netdev)
 	/* avoid frequent scanning */
 	if (!w->essid_search && /* background scan off */
 	    w->scan_all &&
-	    (jiffies - w->last_scan) < (5 * HZ))
+	    (time_before64(get_jiffies_64(), w->last_scan + 5 * HZ)))
 		return 0;
 
 	w->bss_key_alg = IW_ENCODE_ALG_NONE;
@@ -711,7 +715,7 @@ static int gelicw_cmd_set_scan(struct net_device *netdev)
 	if (w->scan_all) {
 		/* scan all ch */
 		dev_dbg(ntodev(netdev), "GELICW_CMD_SCAN all\n");
-		w->last_scan = jiffies; /* last scan time */
+		w->last_scan = get_jiffies_64(); /* last scan time */
 		status = lv1_net_control(bus_id(w), dev_id(w),
 				GELICW_SET_CMD, w->cmd_id, 0, 0,
 				&w->cmd_tag, &val);
@@ -1034,20 +1038,37 @@ static void gelicw_clear_params(struct gelic_wireless *w)
 int gelicw_setup_netdev(struct net_device *netdev, int wi)
 {
 	struct gelic_wireless *w = gelicw_priv(netdev);
+	union ps3_firmware_version ver;
+	union ps3_firmware_version initial_ver;
 
 	if (wi < 0) {
 		/* PS3 low model has no wireless */
-		dev_dbg(ntodev(netdev), "No wireless dvice in this system\n");
+		dev_info(ntodev(netdev), "No wireless dvice in this system\n");
 		w->wireless = 0;
 		return 0;
 	}
-	w->data_buf = kmalloc(GELICW_DATA_BUF_SIZE, GFP_KERNEL);
+	/* version check */
+	initial_ver.raw = 0;
+	initial_ver.major = 1;
+	initial_ver.minor = 6;
+	if (ps3_get_firmware_version(&ver) ||
+	    (ver.raw < initial_ver.raw)) {
+		dev_info(ntodev(netdev),
+			 "firmware %d.%d is too old for wireless.\n",
+			 ver.major, ver.minor);
+		w->wireless = 0;
+		return 0;
+	}
+	/* we need 4K aligned, 16 units of scan_desc sized */
+	BUILD_BUG_ON(PAGE_SIZE < sizeof(struct scan_desc) * MAX_SCAN_BSS);
+	w->data_buf = (u8*)get_zeroed_page(GFP_KERNEL);
 	if (!w->data_buf) {
 		w->wireless = 0;
-		dev_info(ntodev(netdev), "%s:kmalloc failed\n", __func__);
+		dev_info(ntodev(netdev), "%s:get_page failed\n", __func__);
 		return -ENOMEM;
 	}
-	w->wireless = GELICW_WIRELESS_SUPPORTED; /* wireless support */
+
+	w->wireless = GELICW_WIRELESS_SUPPORTED;
 
 	w->ch_info = 0;
 	w->channel = 0;
@@ -1134,7 +1155,7 @@ void gelicw_remove(struct net_device *netdev)
 	gelicw_down(netdev);
 	w->wireless = 0;
 	netdev->wireless_handlers = NULL;
-	kfree(w->data_buf);
+	free_page((unsigned long)w->data_buf);
 }
 
 void gelicw_interrupt(struct net_device *netdev, u64 status)
