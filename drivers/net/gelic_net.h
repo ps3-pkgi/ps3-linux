@@ -133,7 +133,7 @@ enum gelic_net_int1_status {
 						      * interrupt status */
 
 #define GELIC_NET_DMAC_CMDSTAT_CHAIN_END  0x00000002 /* RXDCEIS:DMA stopped */
-
+#define GELIC_NET_DMAC_CMDSTAT_NOT_IN_USE 0xb0000000
 #define GELIC_NET_DESCR_IND_PROC_SHIFT    28
 #define GELIC_NET_DESCR_IND_PROC_MASKO    0x0fffffff
 
@@ -317,7 +317,6 @@ struct rssi_desc {
 	u16 rssi; /* max rssi = 100 */
 } __attribute__ ((packed));
 
-#define GELIC_NET_DMAC_CMDSTAT_NOT_IN_USE 0xb0000000
 
 struct gelicw_bss {
 	u8 bssid[ETH_ALEN];
