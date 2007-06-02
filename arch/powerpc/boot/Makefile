@@ -193,12 +193,11 @@ $(obj)/zImage.initrd.%: vmlinux $(wrapperbits)
 $(obj)/zImage.%: vmlinux $(wrapperbits)
 	$(call if_changed,wrap,$*)
 
-$(obj)/zImage.ps3: vmlinux $(wrapper) $(wrapperbits)
-	$(STRIP) -s -R .comment vmlinux -o vmlinux.strip
-	$(call cmd,wrap,ps3 -s $(srctree)/$(src)/dts/ps3.dts)
+$(obj)/zImage.ps3: vmlinux  $(wrapper) $(wrapperbits) $(srctree)/$(src)/dts/ps3.dts
+	$(call cmd,wrap,ps3,$(srctree)/$(src)/dts/ps3.dts,,)
 
-$(obj)/zImage.initrd.ps3: vmlinux  $(wrapper) $(wrapperbits)
-	$(call cmd,wrap_initrd,ps3 -s $(srctree)/$(src)/dts/ps3.dts)
+$(obj)/zImage.initrd.ps3: vmlinux  $(wrapper) $(wrapperbits) $(srctree)/$(src)/dts/ps3.dts $(obj)/ramdisk.image.gz
+	$(call cmd,wrap,ps3,$(srctree)/$(src)/dts/ps3.dts,,$(obj)/ramdisk.image.gz)
 
 $(obj)/zImage.holly-elf: vmlinux $(wrapperbits)
 	$(call if_changed,wrap,holly,$(obj)/dts/holly.dts,,)
