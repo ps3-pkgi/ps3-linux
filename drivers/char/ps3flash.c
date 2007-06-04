@@ -336,7 +336,7 @@ static int __devinit ps3flash_probe(struct ps3_system_bus_device *_dev)
 	dev->bounce_size = ps3flash_bounce_buffer.size;
 	dev->bounce_buf = ps3flash_bounce_buffer.address;
 
-	error = ps3stor_setup(dev, DEVICE_NAME);
+	error = ps3stor_setup(dev);
 	if (error)
 		goto fail_free_priv;
 

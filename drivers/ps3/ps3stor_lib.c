@@ -108,11 +108,10 @@ static int ps3stor_probe_access(struct ps3_storage_device *dev)
 /**
  *	ps3stor_setup - Setup a storage device before use
  *	@dev: Pointer to a struct ps3_storage_device
- *	@name: Name of the storage driver
  *
  *	Returns 0 for success, or an error code
  */
-int ps3stor_setup(struct ps3_storage_device *dev, const char *name)
+int ps3stor_setup(struct ps3_storage_device *dev)
 {
 	int error, res, alignment;
 	enum ps3_dma_page_size page_size;
@@ -136,8 +135,8 @@ int ps3stor_setup(struct ps3_storage_device *dev, const char *name)
 		goto fail_close_device;
 	}
 
-	error = request_irq(dev->irq, ps3stor_interrupt, IRQF_DISABLED, name,
-			    dev);
+	error = request_irq(dev->irq, ps3stor_interrupt, IRQF_DISABLED,
+			    dev->sbd.core.driver->name, dev);
 	if (error) {
 		dev_err(&dev->sbd.core, "%s:%u: request_irq failed %d\n",
 			__func__, __LINE__, error);

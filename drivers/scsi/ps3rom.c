@@ -19,6 +19,7 @@
  */
 
 #include <linux/cdrom.h>
+#include <linux/highmem.h>
 #include <linux/interrupt.h>
 #include <linux/kthread.h>
 
@@ -44,7 +45,6 @@ struct ps3rom_private {
 	struct task_struct *thread;
 	struct Scsi_Host *host;
 	struct scsi_cmnd *cmd;
-	void (*scsi_done)(struct scsi_cmnd *);
 };
 #define ps3rom_priv(dev)	((dev)->sbd.core.driver_data)
 
@@ -206,23 +206,11 @@ static inline const char *scsi_command(unsigned char cmd) { return NULL; }
 #endif /* DEBUG */
 
 
-static int ps3rom_slave_alloc(struct scsi_device *scsi_dev)
+static int ps3rom_slave_configure(struct scsi_device *scsi_dev)
 {
 	struct ps3_storage_device *dev;
 
 	dev = (struct ps3_storage_device *)scsi_dev->host->hostdata[0];
-
-	dev_dbg(&dev->sbd.core, "%s:%u: id %u, lun %u, channel %u\n", __func__,
-		__LINE__, scsi_dev->id, scsi_dev->lun, scsi_dev->channel);
-
-	scsi_dev->hostdata = dev;
-	return 0;
-}
-
-static int ps3rom_slave_configure(struct scsi_device *scsi_dev)
-{
-	struct ps3_storage_device *dev = scsi_dev->hostdata;
-
 	dev_dbg(&dev->sbd.core, "%s:%u: id %u, lun %u, channel %u\n", __func__,
 		__LINE__, scsi_dev->id, scsi_dev->lun, scsi_dev->channel);
 
@@ -235,31 +223,21 @@ static int ps3rom_slave_configure(struct scsi_device *scsi_dev)
 	return 0;
 }
 
-static void ps3rom_slave_destroy(struct scsi_device *scsi_dev)
-{
-}
-
 static int ps3rom_queuecommand(struct scsi_cmnd *cmd,
 			       void (*done)(struct scsi_cmnd *))
 {
-	struct ps3_storage_device *dev = cmd->device->hostdata;
-	struct ps3rom_private *priv = ps3rom_priv(dev);
+	struct ps3_storage_device *dev;
+	struct ps3rom_private *priv;
 
+	dev = (struct ps3_storage_device *)cmd->device->host->hostdata[0];
+	priv = ps3rom_priv(dev);
 	dev_dbg(&dev->sbd.core, "%s:%u: command 0x%02x (%s)\n", __func__,
 		__LINE__, cmd->cmnd[0], scsi_command(cmd->cmnd[0]));
 
-	spin_lock_irq(&priv->lock);
-	if (priv->cmd) {
-		/* no more than one can be processed */
-		dev_err(&dev->sbd.core, "%s:%u: more than 1 command queued\n",
-			__func__, __LINE__);
-		spin_unlock_irq(&priv->lock);
-		return SCSI_MLQUEUE_HOST_BUSY;
-	}
-
 	// FIXME Prevalidate commands?
+	spin_lock_irq(&priv->lock);
 	priv->cmd = cmd;
-	priv->scsi_done = done;
+	cmd->scsi_done = done;
 	spin_unlock_irq(&priv->lock);
 	wake_up_process(priv->thread);
 	return 0;
@@ -647,7 +625,7 @@ static void ps3rom_request(struct ps3_storage_device *dev,
 
 	spin_lock_irq(&priv->lock);
 	priv->cmd = NULL;
-	priv->scsi_done(cmd);
+	cmd->scsi_done(cmd);
 	spin_unlock_irq(&priv->lock);
 }
 
@@ -680,9 +658,7 @@ static int ps3rom_thread(void *data)
 
 static struct scsi_host_template ps3rom_host_template = {
 	.name =			DEVICE_NAME,
-	.slave_alloc =		ps3rom_slave_alloc,
 	.slave_configure =	ps3rom_slave_configure,
-	.slave_destroy =	ps3rom_slave_destroy,
 	.queuecommand =		ps3rom_queuecommand,
 	.can_queue =		1,
 	.this_id =		7,
@@ -724,7 +700,7 @@ static int __devinit ps3rom_probe(struct ps3_system_bus_device *_dev)
 		goto fail_free_priv;
 	}
 
-	error = ps3stor_setup(dev, DEVICE_NAME);
+	error = ps3stor_setup(dev);
 	if (error)
 		goto fail_free_bounce;
 
@@ -780,10 +756,10 @@ static int ps3rom_remove(struct ps3_system_bus_device *_dev)
 	struct ps3rom_private *priv = ps3rom_priv(dev);
 
 	scsi_remove_host(priv->host);
-	scsi_host_put(priv->host);
 	kthread_stop(priv->thread);
 	ps3stor_teardown(dev);
 	kfree(dev->bounce_buf);
+	scsi_host_put(priv->host);
 	kfree(priv);
 	return 0;
 }

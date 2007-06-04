@@ -105,7 +105,6 @@ config PS3_DISK
 	tristate "PS3 Disk Storage Driver"
 	depends on PPC_PS3 && BLOCK
 	select PS3_STORAGE
-	default y
 	help
 	  Include support for the PS3 Disk Storage.
 
@@ -116,7 +115,6 @@ config PS3_ROM
 	tristate "PS3 ROM Storage Driver"
 	depends on PPC_PS3 && BLK_DEV_SR
 	select PS3_STORAGE
-	default y
 	help
 	  Include support for the PS3 ROM Storage.
 
@@ -127,7 +125,6 @@ config PS3_FLASH
 	tristate "PS3 FLASH ROM Storage Driver"
 	depends on PPC_PS3
 	select PS3_STORAGE
-	default y
 	help
 	  Include support for the PS3 FLASH ROM Storage.
 

@@ -61,7 +61,7 @@ static inline struct ps3_storage_device *to_ps3_storage_device(struct device *de
 	return container_of(dev, struct ps3_storage_device, sbd.core);
 }
 
-extern int ps3stor_setup(struct ps3_storage_device *dev, const char *name);
+extern int ps3stor_setup(struct ps3_storage_device *dev);
 extern void ps3stor_teardown(struct ps3_storage_device *dev);
 extern u64 ps3stor_read_write_sectors(struct ps3_storage_device *dev, u64 lpar,
 				      u64 start_sector, u64 sectors,

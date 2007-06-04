@@ -11,20 +11,18 @@
 #	bootloader and increase compatibility with OpenFirmware.
 #
 #	To this end we need to define BOOTCC, etc, as the tools
-#	needed to build the 32 bit image.  These are normally HOSTCC,
-#	but may be a third compiler if, for example, you are cross
-#	compiling from an intel box.  Once the 64bit ppc gcc is
-#	stable it will probably simply be a compiler switch to
-#	compile for 32bit mode.
+#	needed to build the 32 bit image.  That's normally the same
+#	compiler for the rest of the kernel, with the -m32 flag added.
 #	To make it easier to setup a cross compiler,
 #	CROSS32_COMPILE is setup as a prefix just like CROSS_COMPILE
 #	in the toplevel makefile.
 
 all: $(obj)/zImage
 
-HOSTCC		:= gcc
-BOOTCFLAGS	:= $(HOSTCFLAGS) -fno-builtin -nostdinc -isystem \
-		   $(shell $(CROSS32CC) -print-file-name=include) -fPIC
+BOOTCFLAGS    := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
+		 -fno-strict-aliasing -Os -msoft-float -pipe \
+		 -fomit-frame-pointer -fno-builtin -fPIC -nostdinc \
+		 -isystem $(shell $(CROSS32CC) -print-file-name=include)
 BOOTAFLAGS	:= -D__ASSEMBLY__ $(BOOTCFLAGS) -nostdinc
 
 ifeq ($(call cc-option-yn, -fstack-protector),y)
@@ -34,11 +32,8 @@ endif
 BOOTCFLAGS	+= -I$(obj) -I$(srctree)/$(obj)
 BOOTAFLAGS	+= -I$(obj) -I$(srctree)/$(obj)
 
-src-plat-$(CONFIG_PPC_PS3) += ps3-head.S smp.S ps3.c ps3-hvcall.S
-inc-plat-$(CONFIG_PPC_PS3) += lv1call.h
-
-$(obj)/44x.o: BOOTCFLAGS += -Wa,-mbooke
-$(obj)/ebony.o: BOOTCFLAGS += -Wa,-mbooke
+$(obj)/44x.o: BOOTCFLAGS += -mcpu=440
+$(obj)/ebony.o: BOOTCFLAGS += -mcpu=440
 
 zlib       := inffast.c inflate.c inftrees.c
 zlibheader := inffast.h inffixed.h inflate.h inftrees.h infutil.h
@@ -47,12 +42,16 @@ zliblinuxheader := zlib.h zconf.h zutil.h
 $(addprefix $(obj)/,$(zlib) gunzip_util.o main.o): \
 	$(addprefix $(obj)/,$(zliblinuxheader)) $(addprefix $(obj)/,$(zlibheader))
 
+src-plat-$(CONFIG_PPC_PRPMC2800) += prpmc2800.c
+src-plat-$(CONFIG_PPC_PS3) += ps3-head.S smp.S ps3.c ps3-hvcall.S
+inc-plat-$(CONFIG_PPC_PS3) += lv1call.h
+
 src-wlib := string.S crt0.S stdio.c main.c flatdevtree.c flatdevtree_misc.c \
 		ns16550.c serial.c simple_alloc.c div64.S util.S \
 		gunzip_util.c elf_util.c $(zlib) devtree.c \
 		44x.c ebony.c mv64x60.c mpsc.c mv64x60_i2c.c
 src-plat := $(src-plat-y) of.c cuboot-83xx.c cuboot-85xx.c holly.c \
-		cuboot-ebony.c treeboot-ebony.c prpmc2800.c
+		cuboot-ebony.c treeboot-ebony.c
 src-boot := $(src-wlib) $(src-plat) empty.c
 
 src-boot := $(addprefix $(obj)/, $(src-boot))
@@ -89,7 +88,7 @@ $(obj)/zImage.lds $(obj)/zImage.coff.lds $(obj)/zImage.ps3.lds: $(obj)/%: $(srct
 	@cp $< $@
 
 clean-files := $(zlib) $(zlibheader) $(zliblinuxheader) \
-		empty.c zImage zImage.coff.lds zImage.ps3.lds zImage.lds zImage.sandpoint
+		empty.c zImage zImage.coff.lds zImage.ps3.lds zImage.lds
 
 quiet_cmd_bootcc = BOOTCC  $@
       cmd_bootcc = $(CROSS32CC) -Wp,-MD,$(depfile) $(BOOTCFLAGS) -c -o $@ $<
@@ -144,6 +143,7 @@ image-$(CONFIG_PPC_EFIKA)		+= zImage.chrp
 image-$(CONFIG_PPC_PMAC)		+= zImage.pmac
 image-$(CONFIG_PPC_HOLLY)		+= zImage.holly-elf
 image-$(CONFIG_PPC_PRPMC2800)		+= zImage.prpmc2800
+image-$(CONFIG_PPC_ISERIES)		+= zImage.iseries
 image-$(CONFIG_DEFAULT_UIMAGE)		+= uImage
 
 ifneq ($(CONFIG_DEVICE_TREE),"")
@@ -192,6 +192,9 @@ $(obj)/zImage.initrd.%: vmlinux $(wrapperbits)
 
 $(obj)/zImage.%: vmlinux $(wrapperbits)
 	$(call if_changed,wrap,$*)
+
+$(obj)/zImage.iseries: vmlinux
+	$(STRIP) -s -R .comment $< -o $@
 
 $(obj)/zImage.ps3: vmlinux  $(wrapper) $(wrapperbits) $(srctree)/$(src)/dts/ps3.dts
 	$(call cmd,wrap,ps3,$(srctree)/$(src)/dts/ps3.dts,,)

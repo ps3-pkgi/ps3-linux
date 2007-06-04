@@ -519,8 +519,7 @@ static u64 ps3stor_wait_for_completion(u64 devid, u64 tag,
 						     &status);
 		if (!res)
 			break;
-		set_current_state(TASK_INTERRUPTIBLE);
-		schedule_timeout(1);
+		msleep(1);
 	}
 	if (res)
 		pr_debug("%s:%u: check_async_status returns %ld status %lx\n",
