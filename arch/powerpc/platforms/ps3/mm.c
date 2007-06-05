@@ -502,8 +502,8 @@ static int dma_ioc0_free_chunk(struct dma_chunk *c)
 		    r->ioid);
 
 		if (result) {
-			DBG("%s:%d: lv1_map_device_dma_region failed: %s\n",
-			    __func__, __LINE__, ps3_result(result));
+			DBG("%s:%d: lv1_put_iopte failed: %s\n", __func__,
+			    __LINE__, ps3_result(result));
 		}
 	}
 	kfree(c);

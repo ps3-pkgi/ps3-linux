@@ -32,11 +32,11 @@ union ps3_firmware_version {
 		u16 major;
 		u16 minor;
 		u16 rev;
-	};
+	} __attribute__((packed)) v;
 };
 
-int ps3_get_firmware_version(union ps3_firmware_version *v);
-
+void ps3_get_firmware_version(union ps3_firmware_version *v);
+int ps3_compare_firmware_version(u16 major, u16 minor, u16 rev);
 /* 'Other OS' area */
 
 enum ps3_param_av_multi_out {

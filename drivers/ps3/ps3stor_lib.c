@@ -125,7 +125,7 @@ int ps3stor_setup(struct ps3_storage_device *dev)
 	}
 
 	error = ps3_sb_event_receive_port_setup(&dev->sbd, PS3_BINDING_CPU_ANY,
-		&dev->irq);
+						&dev->irq);
 	if (error) {
 		dev_err(&dev->sbd.core,
 			"%s:%u: ps3_sb_event_receive_port_setup failed %d\n",

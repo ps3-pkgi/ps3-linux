@@ -266,7 +266,7 @@ static int ps3stor_wait_for_completion(u64 dev_id, u64 tag,
  *
  * Uses the hypervisor's storage device notification mechanism to wait until
  * a storage device is ready.  The device notification mechanism uses a
- * psuedo device (id = -1) to asyncronously notify the guest when storage
+ * psuedo device (id = -1) to asynchronously notify the guest when storage
  * devices become ready.  The notification device has a block size of 512
  * bytes.
  */
@@ -663,8 +663,9 @@ static int __devinit ps3_register_repository_device(
  * This implementation only supports background probing on a single bus.
  */
 
-static int ps3_probe_thread(struct ps3_repository_device *repo)
+static int ps3_probe_thread(void *data)
 {
+	struct ps3_repository_device *repo = data;
 	int result;
 	unsigned int ms = 250;
 
@@ -742,8 +743,7 @@ static int __init ps3_start_probe_thread(enum ps3_bus_type bus_type)
 		return -ENODEV;
 	}
 
-	task = kthread_run((int (*)(void *))ps3_probe_thread, &repo,
-		"ps3-probe");
+	task = kthread_run(ps3_probe_thread, &repo, "ps3-probe");
 
 	if (IS_ERR(task)) {
 		result = PTR_ERR(task);

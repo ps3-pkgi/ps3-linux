@@ -46,17 +46,21 @@
 static void smp_send_stop(void) {}
 #endif
 
-int ps3_get_firmware_version(union ps3_firmware_version *v)
+static union ps3_firmware_version current_fw_ver;
+
+void ps3_get_firmware_version(union ps3_firmware_version *v)
 {
-	int result = lv1_get_version_info(&v->raw);
-
-	if (result) {
-		v->raw = 0;
-		return -1;
-	}
-
-	return result;
+	*v = current_fw_ver;
 }
+
+int ps3_compare_firmware_version(u16 major, u16 minor, u16 rev)
+{
+	union ps3_firmware_version x =
+		{.v.pad = 0, .v.major = major, .v.minor = minor, .v.rev = rev};
+
+	return (current_fw_ver.raw - x.raw);
+}
+EXPORT_SYMBOL_GPL(ps3_compare_firmware_version);
 EXPORT_SYMBOL_GPL(ps3_get_firmware_version);
 
 static void ps3_power_save(void)
@@ -162,13 +166,14 @@ static int ps3_set_dabr(u64 dabr)
 
 static void __init ps3_setup_arch(void)
 {
-	union ps3_firmware_version v;
 
 	DBG(" -> %s:%d\n", __func__, __LINE__);
 
-	ps3_get_firmware_version(&v);
-	printk(KERN_INFO "PS3 firmware version %u.%u.%u\n", v.major, v.minor,
-		v.rev);
+	lv1_get_version_info(&current_fw_ver.raw);
+	printk(KERN_INFO "PS3 firmware version %u.%u.%u\n",
+	       current_fw_ver.v.major,
+	       current_fw_ver.v.minor,
+	       current_fw_ver.v.rev);
 
 	ps3_spu_set_platform();
 	ps3_map_htab();

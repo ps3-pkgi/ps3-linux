@@ -27,8 +27,6 @@
 
 #include "vuart.h"
 
-#define PS3AV_HDMI_RANGE_VERSION 0x000100080000UL /* system software 1.80 */
-
 static const struct video_fmt {
 	u32 format;
 	u32 order;
@@ -147,14 +145,10 @@ static u32 ps3av_vid_video2av(int vid)
 
 static int ps3av_hdmi_range(void)
 {
-	union ps3_firmware_version v;
-
-	if (ps3_get_firmware_version(&v) == -1)
+	if (ps3_compare_firmware_version(1, 8, 0) < 0)
 		return 0;
-	else if ((v.raw & 0x0000ffffffffffffUL) < PS3AV_HDMI_RANGE_VERSION)
-		return 0; /* not supported */
-
-	return 1; /* supported */
+	else
+		return 1; /* supported */
 }
 
 int ps3av_cmd_init(void)

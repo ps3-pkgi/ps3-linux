@@ -1038,8 +1038,6 @@ static void gelicw_clear_params(struct gelic_wireless *w)
 int gelicw_setup_netdev(struct net_device *netdev, int wi)
 {
 	struct gelic_wireless *w = gelicw_priv(netdev);
-	union ps3_firmware_version ver;
-	union ps3_firmware_version initial_ver;
 
 	if (wi < 0) {
 		/* PS3 low model has no wireless */
@@ -1048,14 +1046,9 @@ int gelicw_setup_netdev(struct net_device *netdev, int wi)
 		return 0;
 	}
 	/* version check */
-	initial_ver.raw = 0;
-	initial_ver.major = 1;
-	initial_ver.minor = 6;
-	if (ps3_get_firmware_version(&ver) ||
-	    (ver.raw < initial_ver.raw)) {
+	if (ps3_compare_firmware_version(1, 6, 0) < 0) {
 		dev_info(ntodev(netdev),
-			 "firmware %d.%d is too old for wireless.\n",
-			 ver.major, ver.minor);
+			 "firmware is too old for wireless.\n");
 		w->wireless = 0;
 		return 0;
 	}
