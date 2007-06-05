@@ -29,7 +29,7 @@ static irqreturn_t ps3stor_interrupt(int irq, void *data)
 {
 	struct ps3_storage_device *dev = data;
 
-	dev->lv1_res = lv1_storage_get_async_status(dev->sbd.did.dev_id,
+	dev->lv1_res = lv1_storage_get_async_status(dev->sbd.dev_id,
 						    &dev->lv1_tag,
 						    &dev->lv1_status);
 	/*
@@ -124,10 +124,8 @@ int ps3stor_setup(struct ps3_storage_device *dev)
 		goto fail;
 	}
 
-	error = ps3_sb_event_receive_port_setup(PS3_BINDING_CPU_ANY,
-						&dev->sbd.did,
-						dev->sbd.interrupt_id,
-						&dev->irq);
+	error = ps3_sb_event_receive_port_setup(&dev->sbd, PS3_BINDING_CPU_ANY,
+		&dev->irq);
 	if (error) {
 		dev_err(&dev->sbd.core,
 			"%s:%u: ps3_sb_event_receive_port_setup failed %d\n",
@@ -156,9 +154,8 @@ int ps3stor_setup(struct ps3_storage_device *dev)
 	else
 		page_size = PS3_DMA_64K;
 	dev->sbd.d_region = &dev->dma_region;
-	ps3_dma_region_init(&dev->dma_region, &dev->sbd.did, page_size,
-			    PS3_DMA_OTHER, dev->bounce_buf, dev->bounce_size,
-			    PS3_IOBUS_SB);
+	ps3_dma_region_init(&dev->sbd, &dev->dma_region, page_size,
+			    PS3_DMA_OTHER, dev->bounce_buf, dev->bounce_size);
 	res = ps3_dma_region_create(&dev->dma_region);
 	if (res) {
 		dev_err(&dev->sbd.core, "%s:%u: cannot create DMA region\n",
@@ -193,8 +190,7 @@ fail_free_dma:
 fail_free_irq:
 	free_irq(dev->irq, dev);
 fail_sb_event_receive_port_destroy:
-	ps3_sb_event_receive_port_destroy(&dev->sbd.did, dev->sbd.interrupt_id,
-					  dev->irq);
+	ps3_sb_event_receive_port_destroy(&dev->sbd, dev->irq);
 fail_close_device:
 	ps3_close_hv_device(&dev->sbd);
 fail:
@@ -217,9 +213,7 @@ void ps3stor_teardown(struct ps3_storage_device *dev)
 
 	free_irq(dev->irq, dev);
 
-	error = ps3_sb_event_receive_port_destroy(&dev->sbd.did,
-						  dev->sbd.interrupt_id,
-						  dev->irq);
+	error = ps3_sb_event_receive_port_destroy(&dev->sbd, dev->irq);
 	if (error)
 		dev_err(&dev->sbd.core,
 			"%s:%u: destroy event receive port failed %d\n",
@@ -256,10 +250,10 @@ u64 ps3stor_read_write_sectors(struct ps3_storage_device *dev, u64 lpar,
 		__func__, __LINE__, op, sectors, start_sector);
 
 	init_completion(&dev->irq_done);
-	res = write ? lv1_storage_write(dev->sbd.did.dev_id, region_id,
+	res = write ? lv1_storage_write(dev->sbd.dev_id, region_id,
 					start_sector, sectors, 0, lpar,
 					&dev->tag)
-		    : lv1_storage_read(dev->sbd.did.dev_id, region_id,
+		    : lv1_storage_read(dev->sbd.dev_id, region_id,
 				       start_sector, sectors, 0, lpar,
 				       &dev->tag);
 	if (res) {
@@ -305,7 +299,7 @@ u64 ps3stor_send_command(struct ps3_storage_device *dev, u64 cmd, u64 arg1,
 
 	init_completion(&dev->irq_done);
 
-	res = lv1_storage_send_device_command(dev->sbd.did.dev_id, cmd, arg1,
+	res = lv1_storage_send_device_command(dev->sbd.dev_id, cmd, arg1,
 					      arg2, arg3, arg4, &dev->tag);
 	if (res) {
 		dev_err(&dev->sbd.core,

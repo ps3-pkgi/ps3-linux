@@ -63,11 +63,11 @@ static inline struct device * ctodev(struct gelic_net_card * card)
 }
 static inline unsigned int bus_id(struct gelic_net_card *card)
 {
-	return card->dev->did.bus_id;
+	return card->dev->bus_id;
 }
 static inline unsigned int dev_id(struct gelic_net_card *card)
 {
-	return card->dev->did.dev_id;
+	return card->dev->dev_id;
 }
 
 /* set irq_mask */
@@ -564,8 +564,7 @@ static int gelic_net_stop(struct net_device *netdev)
 
 	/* disconnect event port */
 	free_irq(card->netdev->irq, card->netdev);
-	ps3_sb_event_receive_port_destroy(&card->dev->did,
-		card->dev->interrupt_id, card->netdev->irq);
+	ps3_sb_event_receive_port_destroy(card->dev, card->netdev->irq);
 	card->netdev->irq = NO_IRQ;
 
 	netif_carrier_off(netdev);
@@ -1058,8 +1057,8 @@ static int gelic_net_open_device(struct gelic_net_card *card)
 {
 	int result;
 
-	result = ps3_sb_event_receive_port_setup(PS3_BINDING_CPU_ANY,
-		&card->dev->did, card->dev->interrupt_id, &card->netdev->irq);
+	result = ps3_sb_event_receive_port_setup(card->dev, PS3_BINDING_CPU_ANY,
+		&card->netdev->irq);
 
 	if (result) {
 		dev_info(ctodev(card),
@@ -1081,8 +1080,7 @@ static int gelic_net_open_device(struct gelic_net_card *card)
 	return 0;
 
 fail_request_irq:
-	ps3_sb_event_receive_port_destroy(&card->dev->did,
-		card->dev->interrupt_id, card->netdev->irq);
+	ps3_sb_event_receive_port_destroy(card->dev, card->netdev->irq);
 	card->netdev->irq = NO_IRQ;
 fail_alloc_irq:
 	return result;
@@ -1577,17 +1575,14 @@ static struct ps3_system_bus_driver ps3_gelic_driver = {
 	.probe = ps3_gelic_driver_probe,
 	.remove = ps3_gelic_driver_remove,
 	.shutdown = ps3_gelic_driver_remove,
-	.core = {
-		.name = "ps3_gelic_driver",
-		.owner = THIS_MODULE,
-	},
+	.core.name = "ps3_gelic_driver",
+	.core.owner = THIS_MODULE,
 };
 
 static int __init ps3_gelic_driver_init (void)
 {
 	return firmware_has_feature(FW_FEATURE_PS3_LV1)
-		? ps3_system_bus_driver_register(&ps3_gelic_driver,
-						 PS3_IOBUS_SB)
+		? ps3_system_bus_driver_register(&ps3_gelic_driver)
 		: -ENODEV;
 }
 

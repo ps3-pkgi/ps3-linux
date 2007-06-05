@@ -63,11 +63,11 @@ static inline struct gelic_wireless *gelicw_priv(struct net_device *netdev)
 }
 static inline unsigned int bus_id(struct gelic_wireless *w)
 {
-	return w->card->dev->did.bus_id;
+	return w->card->dev->bus_id;
 }
 static inline unsigned int dev_id(struct gelic_wireless *w)
 {
-	return w->card->dev->did.dev_id;
+	return w->card->dev->dev_id;
 }
 
 /* control wired or wireless */

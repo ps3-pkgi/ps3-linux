@@ -48,17 +48,6 @@ enum ps3_param_av_multi_out {
 
 enum ps3_param_av_multi_out ps3_os_area_get_av_multi_out(void);
 
-/**
- * struct ps3_device_id - HV bus device identifier from the system repository
- * @bus_id: HV bus id, {1..} (zero invalid)
- * @dev_id: HV device id, {0..}
- */
-
-struct ps3_device_id {
-	unsigned int bus_id;
-	unsigned int dev_id;
-};
-
 /* dma routines */
 
 enum ps3_dma_page_size {
@@ -73,16 +62,9 @@ enum ps3_dma_region_type {
 	PS3_DMA_INTERNAL = 2,
 };
 
-enum ps3_iobus_type {
-	PS3_IOBUS_IOC0 = 1,
-	PS3_IOBUS_SB,
-	PS3_IOBUS_VUART,
-};
-
 struct ps3_dma_region_ops;
 
 /**
- * struct ps3_dma_region_ops - dma region operations
  * struct ps3_dma_region - A per device dma state variables structure
  * @did: The HV device id.
  * @page_size: The ioc pagesize.
@@ -92,12 +74,13 @@ struct ps3_dma_region_ops;
  * @offset: The offset from the start of memory of the region.
  * @ioid: The IOID of the device who owns this region
  * @chunk_list: Opaque variable used by the ioc page manager.
+ * @region_ops: struct ps3_dma_region_ops - dma region operations
  */
 
 struct ps3_dma_region {
-	/* device variables (set by ps3_dma_region_init) */
+	struct ps3_system_bus_device *dev;
+	/* device variables */
 	const struct ps3_dma_region_ops *region_ops;
-	struct ps3_device_id did;
 	unsigned char ioid;
 	enum ps3_dma_page_size page_size;
 	enum ps3_dma_region_type region_type;
@@ -132,11 +115,11 @@ struct ps3_dma_region_ops {
  * ps3_system_bus_device_register.
  */
 
-void ps3_dma_region_init(struct ps3_dma_region *r,
-	 const struct ps3_device_id *did,
-	 enum ps3_dma_page_size page_size,
-	 enum ps3_dma_region_type region_type, void *addr,
-	 unsigned long len, enum ps3_iobus_type iobus_type);
+struct ps3_system_bus_device;
+
+int ps3_dma_region_init(struct ps3_system_bus_device *dev,
+	struct ps3_dma_region *r, enum ps3_dma_page_size page_size,
+	enum ps3_dma_region_type region_type, void *addr, unsigned long len);
 int ps3_dma_region_create(struct ps3_dma_region *r);
 int ps3_dma_region_free(struct ps3_dma_region *r);
 int ps3_dma_map(struct ps3_dma_region *r, unsigned long virt_addr,
@@ -160,8 +143,8 @@ struct ps3_mmio_region_ops;
  */
 
 struct ps3_mmio_region {
+	struct ps3_system_bus_device *dev;
 	const struct ps3_mmio_region_ops * mmio_ops;
-	struct ps3_device_id did;
 	unsigned long bus_addr;
 	unsigned long len;
 	enum ps3_mmio_page_size page_size;
@@ -179,10 +162,9 @@ struct ps3_mmio_region_ops {
  * ps3_system_bus_device_register.
  */
 
-void ps3_mmio_region_init(struct ps3_mmio_region *r,
-	const struct ps3_device_id* did, unsigned long bus_addr,
-	unsigned long len, enum ps3_mmio_page_size page_size,
-			  enum ps3_iobus_type iobus_type);
+int ps3_mmio_region_init(struct ps3_system_bus_device *dev,
+	struct ps3_mmio_region *r, unsigned long bus_addr, unsigned long len,
+	enum ps3_mmio_page_size page_size);
 int ps3_mmio_region_create(struct ps3_mmio_region *r);
 int ps3_free_mmio_region(struct ps3_mmio_region *r);
 unsigned long ps3_mm_phys_to_lpar(unsigned long phys_addr);
@@ -215,11 +197,10 @@ int ps3_spe_irq_setup(enum ps3_cpu_binding cpu, unsigned long spe_id,
 	unsigned int class, unsigned int *virq);
 int ps3_spe_irq_destroy(unsigned int virq);
 
-int ps3_sb_event_receive_port_setup(enum ps3_cpu_binding cpu,
-	const struct ps3_device_id *did, unsigned int interrupt_id,
-	unsigned int *virq);
-int ps3_sb_event_receive_port_destroy(const struct ps3_device_id *did,
-	unsigned int interrupt_id, unsigned int virq);
+int ps3_sb_event_receive_port_setup(struct ps3_system_bus_device *dev,
+	enum ps3_cpu_binding cpu, unsigned int *virq);
+int ps3_sb_event_receive_port_destroy(struct ps3_system_bus_device *dev,
+	unsigned int virq);
 
 /* lv1 result codes */
 
@@ -326,7 +307,7 @@ enum ps3_match_id {
 	PS3_MATCH_ID_STOR_ROM       = 7,
 	PS3_MATCH_ID_STOR_FLASH     = 8,
 	PS3_MATCH_ID_SOUND          = 9,
-	PS3_MATCH_ID_GFX            = 10,
+	PS3_MATCH_ID_GRAPHICS       = 10,
 };
 
 #define PS3_MODULE_ALIAS_EHCI           "ps3:1"
@@ -338,7 +319,13 @@ enum ps3_match_id {
 #define PS3_MODULE_ALIAS_STOR_ROM       "ps3:7"
 #define PS3_MODULE_ALIAS_STOR_FLASH     "ps3:8"
 #define PS3_MODULE_ALIAS_SOUND          "ps3:9"
-#define PS3_MODULE_ALIAS_GFX            "ps3:10"
+#define PS3_MODULE_ALIAS_GRAPHICS       "ps3:10"
+
+enum ps3_system_bus_device_type {
+	PS3_DEVICE_TYPE_IOC0 = 1,
+	PS3_DEVICE_TYPE_SB,
+	PS3_DEVICE_TYPE_VUART,
+};
 
 /**
  * struct ps3_system_bus_device - a device on the system bus
@@ -346,22 +333,19 @@ enum ps3_match_id {
 
 struct ps3_system_bus_device {
 	enum ps3_match_id match_id;
-	struct ps3_device_id did;
-	unsigned int interrupt_id;
-/*	struct iommu_table *iommu_table; -- waiting for Ben's cleanups */
-	struct ps3_dma_region *d_region;
-	struct ps3_mmio_region *m_region;
+	enum ps3_system_bus_device_type dev_type;
+
+// need to put these into a union!!!
+	unsigned int bus_id;              /* SB */
+	unsigned int dev_id;              /* SB */
+	unsigned int interrupt_id;        /* SB */
+	struct ps3_dma_region *d_region;  /* SB, IOC0 */
+	struct ps3_mmio_region *m_region; /* SB, IOC0*/
+	unsigned int port_number;         /* VUART */
+
+/*	struct iommu_table *iommu_table; -- waiting for BenH's cleanups */
 	struct device core;
 	void* driver_priv; /* private driver variables */
-};
-
-static inline void ps3_system_bus_device_init(
-	struct ps3_system_bus_device *dev, enum ps3_match_id match_id,
-	struct ps3_dma_region * d_region, struct ps3_mmio_region * m_region)
-{
-	dev->match_id = match_id;
-	dev->m_region = m_region;
-	dev->d_region = d_region;
 };
 
 int ps3_open_hv_device(struct ps3_system_bus_device *dev);
@@ -381,10 +365,8 @@ struct ps3_system_bus_driver {
 /*	int (*resume)(struct ps3_system_bus_device *); */
 };
 
-int ps3_system_bus_device_register(struct ps3_system_bus_device *dev,
-				   enum ps3_iobus_type iobus_type);
-int ps3_system_bus_driver_register(struct ps3_system_bus_driver *drv,
-				   enum ps3_iobus_type iobus_type);
+int ps3_system_bus_device_register(struct ps3_system_bus_device *dev);
+int ps3_system_bus_driver_register(struct ps3_system_bus_driver *drv);
 void ps3_system_bus_driver_unregister(struct ps3_system_bus_driver *drv);
 
 static inline struct ps3_system_bus_driver *ps3_drv_to_system_bus_drv(

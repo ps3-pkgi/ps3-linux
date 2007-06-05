@@ -972,8 +972,7 @@ static int __init ehci_hcd_init(void)
 
 #ifdef PS3_SYSTEM_BUS_DRIVER
 	if (firmware_has_feature(FW_FEATURE_PS3_LV1)) {
-		retval = ps3_system_bus_driver_register(&PS3_SYSTEM_BUS_DRIVER,
-							PS3_IOBUS_SB);
+		retval = ps3_system_bus_driver_register(&PS3_SYSTEM_BUS_DRIVER);
 		if (retval < 0) {
 #ifdef PLATFORM_DRIVER
 			platform_driver_unregister(&PLATFORM_DRIVER);

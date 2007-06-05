@@ -1181,7 +1181,7 @@ static int ps3fb_shutdown(struct ps3_system_bus_device *dev)
 }
 
 static struct ps3_system_bus_driver ps3fb_driver = {
-	.match_id	= PS3_MATCH_ID_GFX,
+	.match_id	= PS3_MATCH_ID_GRAPHICS,
 	.core.name	= DEVICE_NAME,
 	.core.owner	= THIS_MODULE,
 	.probe		= ps3fb_probe,
@@ -1219,7 +1219,7 @@ static int __init ps3fb_init(void)
 	if (!ps3fb_videomemory.address ||  ps3fb_setup())
 		return -ENXIO;
 
-	return ps3_system_bus_driver_register(&ps3fb_driver, 0);
+	return ps3_system_bus_driver_register(&ps3fb_driver);
 }
 
 static void __exit ps3fb_exit(void)

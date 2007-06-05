@@ -776,7 +776,7 @@ static struct ps3_system_bus_driver ps3rom = {
 
 static int __init ps3rom_init(void)
 {
-	return ps3_system_bus_driver_register(&ps3rom, PS3_IOBUS_SB);
+	return ps3_system_bus_driver_register(&ps3rom);
 }
 
 static void __exit ps3rom_exit(void)

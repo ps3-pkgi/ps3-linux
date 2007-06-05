@@ -819,7 +819,6 @@ static int __init snd_ps3_driver_probe(struct ps3_system_bus_device * dev)
 {
 	int ret;
 	u64 lpar_addr, lpar_size;
-	struct ps3_device_id null_id = {0, 0};
 
 	BUG_ON(!firmware_has_feature(FW_FEATURE_PS3_LV1));
 	BUG_ON(dev->match_id != PS3_MATCH_ID_SOUND);
@@ -837,25 +836,19 @@ static int __init snd_ps3_driver_probe(struct ps3_system_bus_device * dev)
 		printk(KERN_ERR "%s: device map 2 failed %d\n", __func__, ret);
 		goto clean_open;
 	}
-	ps3_mmio_region_init(dev->m_region,
-			     &null_id,
-			     lpar_addr,
-			     lpar_size,
-			     PAGE_SHIFT,
-			     PS3_IOBUS_IOC0);
+	ps3_mmio_region_init(dev, dev->m_region, lpar_addr, lpar_size,
+		PAGE_SHIFT);
 
 	if ((ret = snd_ps3_map_mmio())) {
 		goto clean_dev_map;
 	}
 
 	/* setup DMA area */
-	ps3_dma_region_init(dev->d_region,
-			    &null_id,
+	ps3_dma_region_init(dev, dev->d_region,
 			    PAGE_SHIFT, /* use system page size */
 			    0, /* dma type; not used */
 			    NULL,
-			    _ALIGN_UP(SND_PS3_DMA_REGION_SIZE, PAGE_SIZE),
-			    PS3_IOBUS_IOC0);
+			    _ALIGN_UP(SND_PS3_DMA_REGION_SIZE, PAGE_SIZE));
 	dev->d_region->ioid = PS3_AUDIO_IOID;
 
 	ret = ps3_dma_region_create(dev->d_region);
@@ -1291,8 +1284,7 @@ static int __init snd_ps3_init(void)
 	rwlock_init(&the_card.start_delay_lock);
 
 	/* register systembus DRIVER, this calls our probe() func */
-	ret = ps3_system_bus_driver_register(&snd_ps3_bus_driver_info,
-					     PS3_IOBUS_IOC0);
+	ret = ps3_system_bus_driver_register(&snd_ps3_bus_driver_info);
 
 	return ret;
 }

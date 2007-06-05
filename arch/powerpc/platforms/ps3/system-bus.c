@@ -48,10 +48,10 @@ static int ps3_open_hv_device_sb(struct ps3_system_bus_device *dev)
 {
 	int result;
 
-	BUG_ON(!dev->did.bus_id);
+	BUG_ON(!dev->bus_id);
 	mutex_lock(&usage_hack.mutex);
 
-	if(dev->did.bus_id == 1 && dev->did.dev_id == 1) {
+	if(dev->bus_id == 1 && dev->dev_id == 1) {
 		usage_hack.sb_11++;
 		if (usage_hack.sb_11 > 1) {
 			result = 0;
@@ -59,7 +59,7 @@ static int ps3_open_hv_device_sb(struct ps3_system_bus_device *dev)
 		}
 	}
 
-	if(dev->did.bus_id == 1 && dev->did.dev_id == 2) {
+	if(dev->bus_id == 1 && dev->dev_id == 2) {
 		usage_hack.sb_12++;
 		if (usage_hack.sb_12 > 1) {
 			result = 0;
@@ -67,7 +67,7 @@ static int ps3_open_hv_device_sb(struct ps3_system_bus_device *dev)
 		}
 	}
 
-	result = lv1_open_device(dev->did.bus_id, dev->did.dev_id, 0);
+	result = lv1_open_device(dev->bus_id, dev->dev_id, 0);
 
 	if (result) {
 		pr_debug("%s:%d: lv1_open_device failed: %s\n", __func__,
@@ -84,10 +84,10 @@ static int ps3_close_hv_device_sb(struct ps3_system_bus_device *dev)
 {
 	int result;
 
-	BUG_ON(!dev->did.bus_id);
+	BUG_ON(!dev->bus_id);
 	mutex_lock(&usage_hack.mutex);
 
-	if(dev->did.bus_id == 1 && dev->did.dev_id == 1) {
+	if(dev->bus_id == 1 && dev->dev_id == 1) {
 		usage_hack.sb_11--;
 		if (usage_hack.sb_11) {
 			result = 0;
@@ -95,7 +95,7 @@ static int ps3_close_hv_device_sb(struct ps3_system_bus_device *dev)
 		}
 	}
 
-	if(dev->did.bus_id == 1 && dev->did.dev_id == 2) {
+	if(dev->bus_id == 1 && dev->dev_id == 2) {
 		usage_hack.sb_12--;
 		if (usage_hack.sb_12) {
 			result = 0;
@@ -103,7 +103,7 @@ static int ps3_close_hv_device_sb(struct ps3_system_bus_device *dev)
 		}
 	}
 
-	result = lv1_close_device(dev->did.bus_id, dev->did.dev_id);
+	result = lv1_close_device(dev->bus_id, dev->dev_id);
 	BUG_ON(result);
 
 done:
@@ -171,7 +171,7 @@ int ps3_open_hv_device(struct ps3_system_bus_device *dev)
 		return ps3_open_hv_device_sb(dev);
 
 	case PS3_MATCH_ID_SOUND:
-	case PS3_MATCH_ID_GFX:
+	case PS3_MATCH_ID_GRAPHICS:
 		return ps3_open_hv_device_gpu(dev);
 
 	case PS3_MATCH_ID_AV_SETTINGS:
@@ -179,7 +179,7 @@ int ps3_open_hv_device(struct ps3_system_bus_device *dev)
 		pr_debug("%s:%d: unsupported match_id: %u\n", __func__,
 			__LINE__, dev->match_id);
 		pr_debug("%s:%d: bus_id: %u\n", __func__,
-			__LINE__, dev->did.bus_id);
+			__LINE__, dev->bus_id);
 		BUG();
 		return -EINVAL;
 
@@ -209,7 +209,7 @@ int ps3_close_hv_device(struct ps3_system_bus_device *dev)
 		return ps3_close_hv_device_sb(dev);
 
 	case PS3_MATCH_ID_SOUND:
-	case PS3_MATCH_ID_GFX:
+	case PS3_MATCH_ID_GRAPHICS:
 		return ps3_close_hv_device_gpu(dev);
 
 	case PS3_MATCH_ID_AV_SETTINGS:
@@ -217,7 +217,7 @@ int ps3_close_hv_device(struct ps3_system_bus_device *dev)
 		pr_debug("%s:%d: unsupported match_id: %u\n", __func__,
 			__LINE__, dev->match_id);
 		pr_debug("%s:%d: bus_id: %u\n", __func__,
-			__LINE__, dev->did.bus_id);
+			__LINE__, dev->bus_id);
 		BUG();
 		return -EINVAL;
 
@@ -236,8 +236,8 @@ EXPORT_SYMBOL_GPL(ps3_close_hv_device);
 static void _dump_mmio_region(const struct ps3_mmio_region* r,
 	const char* func, int line)
 {
-	pr_debug("%s:%d: dev       %u:%u\n", func, line, r->did.bus_id,
-		r->did.dev_id);
+	pr_debug("%s:%d: dev       %u:%u\n", func, line, r->dev->bus_id,
+		r->dev->dev_id);
 	pr_debug("%s:%d: bus_addr  %lxh\n", func, line, r->bus_addr);
 	pr_debug("%s:%d: len       %lxh\n", func, line, r->len);
 	pr_debug("%s:%d: lpar_addr %lxh\n", func, line, r->lpar_addr);
@@ -247,7 +247,7 @@ static int ps3_sb_mmio_region_create(struct ps3_mmio_region *r)
 {
 	int result;
 
-	result = lv1_map_device_mmio_region(r->did.bus_id, r->did.dev_id,
+	result = lv1_map_device_mmio_region(r->dev->bus_id, r->dev->dev_id,
 		r->bus_addr, r->len, r->page_size, &r->lpar_addr);
 
 	if (result) {
@@ -278,7 +278,7 @@ static int ps3_sb_free_mmio_region(struct ps3_mmio_region *r)
 
 	dump_mmio_region(r);
 ;
-	result = lv1_unmap_device_mmio_region(r->did.bus_id, r->did.dev_id,
+	result = lv1_unmap_device_mmio_region(r->dev->bus_id, r->dev->dev_id,
 		r->lpar_addr);
 
 	if (result)
@@ -313,25 +313,26 @@ static const struct ps3_mmio_region_ops ps3_mmio_ioc0_region_ops = {
 	.free = ps3_ioc0_free_mmio_region
 };
 
-void ps3_mmio_region_init(struct ps3_mmio_region *r,
-	const struct ps3_device_id* did, unsigned long bus_addr,
-	unsigned long len, enum ps3_mmio_page_size page_size,
-	enum ps3_iobus_type iobus_type)
+int ps3_mmio_region_init(struct ps3_system_bus_device *dev,
+	struct ps3_mmio_region *r, unsigned long bus_addr, unsigned long len,
+	enum ps3_mmio_page_size page_size)
 {
-	r->did = *did;
+	r->dev = dev;
 	r->bus_addr = bus_addr;
 	r->len = len;
 	r->page_size = page_size;
-	switch (iobus_type) {
-	case PS3_IOBUS_SB:
+	switch (dev->dev_type) {
+	case PS3_DEVICE_TYPE_SB:
 		r->mmio_ops = &ps3_mmio_sb_region_ops;
 		break;
-	case PS3_IOBUS_IOC0:
+	case PS3_DEVICE_TYPE_IOC0:
 		r->mmio_ops = &ps3_mmio_ioc0_region_ops;
 		break;
 	default:
 		BUG();
+		return -EINVAL;
 	}
+	return 0;
 }
 EXPORT_SYMBOL_GPL(ps3_mmio_region_init);
 
@@ -708,8 +709,7 @@ static void ps3_system_bus_release_device(struct device *_dev)
  * object and frees the object in ps3_system_bus_release_device().
  */
 
-int ps3_system_bus_device_register(struct ps3_system_bus_device *dev,
-	enum ps3_iobus_type iobus_type)
+int ps3_system_bus_device_register(struct ps3_system_bus_device *dev)
 {
 	int result;
 	static unsigned int dev_ioc0_count;
@@ -721,19 +721,19 @@ int ps3_system_bus_device_register(struct ps3_system_bus_device *dev,
 	dev->core.bus = &ps3_system_bus_type;
 	dev->core.release = ps3_system_bus_release_device;
 
-	switch (iobus_type) {
-	case PS3_IOBUS_IOC0:
+	switch (dev->dev_type) {
+	case PS3_DEVICE_TYPE_IOC0:
 		dev->core.archdata.dma_ops = &ps3_ioc0_dma_ops;
 		snprintf(dev->core.bus_id, sizeof(dev->core.bus_id),
 			"ioc0_%02x", ++dev_ioc0_count);
 		break;
-	case PS3_IOBUS_SB:
+	case PS3_DEVICE_TYPE_SB:
 		dev->core.archdata.dma_ops = &ps3_sb_dma_ops;
 		snprintf(dev->core.bus_id, sizeof(dev->core.bus_id),
 			"sb_%02x", ++dev_sb_count);
 
 		break;
-	case PS3_IOBUS_VUART:
+	case PS3_DEVICE_TYPE_VUART:
 		snprintf(dev->core.bus_id, sizeof(dev->core.bus_id),
 			"vuart_%02x", ++dev_vuart_count);
 		break;
@@ -752,8 +752,7 @@ int ps3_system_bus_device_register(struct ps3_system_bus_device *dev,
 
 EXPORT_SYMBOL_GPL(ps3_system_bus_device_register);
 
-int ps3_system_bus_driver_register(struct ps3_system_bus_driver *drv,
-	enum ps3_iobus_type iobus_type)
+int ps3_system_bus_driver_register(struct ps3_system_bus_driver *drv)
 {
 	int result;
 

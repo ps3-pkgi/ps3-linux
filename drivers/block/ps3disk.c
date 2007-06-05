@@ -383,7 +383,7 @@ static int __init ps3disk_init(void)
 	pr_info("%s:%u: registered block device major %d\n", __func__,
 		__LINE__, ps3disk_major);
 
-	return ps3_system_bus_driver_register(&ps3disk, PS3_IOBUS_SB);
+	return ps3_system_bus_driver_register(&ps3disk);
 }
 
 static void __exit ps3disk_exit(void)

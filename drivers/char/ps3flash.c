@@ -384,7 +384,7 @@ static struct ps3_system_bus_driver ps3flash = {
 
 static int __init ps3flash_init(void)
 {
-	return ps3_system_bus_driver_register(&ps3flash, PS3_IOBUS_SB);
+	return ps3_system_bus_driver_register(&ps3flash);
 }
 
 static void __exit ps3flash_exit(void)
