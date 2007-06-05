@@ -25,6 +25,7 @@
 #include <linux/interrupt.h>
 #include <linux/kthread.h>
 
+#include <asm/lv1call.h>
 #include <asm/ps3stor.h>
 
 
@@ -48,10 +49,10 @@
 
 struct ps3disk_private {
 	spinlock_t lock;
-	struct task_struct *thread;
 	struct request_queue *queue;
 	struct gendisk *gendisk;
 	unsigned int blocking_factor;
+	struct request *req;
 };
 #define ps3disk_priv(dev)	((dev)->sbd.core.driver_data)
 
@@ -65,12 +66,11 @@ static int ps3disk_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
-
-
 static struct block_device_operations ps3disk_fops = {
 	.owner		= THIS_MODULE,
 	.open		= ps3disk_open,
 };
+
 
 static void ps3disk_scatter_gather(struct ps3_storage_device *dev,
 				   struct request *req, int gather)
@@ -104,11 +104,35 @@ static void ps3disk_scatter_gather(struct ps3_storage_device *dev,
 	}
 }
 
-static void ps3disk_handle_request_sg(struct ps3_storage_device *dev,
-				      struct request *req)
+static u64 ps3disk_read_write_sectors(struct ps3_storage_device *dev, u64 lpar,
+				      u64 start_sector, u64 sectors, int write)
+{
+	unsigned int region_id = dev->regions[dev->region_idx].id;
+	const char *op = write ? "write" : "read";
+	int res;
+
+	dev_dbg(&dev->sbd.core, "%s:%u: %s %lu sectors starting at %lu\n",
+		__func__, __LINE__, op, sectors, start_sector);
+
+	res = write ? lv1_storage_write(dev->sbd.dev_id, region_id,
+					start_sector, sectors, 0, lpar,
+					&dev->tag)
+		    : lv1_storage_read(dev->sbd.dev_id, region_id,
+				       start_sector, sectors, 0, lpar,
+				       &dev->tag);
+	if (res) {
+		dev_dbg(&dev->sbd.core, "%s:%u: %s failed %d\n", __func__,
+			__LINE__, op, res);
+		return -1;
+	}
+
+	return 0;
+}
+
+static int ps3disk_submit_request_sg(struct ps3_storage_device *dev,
+				     struct request *req)
 {
 	struct ps3disk_private *priv = ps3disk_priv(dev);
-	int uptodate = 1;
 	int write = rq_data_dir(req);
 	const char *op = write ? "write" : "read";
 	u64 res;
@@ -127,58 +151,117 @@ static void ps3disk_handle_request_sg(struct ps3_storage_device *dev,
 	if (write)
 		ps3disk_scatter_gather(dev, req, 1);
 
-	res = ps3stor_read_write_sectors(dev, dev->bounce_lpar,
+	res = ps3disk_read_write_sectors(dev, dev->bounce_lpar,
 					 req->sector*priv->blocking_factor,
 					 req->nr_sectors*priv->blocking_factor,
 					 write);
 	if (res) {
 		dev_err(&dev->sbd.core, "%s:%u: %s failed 0x%lx\n", __func__,
 			__LINE__, op, res);
-		uptodate = 0;
-	} else if (!write)
-		ps3disk_scatter_gather(dev, req, 0);
+		end_request(req, 0);
+		return 0;
+	}
 
-	spin_lock_irq(&priv->lock);
+	priv->req = req;
+	return 1;
+}
+
+static void ps3disk_do_request(struct ps3_storage_device *dev,
+			       request_queue_t *q)
+{
+	struct request *req;
+
+	dev_dbg(&dev->sbd.core, "%s:%u\n", __func__, __LINE__);
+
+	while ((req = elv_next_request(q))) {
+		if (!blk_fs_request(req)) {
+			blk_dump_rq_flags(req, DEVICE_NAME " bad request");
+			end_request(req, 0);
+			continue;
+		}
+		if (ps3disk_submit_request_sg(dev, req))
+			break;
+	}
+}
+
+static void ps3disk_request(request_queue_t *q)
+{
+	struct ps3_storage_device *dev = q->queuedata;
+	struct ps3disk_private *priv = ps3disk_priv(dev);
+
+	if (priv->req) {
+		dev_dbg(&dev->sbd.core, "%s:%u busy\n", __func__, __LINE__);
+		return;
+	}
+
+	ps3disk_do_request(dev, q);
+}
+
+static irqreturn_t ps3disk_interrupt(int irq, void *data)
+{
+	struct ps3_storage_device *dev = data;
+	struct ps3disk_private *priv;
+	struct request *req;
+	int write;
+	const char *op;
+	int uptodate;
+
+	dev->lv1_res = lv1_storage_get_async_status(dev->sbd.dev_id,
+						    &dev->lv1_tag,
+						    &dev->lv1_status);
+	/*
+	 * lv1_status = -1 may mean that ATAPI transport completed OK, but
+	 * ATAPI command itself resulted CHECK CONDITION
+	 * so, upper layer should issue REQUEST_SENSE to check the sense data
+	 */
+
+	if (dev->lv1_tag != dev->tag)
+		dev_err(&dev->sbd.core,
+			"%s:%u: tag mismatch, got %lx, expected %lx\n",
+			__func__, __LINE__, dev->lv1_tag, dev->tag);
+
+	if (dev->lv1_res) {
+		dev_err(&dev->sbd.core, "%s:%u: res=%d status=0x%lx\n",
+			__func__, __LINE__, dev->lv1_res, dev->lv1_status);
+		return IRQ_HANDLED;
+	}
+
+	priv = ps3disk_priv(dev);
+	req = priv->req;
+	if (!req) {
+		dev_dbg(&dev->sbd.core,
+			"%s:%u non-block layer request completed\n", __func__,
+			__LINE__);
+		complete(&dev->irq_done);
+		return IRQ_HANDLED;
+	}
+
+	write = rq_data_dir(req);
+	op = write ? "write" : "read";
+	if (dev->lv1_status) {
+		dev_dbg(&dev->sbd.core, "%s:%u: %s failed 0x%lx\n", __func__,
+			__LINE__, op, dev->lv1_status);
+		uptodate = 0;
+	} else {
+		dev_dbg(&dev->sbd.core, "%s:%u: %s completed\n", __func__,
+			__LINE__, op);
+		uptodate = 1;
+		if (!write)
+			ps3disk_scatter_gather(dev, req, 0);
+	}
+
+	spin_lock(&priv->lock);
 	if (!end_that_request_first(req, uptodate, req->nr_sectors)) {
 		blkdev_dequeue_request(req);
 		end_that_request_last(req, uptodate);
 	}
-	spin_unlock_irq(&priv->lock);
+	priv->req = NULL;
+	ps3disk_do_request(dev, priv->queue);
+	spin_unlock(&priv->lock);
+
+	return IRQ_HANDLED;
 }
 
-static int ps3disk_thread(void *data)
-{
-	struct ps3_storage_device *dev = data;
-	struct ps3disk_private *priv = ps3disk_priv(dev);
-	request_queue_t *q = priv->queue;
-	struct request *req;
-
-	dev_dbg(&dev->sbd.core, "%s thread init\n", __func__);
-
-	current->flags |= PF_NOFREEZE;
-
-	while (!kthread_should_stop()) {
-		spin_lock_irq(&priv->lock);
-		set_current_state(TASK_INTERRUPTIBLE);
-		req = elv_next_request(q);
-		if (!req) {
-			spin_unlock_irq(&priv->lock);
-			schedule();
-			continue;
-		}
-		if (!blk_fs_request(req)) {
-			blk_dump_rq_flags(req, DEVICE_NAME " bad request");
-			end_request(req, 0);
-			spin_unlock_irq(&priv->lock);
-			continue;
-		}
-		spin_unlock_irq(&priv->lock);
-		ps3disk_handle_request_sg(dev, req);
-	}
-
-	dev_dbg(&dev->sbd.core, "%s thread exit\n", __func__);
-	return 0;
-}
 
 static int ps3disk_sync_cache(struct ps3_storage_device *dev)
 {
@@ -199,6 +282,7 @@ static int ps3disk_issue_flush(request_queue_t *q, struct gendisk *gendisk,
 			       sector_t *sector)
 {
 	struct ps3_storage_device *dev = q->queuedata;
+	// FIXME Make sure no request is currently submitted
 	return ps3disk_sync_cache(dev);
 }
 
@@ -206,17 +290,12 @@ static void ps3disk_prepare_flush(request_queue_t *q, struct request *req)
 {
 	// FIXME Is this the correct thing to do?
 	struct ps3_storage_device *dev = q->queuedata;
+	// FIXME Make sure no request is currently submitted
 	ps3disk_sync_cache(dev);
 	memset(req->cmd, 0, sizeof(req->cmd));
 	req->cmd_type = REQ_TYPE_FLUSH;
 }
 
-static void ps3disk_request(request_queue_t *q)
-{
-	struct ps3_storage_device *dev = q->queuedata;
-	struct ps3disk_private *priv = ps3disk_priv(dev);
-	wake_up_process(priv->thread);
-}
 
 static unsigned long ps3disk_mask;
 
@@ -228,7 +307,6 @@ static int __devinit ps3disk_probe(struct ps3_system_bus_device *_dev)
 	unsigned int devidx;
 	struct request_queue *queue;
 	struct gendisk *gendisk;
-	struct task_struct *task;
 
 	if (dev->blk_size < KERNEL_SECTOR_SIZE) {
 		dev_err(&dev->sbd.core,
@@ -265,6 +343,16 @@ static int __devinit ps3disk_probe(struct ps3_system_bus_device *_dev)
 	error = ps3stor_setup(dev);
 	if (error)
 		goto fail_free_bounce;
+
+	/* override the interrupt handler */
+	free_irq(dev->irq, dev);
+	error = request_irq(dev->irq, ps3disk_interrupt, IRQF_DISABLED,
+			    dev->sbd.core.driver->name, dev);
+	if (error) {
+		dev_err(&dev->sbd.core, "%s:%u: request_irq failed %d\n",
+			__func__, __LINE__, error);
+		goto fail_teardown;
+	}
 
 	queue = blk_init_queue(ps3disk_request, &priv->lock);
 	if (!queue) {
@@ -312,18 +400,9 @@ static int __devinit ps3disk_probe(struct ps3_system_bus_device *_dev)
 	set_capacity(gendisk,
 		     dev->regions[dev->region_idx].size*priv->blocking_factor);
 
-	task = kthread_run(ps3disk_thread, dev, DEVICE_NAME);
-	if (IS_ERR(task)) {
-		error = PTR_ERR(task);
-		goto fail_free_disk;
-	}
-	priv->thread = task;
-
 	add_disk(gendisk);
 	return 0;
 
-fail_free_disk:
-	put_disk(priv->gendisk);
 fail_cleanup_queue:
 	blk_cleanup_queue(queue);
 fail_teardown:
@@ -342,7 +421,6 @@ static int ps3disk_remove(struct ps3_system_bus_device *_dev)
 	struct ps3_storage_device *dev = to_ps3_storage_device(&_dev->core);
 	struct ps3disk_private *priv = ps3disk_priv(dev);
 
-	kthread_stop(priv->thread);
 	__clear_bit(priv->gendisk->first_minor / PS3DISK_MINORS,
 		    &ps3disk_mask);
 	del_gendisk(priv->gendisk);
@@ -355,7 +433,6 @@ static int ps3disk_remove(struct ps3_system_bus_device *_dev)
 	kfree(priv);
 	return 0;
 }
-
 
 static struct ps3_system_bus_driver ps3disk = {
 	.match_id	= PS3_MATCH_ID_STOR_DISK,

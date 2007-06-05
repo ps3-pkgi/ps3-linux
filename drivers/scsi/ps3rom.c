@@ -25,6 +25,7 @@
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>
+#include <scsi/scsi_dbg.h>
 #include <scsi/scsi_device.h>
 #include <scsi/scsi_host.h>
 
@@ -41,9 +42,9 @@
 
 
 struct ps3rom_private {
+	struct ps3_storage_device *dev;
 	spinlock_t lock;
 	struct task_struct *thread;
-	struct Scsi_Host *host;
 	struct scsi_cmnd *cmd;
 };
 #define ps3rom_priv(dev)	((dev)->sbd.core.driver_data)
@@ -84,128 +85,6 @@ enum lv1_atapi_in_out {
 };
 
 
-#ifdef DEBUG
-static const char *scsi_command(unsigned char cmd)
-{
-	switch (cmd) {
-	case TEST_UNIT_READY:		return "TEST_UNIT_READY/GPCMD_TEST_UNIT_READY";
-	case REZERO_UNIT:		return "REZERO_UNIT";
-	case REQUEST_SENSE:		return "REQUEST_SENSE/GPCMD_REQUEST_SENSE";
-	case FORMAT_UNIT:		return "FORMAT_UNIT/GPCMD_FORMAT_UNIT";
-	case READ_BLOCK_LIMITS:		return "READ_BLOCK_LIMITS";
-	case REASSIGN_BLOCKS:		return "REASSIGN_BLOCKS/INITIALIZE_ELEMENT_STATUS";
-	case READ_6:			return "READ_6";
-	case WRITE_6:			return "WRITE_6/MI_REPORT_TARGET_PGS";
-	case SEEK_6:			return "SEEK_6";
-	case READ_REVERSE:		return "READ_REVERSE";
-	case WRITE_FILEMARKS:		return "WRITE_FILEMARKS/SAI_READ_CAPACITY_16";
-	case SPACE:			return "SPACE";
-	case INQUIRY:			return "INQUIRY/GPCMD_INQUIRY";
-	case RECOVER_BUFFERED_DATA:	return "RECOVER_BUFFERED_DATA";
-	case MODE_SELECT:		return "MODE_SELECT";
-	case RESERVE:			return "RESERVE";
-	case RELEASE:			return "RELEASE";
-	case COPY:			return "COPY";
-	case ERASE:			return "ERASE";
-	case MODE_SENSE:		return "MODE_SENSE";
-	case START_STOP:		return "START_STOP/GPCMD_START_STOP_UNIT";
-	case RECEIVE_DIAGNOSTIC:	return "RECEIVE_DIAGNOSTIC";
-	case SEND_DIAGNOSTIC:		return "SEND_DIAGNOSTIC";
-	case ALLOW_MEDIUM_REMOVAL:	return "ALLOW_MEDIUM_REMOVAL/GPCMD_PREVENT_ALLOW_MEDIUM_REMOVAL";
-	case SET_WINDOW:		return "SET_WINDOW";
-	case READ_CAPACITY:		return "READ_CAPACITY/GPCMD_READ_CDVD_CAPACITY";
-	case READ_10:			return "READ_10/GPCMD_READ_10";
-	case WRITE_10:			return "WRITE_10/GPCMD_WRITE_10";
-	case SEEK_10:			return "SEEK_10/POSITION_TO_ELEMENT/GPCMD_SEEK";
-	case WRITE_VERIFY:		return "WRITE_VERIFY/GPCMD_WRITE_AND_VERIFY_10";
-	case VERIFY:			return "VERIFY/GPCMD_VERIFY_10";
-	case SEARCH_HIGH:		return "SEARCH_HIGH";
-	case SEARCH_EQUAL:		return "SEARCH_EQUAL";
-	case SEARCH_LOW:		return "SEARCH_LOW";
-	case SET_LIMITS:		return "SET_LIMITS";
-	case PRE_FETCH:			return "PRE_FETCH/READ_POSITION";
-	case SYNCHRONIZE_CACHE:		return "SYNCHRONIZE_CACHE/GPCMD_FLUSH_CACHE";
-	case LOCK_UNLOCK_CACHE:		return "LOCK_UNLOCK_CACHE";
-	case READ_DEFECT_DATA:		return "READ_DEFECT_DATA";
-	case MEDIUM_SCAN:		return "MEDIUM_SCAN";
-	case COMPARE:			return "COMPARE";
-	case COPY_VERIFY:		return "COPY_VERIFY";
-	case WRITE_BUFFER:		return "WRITE_BUFFER";
-	case READ_BUFFER:		return "READ_BUFFER";
-	case UPDATE_BLOCK:		return "UPDATE_BLOCK";
-	case READ_LONG:			return "READ_LONG";
-	case WRITE_LONG:		return "WRITE_LONG";
-	case CHANGE_DEFINITION:		return "CHANGE_DEFINITION";
-	case WRITE_SAME:		return "WRITE_SAME";
-	case READ_TOC:			return "READ_TOC/GPCMD_READ_TOC_PMA_ATIP";
-	case LOG_SELECT:		return "LOG_SELECT";
-	case LOG_SENSE:			return "LOG_SENSE";
-	case MODE_SELECT_10:		return "MODE_SELECT_10/GPCMD_MODE_SELECT_10";
-	case RESERVE_10:		return "RESERVE_10";
-	case RELEASE_10:		return "RELEASE_10";
-	case MODE_SENSE_10:		return "MODE_SENSE_10/GPCMD_MODE_SENSE_10";
-	case PERSISTENT_RESERVE_IN:	return "PERSISTENT_RESERVE_IN";
-	case PERSISTENT_RESERVE_OUT:	return "PERSISTENT_RESERVE_OUT";
-	case REPORT_LUNS:		return "REPORT_LUNS";
-	case MAINTENANCE_IN:		return "MAINTENANCE_IN/GPCMD_SEND_KEY";
-	case MOVE_MEDIUM:		return "MOVE_MEDIUM";
-	case EXCHANGE_MEDIUM:		return "EXCHANGE_MEDIUM/GPCMD_LOAD_UNLOAD";
-	case READ_12:			return "READ_12/GPCMD_READ_12";
-	case WRITE_12:			return "WRITE_12";
-	case WRITE_VERIFY_12:		return "WRITE_VERIFY_12";
-	case SEARCH_HIGH_12:		return "SEARCH_HIGH_12";
-	case SEARCH_EQUAL_12:		return "SEARCH_EQUAL_12";
-	case SEARCH_LOW_12:		return "SEARCH_LOW_12";
-	case READ_ELEMENT_STATUS:	return "READ_ELEMENT_STATUS";
-	case SEND_VOLUME_TAG:		return "SEND_VOLUME_TAG/GPCMD_SET_STREAMING";
-	case WRITE_LONG_2:		return "WRITE_LONG_2";
-	case READ_16:			return "READ_16";
-	case WRITE_16:			return "WRITE_16";
-	case VERIFY_16:			return "VERIFY_16";
-	case SERVICE_ACTION_IN:		return "SERVICE_ACTION_IN";
-	case ATA_16:			return "ATA_16";
-	case ATA_12:			return "ATA_12/GPCMD_BLANK";
-	case GPCMD_CLOSE_TRACK:		return "GPCMD_CLOSE_TRACK";
-	case GPCMD_GET_CONFIGURATION:	return "GPCMD_GET_CONFIGURATION";
-	case GPCMD_GET_EVENT_STATUS_NOTIFICATION:	return "GPCMD_GET_EVENT_STATUS_NOTIFICATION";
-	case GPCMD_GET_PERFORMANCE:	return "GPCMD_GET_PERFORMANCE";
-	case GPCMD_MECHANISM_STATUS:	return "GPCMD_MECHANISM_STATUS";
-	case GPCMD_PAUSE_RESUME:	return "GPCMD_PAUSE_RESUME";
-	case GPCMD_PLAY_AUDIO_10:	return "GPCMD_PLAY_AUDIO_10";
-	case GPCMD_PLAY_AUDIO_MSF:	return "GPCMD_PLAY_AUDIO_MSF";
-	case GPCMD_PLAY_AUDIO_TI:	return "GPCMD_PLAY_AUDIO_TI/GPCMD_PLAYAUDIO_TI";
-	case GPCMD_PLAY_CD:		return "GPCMD_PLAY_CD";
-	case GPCMD_READ_BUFFER_CAPACITY:	return "GPCMD_READ_BUFFER_CAPACITY";
-	case GPCMD_READ_CD:		return "GPCMD_READ_CD";
-	case GPCMD_READ_CD_MSF:		return "GPCMD_READ_CD_MSF";
-	case GPCMD_READ_DISC_INFO:	return "GPCMD_READ_DISC_INFO";
-	case GPCMD_READ_DVD_STRUCTURE:	return "GPCMD_READ_DVD_STRUCTURE";
-	case GPCMD_READ_FORMAT_CAPACITIES:	return "GPCMD_READ_FORMAT_CAPACITIES";
-	case GPCMD_READ_HEADER:		return "GPCMD_READ_HEADER";
-	case GPCMD_READ_TRACK_RZONE_INFO:	return "GPCMD_READ_TRACK_RZONE_INFO";
-	case GPCMD_READ_SUBCHANNEL:	return "GPCMD_READ_SUBCHANNEL";
-	case GPCMD_REPAIR_RZONE_TRACK:	return "GPCMD_REPAIR_RZONE_TRACK";
-	case GPCMD_REPORT_KEY:		return "GPCMD_REPORT_KEY";
-	case GPCMD_RESERVE_RZONE_TRACK:	return "GPCMD_RESERVE_RZONE_TRACK";
-	case GPCMD_SEND_CUE_SHEET:	return "GPCMD_SEND_CUE_SHEET";
-	case GPCMD_SCAN:		return "GPCMD_SCAN";
-	case GPCMD_SEND_DVD_STRUCTURE:	return "GPCMD_SEND_DVD_STRUCTURE";
-	case GPCMD_SEND_EVENT:		return "GPCMD_SEND_EVENT";
-	case GPCMD_SEND_OPC:		return "GPCMD_SEND_OPC";
-	case GPCMD_SET_READ_AHEAD:	return "GPCMD_SET_READ_AHEAD";
-	case GPCMD_STOP_PLAY_SCAN:	return "GPCMD_STOP_PLAY_SCAN";
-	case GPCMD_SET_SPEED:		return "GPCMD_SET_SPEED";
-	case GPCMD_GET_MEDIA_STATUS:	return "GPCMD_GET_MEDIA_STATUS";
-
-	default:
-	    return "***UNKNOWN***";
-	}
-}
-#else /* !DEBUG */
-static inline const char *scsi_command(unsigned char cmd) { return NULL; }
-#endif /* DEBUG */
-
-
 static int ps3rom_slave_configure(struct scsi_device *scsi_dev)
 {
 	struct ps3_storage_device *dev;
@@ -226,15 +105,14 @@ static int ps3rom_slave_configure(struct scsi_device *scsi_dev)
 static int ps3rom_queuecommand(struct scsi_cmnd *cmd,
 			       void (*done)(struct scsi_cmnd *))
 {
-	struct ps3_storage_device *dev;
 	struct ps3rom_private *priv;
 
-	dev = (struct ps3_storage_device *)cmd->device->host->hostdata[0];
-	priv = ps3rom_priv(dev);
-	dev_dbg(&dev->sbd.core, "%s:%u: command 0x%02x (%s)\n", __func__,
-		__LINE__, cmd->cmnd[0], scsi_command(cmd->cmnd[0]));
+#ifdef DEBUG
+	scsi_print_command(cmd);
+#endif
 
 	// FIXME Prevalidate commands?
+	priv = (struct ps3rom_private *)cmd->device->host->hostdata;
 	spin_lock_irq(&priv->lock);
 	priv->cmd = cmd;
 	cmd->scsi_done = done;
@@ -262,14 +140,6 @@ static int fill_from_dev_buffer(struct scsi_cmnd *cmd, const void *buf,
 	if (cmd->sc_data_direction != DMA_BIDIRECTIONAL &&
 	    cmd->sc_data_direction != DMA_FROM_DEVICE)
 		return DID_ERROR << 16;
-
-	if (!cmd->use_sg) {
-		req_len = cmd->request_bufflen;
-		act_len = min(req_len, buflen);
-		memcpy(cmd->request_buffer, buf, act_len);
-		cmd->resid = req_len - act_len;
-		return 0;
-	}
 
 	sgpnt = cmd->request_buffer;
 	active = 1;
@@ -311,13 +181,6 @@ static int fetch_to_dev_buffer(struct scsi_cmnd *cmd, void *buf, int buflen)
 	if (cmd->sc_data_direction != DMA_BIDIRECTIONAL &&
 	    cmd->sc_data_direction != DMA_TO_DEVICE)
 		return -1;
-
-	if (!cmd->use_sg) {
-		req_len = cmd->request_bufflen;
-		len = min(req_len, buflen);
-		memcpy(buf, cmd->request_buffer, len);
-		return len;
-	}
 
 	sgpnt = cmd->request_buffer;
 	for (k = 0, req_len = 0, fin = 0; k < cmd->use_sg; ++k, ++sgpnt) {
@@ -383,9 +246,6 @@ static inline unsigned int cdda_raw_len(const struct scsi_cmnd *cmd)
 static u64 ps3rom_send_atapi_command(struct ps3_storage_device *dev,
 				     struct lv1_atapi_cmnd_block *cmd)
 {
-	dev_dbg(&dev->sbd.core, "%s:%u: send ATAPI command 0x%02x (%s)\n",
-		__func__, __LINE__, cmd->pkt[0], scsi_command(cmd->pkt[0]));
-
 	return ps3stor_send_command(dev, LV1_STORAGE_SEND_ATAPI_COMMAND,
 				    ps3_mm_phys_to_lpar(__pa(cmd)),
 				    sizeof(*cmd), cmd->buffer, cmd->arglen);
@@ -558,11 +418,11 @@ static void ps3rom_request(struct ps3_storage_device *dev,
 			   struct scsi_cmnd *cmd)
 {
 	unsigned char opcode = cmd->cmnd[0];
-	struct ps3rom_private *priv = ps3rom_priv(dev);
+	struct ps3rom_private *priv;
 
-	dev_dbg(&dev->sbd.core, "%s:%u: command 0x%02x (%s)\n", __func__,
-		__LINE__, opcode, scsi_command(opcode));
-
+#ifdef DEBUG
+	scsi_print_command(cmd);
+#endif
 	switch (opcode) {
 	case INQUIRY:
 		ps3rom_atapi_request(dev, cmd, srb6_len(cmd),
@@ -615,14 +475,15 @@ static void ps3rom_request(struct ps3_storage_device *dev,
 		break;
 
 	default:
-		dev_err(&dev->sbd.core, "%s:%u: illegal request 0x%02x (%s)\n",
-			__func__, __LINE__, opcode, scsi_command(opcode));
+		dev_err(&dev->sbd.core, "%s:%u: illegal request 0x%02x\n",
+			__func__, __LINE__, opcode);
 		cmd->result = DID_ERROR << 16;
 		memset(cmd->sense_buffer, 0, SCSI_SENSE_BUFFERSIZE);
 		cmd->sense_buffer[0] = 0x70;
 		cmd->sense_buffer[2] = ILLEGAL_REQUEST;
 	}
 
+	priv = (struct ps3rom_private *)cmd->device->host->hostdata;
 	spin_lock_irq(&priv->lock);
 	priv->cmd = NULL;
 	cmd->scsi_done(cmd);
@@ -631,8 +492,9 @@ static void ps3rom_request(struct ps3_storage_device *dev,
 
 static int ps3rom_thread(void *data)
 {
-	struct ps3_storage_device *dev = data;
-	struct ps3rom_private *priv = ps3rom_priv(dev);
+	struct Scsi_Host *host = data;
+	struct ps3rom_private *priv = (struct ps3rom_private *)host->hostdata;
+	struct ps3_storage_device *dev = priv->dev;
 	struct scsi_cmnd *cmd;
 
 	dev_dbg(&dev->sbd.core, "%s thread init\n", __func__);
@@ -674,9 +536,9 @@ static struct scsi_host_template ps3rom_host_template = {
 static int __devinit ps3rom_probe(struct ps3_system_bus_device *_dev)
 {
 	struct ps3_storage_device *dev = to_ps3_storage_device(&_dev->core);
-	struct ps3rom_private *priv;
 	int error;
 	struct Scsi_Host *host;
+	struct ps3rom_private *priv;
 	struct task_struct *task;
 
 	if (dev->blk_size != CD_FRAMESIZE) {
@@ -686,18 +548,10 @@ static int __devinit ps3rom_probe(struct ps3_system_bus_device *_dev)
 		return -EINVAL;
 	}
 
-	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
-	if (!priv)
-		return -ENOMEM;
-
-	ps3rom_priv(dev) = priv;
-	spin_lock_init(&priv->lock);
-
 	dev->bounce_size = BOUNCE_SIZE;
 	dev->bounce_buf = kmalloc(BOUNCE_SIZE, GFP_DMA);
 	if (!dev->bounce_buf) {
-		error = -ENOMEM;
-		goto fail_free_priv;
+		return -ENOMEM;
 	}
 
 	error = ps3stor_setup(dev);
@@ -705,15 +559,17 @@ static int __devinit ps3rom_probe(struct ps3_system_bus_device *_dev)
 		goto fail_free_bounce;
 
 	host = scsi_host_alloc(&ps3rom_host_template,
-			       sizeof(struct ps3_system_bus_device *));
+			       sizeof(struct ps3rom_private));
 	if (!host) {
 		dev_err(&dev->sbd.core, "%s:%u: scsi_host_alloc failed\n",
 			__func__, __LINE__);
 		goto fail_teardown;
 	}
 
-	priv->host = host;
-	host->hostdata[0] = (unsigned long)dev;
+	priv = (struct ps3rom_private *)host->hostdata;
+	ps3rom_priv(dev) = host;
+	spin_lock_init(&priv->lock);
+	priv->dev = dev;
 
 	/* One device/LUN per SCSI bus */
 	host->max_id = 1;
@@ -727,7 +583,7 @@ static int __devinit ps3rom_probe(struct ps3_system_bus_device *_dev)
 		goto fail_host_put;
 	}
 
-	task = kthread_run(ps3rom_thread, dev, DEVICE_NAME);
+	task = kthread_run(ps3rom_thread, host, DEVICE_NAME);
 	if (IS_ERR(task)) {
 		error = PTR_ERR(task);
 		goto fail_remove_host;
@@ -745,22 +601,20 @@ fail_teardown:
 	ps3stor_teardown(dev);
 fail_free_bounce:
 	kfree(dev->bounce_buf);
-fail_free_priv:
-	kfree(priv);
 	return error;
 }
 
 static int ps3rom_remove(struct ps3_system_bus_device *_dev)
 {
 	struct ps3_storage_device *dev = to_ps3_storage_device(&_dev->core);
-	struct ps3rom_private *priv = ps3rom_priv(dev);
+	struct Scsi_Host *host = ps3rom_priv(dev);
+	struct ps3rom_private *priv = (struct ps3rom_private *)host->hostdata;
 
-	scsi_remove_host(priv->host);
+	scsi_remove_host(host);
 	kthread_stop(priv->thread);
 	ps3stor_teardown(dev);
 	kfree(dev->bounce_buf);
-	scsi_host_put(priv->host);
-	kfree(priv);
+	scsi_host_put(host);
 	return 0;
 }
 
