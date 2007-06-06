@@ -183,31 +183,35 @@ static int __init setup_areas(struct spu *spu)
 {
 	struct table {char* name; unsigned long addr; unsigned long size;};
 
-	spu_pdata(spu)->shadow = __ioremap(
+	spu_pdata(spu)->shadow = (__force void *)ioremap_flags(
 		spu_pdata(spu)->shadow_addr, sizeof(struct spe_shadow),
-		pgprot_val(PAGE_READONLY) | _PAGE_NO_CACHE | _PAGE_GUARDED);
+		pgprot_val(PAGE_READONLY) | _PAGE_NO_CACHE);
+
 	if (!spu_pdata(spu)->shadow) {
 		pr_debug("%s:%d: ioremap shadow failed\n", __func__, __LINE__);
 		goto fail_ioremap;
 	}
 
-	spu->local_store = (__force void *)ioremap(spu->local_store_phys,
-						   LS_SIZE);
+	spu->local_store = (__force void *)ioremap_flags(spu->local_store_phys,
+		LS_SIZE, _PAGE_NO_CACHE);
+
 	if (!spu->local_store) {
 		pr_debug("%s:%d: ioremap local_store failed\n",
 			__func__, __LINE__);
 		goto fail_ioremap;
 	}
 
-	spu->problem = ioremap(spu->problem_phys,
-		sizeof(struct spu_problem));
+	spu->problem = (__force void *)ioremap_flags(spu->problem_phys,
+		sizeof(struct spu_problem), _PAGE_NO_CACHE);
+
 	if (!spu->problem) {
 		pr_debug("%s:%d: ioremap problem failed\n", __func__, __LINE__);
 		goto fail_ioremap;
 	}
 
-	spu->priv2 = ioremap(spu_pdata(spu)->priv2_addr,
-		sizeof(struct spu_priv2));
+	spu->priv2 = (__force void *)ioremap_flags(spu_pdata(spu)->priv2_addr,
+		sizeof(struct spu_priv2), _PAGE_NO_CACHE);
+
 	if (!spu->priv2) {
 		pr_debug("%s:%d: ioremap priv2 failed\n", __func__, __LINE__);
 		goto fail_ioremap;
