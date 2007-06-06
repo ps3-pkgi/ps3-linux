@@ -2338,12 +2338,6 @@ struct tty_driver *console_driver;
 
 #ifdef CONFIG_VT_CONSOLE
 
-void vt_console_stop(void)
-{
-	printable = 0;
-}
-EXPORT_SYMBOL_GPL(vt_console_stop);
-
 /*
  *	Console on virtual terminal
  *

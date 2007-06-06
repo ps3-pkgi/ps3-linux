@@ -1132,9 +1132,6 @@ static int __devexit ps3fb_remove(struct ps3_system_bus_device *dev)
 	return 0;
 }
 
-extern void fbcon_exit(void);		// FIXME
-extern void vt_console_stop(void);	// FIXME
-
 static int ps3fb_shutdown(struct ps3_system_bus_device *dev)
 {
 	int status;
@@ -1142,8 +1139,8 @@ static int ps3fb_shutdown(struct ps3_system_bus_device *dev)
 
 	printk(" -> %s:%d\n", __func__, __LINE__);
 
-	vt_console_stop();
-	fbcon_exit();
+	// is this stuff ok here??
+	// just set .shutdown = ps3fb_remove???
 
 	ps3fb_flip_ctl(0, &ps3fb);	/* flip off */
 	ps3fb.dinfo->irq.mask = 0;
