@@ -367,8 +367,8 @@ static void  __maybe_unused _dma_dump_region(const struct ps3_dma_region *r,
 	DBG("%s:%d: len        %lxh\n", func, line, r->len);
 	DBG("%s:%d: offset     %lxh\n", func, line, r->offset);
 }
-
-/**
+  
+  /**
  * dma_chunk - A chunk of dma pages mapped by the io controller.
  * @region - The dma region that owns this chunk.
  * @lpar_addr: Starting lpar address of the area to map.

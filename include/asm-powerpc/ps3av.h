@@ -723,6 +723,6 @@ extern int ps3av_dev_close(void);
 extern void ps3av_register_flip_ctl(void (*flip_ctl)(int on, void *data),
 				    void *flip_data);
 extern void ps3av_flip_ctl(int on);
-#endif /* __KERNEL__ */
 
+#endif /* __KERNEL__ */
 #endif	/* _ASM_POWERPC_PS3AV_H_ */

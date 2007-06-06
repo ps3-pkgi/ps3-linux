@@ -32,11 +32,12 @@ union ps3_firmware_version {
 		u16 major;
 		u16 minor;
 		u16 rev;
-	} __attribute__((packed)) v;
+	};
 };
 
 void ps3_get_firmware_version(union ps3_firmware_version *v);
 int ps3_compare_firmware_version(u16 major, u16 minor, u16 rev);
+
 /* 'Other OS' area */
 
 enum ps3_param_av_multi_out {
@@ -335,7 +336,6 @@ struct ps3_system_bus_device {
 	enum ps3_match_id match_id;
 	enum ps3_system_bus_device_type dev_type;
 
-// need to put these into a union!!!
 	unsigned int bus_id;              /* SB */
 	unsigned int dev_id;              /* SB */
 	unsigned int interrupt_id;        /* SB */

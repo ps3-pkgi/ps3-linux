@@ -75,7 +75,6 @@ enum vuart_interrupt_mask {
  */
 
 struct ps3_vuart_port_priv {
-	//struct ps3_system_bus_device *dev;
 	u64 interrupt_mask;
 
 	struct {
@@ -112,14 +111,14 @@ struct ports_bmp {
 } __attribute__ ((aligned (32)));
 
 #define dump_ports_bmp(_b) _dump_ports_bmp(_b, __func__, __LINE__)
-static void __attribute__ ((unused)) _dump_ports_bmp(
+static void __maybe_unused _dump_ports_bmp(
 	const struct ports_bmp* bmp, const char* func, int line)
 {
 	pr_debug("%s:%d: ports_bmp: %016lxh\n", func, line, bmp->status);
 }
 
 #define dump_port_params(_b) _dump_port_params(_b, __func__, __LINE__)
-static void __attribute__ ((unused)) _dump_port_params(unsigned int port_number,
+static void __maybe_unused _dump_port_params(unsigned int port_number,
 	const char* func, int line)
 {
 #if defined(DEBUG)
@@ -1244,18 +1243,8 @@ module_exit(ps3_vuart_bus_exit);
 
 static void ps3_vuart_port_release_device(struct ps3_system_bus_device *dev)
 {
-#if defined(DEBUG)
-	dev_dbg(&dev->core, " -> %s:%d\n", __func__, __LINE__);
-
+	dev_dbg(&dev->core, "%s:%d\n", __func__, __LINE__);
 	BUG_ON(dev->driver_priv && "forgot to free");
-
-	//ps3_system_bus_device_unregister(dev); //here, or in ps3_vuart_remove???
-
-	//dev_dbg(&dev->core, " <- %s:%d\n", __func__, __LINE__);
-	pr_debug(" <- %s:%d\n", __func__, __LINE__);
-#else
-	//ps3_system_bus_device_unregister(dev); //here, or in ps3_vuart_remove???
-#endif
 }
 
 /**

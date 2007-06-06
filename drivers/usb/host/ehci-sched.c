@@ -21,6 +21,10 @@
 
 /*-------------------------------------------------------------------------*/
 
+#ifdef CONFIG_PPC_PS3
+#include <asm/firmware.h>
+#endif
+
 /*
  * EHCI scheduled transaction support:  interrupt, iso, split iso
  * These are called "periodic" transactions in the EHCI spec.

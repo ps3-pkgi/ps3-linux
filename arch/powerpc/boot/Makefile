@@ -42,7 +42,6 @@ zliblinuxheader := zlib.h zconf.h zutil.h
 $(addprefix $(obj)/,$(zlib) gunzip_util.o main.o): \
 	$(addprefix $(obj)/,$(zliblinuxheader)) $(addprefix $(obj)/,$(zlibheader))
 
-src-plat-$(CONFIG_PPC_PRPMC2800) += prpmc2800.c
 src-plat-$(CONFIG_PPC_PS3) += ps3-head.S smp.S ps3.c ps3-hvcall.S
 inc-plat-$(CONFIG_PPC_PS3) += lv1call.h
 
@@ -51,7 +50,7 @@ src-wlib := string.S crt0.S stdio.c main.c flatdevtree.c flatdevtree_misc.c \
 		gunzip_util.c elf_util.c $(zlib) devtree.c \
 		44x.c ebony.c mv64x60.c mpsc.c mv64x60_i2c.c
 src-plat := $(src-plat-y) of.c cuboot-83xx.c cuboot-85xx.c holly.c \
-		cuboot-ebony.c treeboot-ebony.c
+		cuboot-ebony.c treeboot-ebony.c prpmc2800.c
 src-boot := $(src-wlib) $(src-plat) empty.c
 
 src-boot := $(addprefix $(obj)/, $(src-boot))
