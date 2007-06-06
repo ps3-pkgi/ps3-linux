@@ -505,15 +505,13 @@ static int __init ps3_register_vuart_devices(void)
 	pr_debug(" -> %s:%d\n", __func__, __LINE__);
 
 	result = ps3_repository_read_vuart_av_port(&port_number);
-
 	if (result)
 		port_number = 0; /* av default */
 
 	result = ps3_setup_vuart_device(PS3_MATCH_ID_AV_SETTINGS, port_number);
 	WARN_ON(result);
 
-	ps3_repository_read_vuart_sysmgr_port(&port_number);
-
+	result = ps3_repository_read_vuart_sysmgr_port(&port_number);
 	if (result)
 		port_number = 2; /* sysmgr default */
 
