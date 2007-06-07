@@ -1238,16 +1238,6 @@ core_initcall(ps3_vuart_bus_init);
 module_exit(ps3_vuart_bus_exit);
 
 /**
- * ps3_vuart_port_release_device - Remove a vuart port device.
- */
-
-static void ps3_vuart_port_release_device(struct ps3_system_bus_device *dev)
-{
-	dev_dbg(&dev->core, "%s:%d\n", __func__, __LINE__);
-	BUG_ON(dev->driver_priv && "forgot to free");
-}
-
-/**
  * ps3_vuart_port_driver_register - Add a vuart port device driver.
  */
 

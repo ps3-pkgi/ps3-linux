@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
-# Linux kernel version: 2.6.22-rc3
-# Sat May 26 14:31:52 2007
+# Linux kernel version: 2.6.22-rc4
+# Thu Jun  7 11:04:49 2007
 #
 CONFIG_PPC64=y
 CONFIG_64BIT=y
@@ -461,7 +461,6 @@ CONFIG_SCSI_WAIT_SCAN=m
 #
 # CONFIG_ISCSI_TCP is not set
 # CONFIG_SCSI_DEBUG is not set
-# CONFIG_SCSI_ESP_CORE is not set
 # CONFIG_ATA is not set
 
 #
@@ -591,7 +590,7 @@ CONFIG_INPUT_JOYSTICK=y
 CONFIG_VT=y
 CONFIG_VT_CONSOLE=y
 CONFIG_HW_CONSOLE=y
-# CONFIG_VT_HW_CONSOLE_BINDING is not set
+CONFIG_VT_HW_CONSOLE_BINDING=y
 # CONFIG_SERIAL_NONSTANDARD is not set
 
 #
@@ -1096,7 +1095,6 @@ CONFIG_NLS_ISO8859_1=y
 #
 # CONFIG_DLM is not set
 # CONFIG_UCC_SLOW is not set
-# CONFIG_UCC_FAST is not set
 
 #
 # Library routines
@@ -1153,16 +1151,7 @@ CONFIG_DEBUG_STACKOVERFLOW=y
 # CONFIG_DEBUGGER is not set
 CONFIG_IRQSTACKS=y
 # CONFIG_BOOTX_TEXT is not set
-CONFIG_PPC_EARLY_DEBUG=y
-# CONFIG_PPC_EARLY_DEBUG_LPAR is not set
-# CONFIG_PPC_EARLY_DEBUG_G5 is not set
-# CONFIG_PPC_EARLY_DEBUG_RTAS_PANEL is not set
-# CONFIG_PPC_EARLY_DEBUG_RTAS_CONSOLE is not set
-# CONFIG_PPC_EARLY_DEBUG_MAPLE is not set
-# CONFIG_PPC_EARLY_DEBUG_ISERIES is not set
-# CONFIG_PPC_EARLY_DEBUG_PAS_REALMODE is not set
-# CONFIG_PPC_EARLY_DEBUG_BEAT is not set
-# CONFIG_PPC_EARLY_DEBUG_44x is not set
+# CONFIG_PPC_EARLY_DEBUG is not set
 
 #
 # Security options
