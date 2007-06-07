@@ -21,8 +21,8 @@
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
 #include <linux/miscdevice.h>
+#include <linux/uaccess.h>
 
-#include <asm/uaccess.h>
 #include <asm/ps3stor.h>
 
 

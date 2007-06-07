@@ -33,7 +33,6 @@
 
 #define BOUNCE_SIZE		(64*1024)
 
-// FIXME Use a fixed major assigned by LANANA?
 #define PS3DISK_MAJOR		0
 
 #define PS3DISK_MAX_DISKS	16
@@ -57,6 +56,7 @@ struct ps3disk_private {
 #define ps3disk_priv(dev)	((dev)->sbd.core.driver_data)
 
 static int ps3disk_major = PS3DISK_MAJOR;
+
 
 static int ps3disk_open(struct inode *inode, struct file *file)
 {
@@ -166,6 +166,28 @@ static int ps3disk_submit_request_sg(struct ps3_storage_device *dev,
 	return 1;
 }
 
+static int ps3disk_submit_flush_request(struct ps3_storage_device *dev,
+					struct request *req)
+{
+	struct ps3disk_private *priv = ps3disk_priv(dev);
+	u64 res;
+
+	dev_dbg(&dev->sbd.core, "%s:%u: flush request\n", __func__, __LINE__);
+
+	res = lv1_storage_send_device_command(dev->sbd.dev_id,
+					      LV1_STORAGE_ATA_HDDOUT, 0, 0, 0,
+					      0, &dev->tag);
+	if (res) {
+		dev_err(&dev->sbd.core, "%s:%u: sync cache failed 0x%lx\n",
+			__func__, __LINE__, res);
+		end_request(req, 0);
+		return 0;
+	}
+
+	priv->req = req;
+	return 1;
+}
+
 static void ps3disk_do_request(struct ps3_storage_device *dev,
 			       request_queue_t *q)
 {
@@ -174,13 +196,17 @@ static void ps3disk_do_request(struct ps3_storage_device *dev,
 	dev_dbg(&dev->sbd.core, "%s:%u\n", __func__, __LINE__);
 
 	while ((req = elv_next_request(q))) {
-		if (!blk_fs_request(req)) {
+		if (blk_fs_request(req)) {
+			if (ps3disk_submit_request_sg(dev, req))
+				break;
+		} else if (req->cmd_type == REQ_TYPE_FLUSH) {
+			if (ps3disk_submit_flush_request(dev, req))
+				break;
+		} else {
 			blk_dump_rq_flags(req, DEVICE_NAME " bad request");
 			end_request(req, 0);
 			continue;
 		}
-		if (ps3disk_submit_request_sg(dev, req))
-			break;
 	}
 }
 
@@ -202,7 +228,7 @@ static irqreturn_t ps3disk_interrupt(int irq, void *data)
 	struct ps3_storage_device *dev = data;
 	struct ps3disk_private *priv;
 	struct request *req;
-	int write;
+	int read;
 	const char *op;
 	int uptodate;
 
@@ -236,8 +262,13 @@ static irqreturn_t ps3disk_interrupt(int irq, void *data)
 		return IRQ_HANDLED;
 	}
 
-	write = rq_data_dir(req);
-	op = write ? "write" : "read";
+	if (req->cmd_type == REQ_TYPE_FLUSH) {
+		read = 0;
+		op = "flush";
+	} else {
+		read = !rq_data_dir(req);
+		op = read ? "read" : "write";
+	}
 	if (dev->lv1_status) {
 		dev_dbg(&dev->sbd.core, "%s:%u: %s failed 0x%lx\n", __func__,
 			__LINE__, op, dev->lv1_status);
@@ -246,22 +277,18 @@ static irqreturn_t ps3disk_interrupt(int irq, void *data)
 		dev_dbg(&dev->sbd.core, "%s:%u: %s completed\n", __func__,
 			__LINE__, op);
 		uptodate = 1;
-		if (!write)
+		if (read)
 			ps3disk_scatter_gather(dev, req, 0);
 	}
 
 	spin_lock(&priv->lock);
-	if (!end_that_request_first(req, uptodate, req->nr_sectors)) {
-		blkdev_dequeue_request(req);
-		end_that_request_last(req, uptodate);
-	}
+	end_request(req, uptodate);
 	priv->req = NULL;
 	ps3disk_do_request(dev, priv->queue);
 	spin_unlock(&priv->lock);
 
 	return IRQ_HANDLED;
 }
-
 
 static int ps3disk_sync_cache(struct ps3_storage_device *dev)
 {
@@ -278,22 +305,33 @@ static int ps3disk_sync_cache(struct ps3_storage_device *dev)
 	return 0;
 }
 
+static void ps3disk_prepare_flush(request_queue_t *q, struct request *req)
+{
+	struct ps3_storage_device *dev = q->queuedata;
+
+	dev_dbg(&dev->sbd.core, "%s:%u\n", __func__, __LINE__);
+
+	memset(req->cmd, 0, sizeof(req->cmd));
+	req->cmd_type = REQ_TYPE_FLUSH;
+}
+
 static int ps3disk_issue_flush(request_queue_t *q, struct gendisk *gendisk,
 			       sector_t *sector)
 {
 	struct ps3_storage_device *dev = q->queuedata;
-	// FIXME Make sure no request is currently submitted
-	return ps3disk_sync_cache(dev);
-}
+	struct request *req;
+	int res;
 
-static void ps3disk_prepare_flush(request_queue_t *q, struct request *req)
-{
-	// FIXME Is this the correct thing to do?
-	struct ps3_storage_device *dev = q->queuedata;
-	// FIXME Make sure no request is currently submitted
-	ps3disk_sync_cache(dev);
-	memset(req->cmd, 0, sizeof(req->cmd));
-	req->cmd_type = REQ_TYPE_FLUSH;
+	dev_dbg(&dev->sbd.core, "%s:%u\n", __func__, __LINE__);
+
+	req = blk_get_request(q, WRITE, __GFP_WAIT);
+	ps3disk_prepare_flush(q, req);
+	res = blk_execute_rq(q, gendisk, req, 0);
+	if (res)
+		dev_err(&dev->sbd.core, "%s:%u: flush request failed %d\n",
+			__func__, __LINE__, res);
+	blk_put_request(req);
+	return res;
 }
 
 
@@ -394,6 +432,7 @@ static int __devinit ps3disk_probe(struct ps3_system_bus_device *_dev)
 	gendisk->fops = &ps3disk_fops;
 	gendisk->queue = queue;
 	gendisk->private_data = dev;
+	gendisk->driverfs_dev = &dev->sbd.core;
 	snprintf(gendisk->disk_name, sizeof(gendisk->disk_name), PS3DISK_NAME,
 		 devidx+'a');
 	priv->blocking_factor = dev->blk_size/KERNEL_SECTOR_SIZE;

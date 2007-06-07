@@ -1170,7 +1170,7 @@ static struct ps3_system_bus_driver ps3fb_driver = {
 	.core.name	= DEVICE_NAME,
 	.core.owner	= THIS_MODULE,
 	.probe		= ps3fb_probe,
-	.remove		= __devexit_p(ps3fb_shutdown),
+	.remove		= ps3fb_shutdown,
 	.shutdown	= ps3fb_shutdown,
 };
 
@@ -1215,9 +1215,7 @@ static void __exit ps3fb_exit(void)
 }
 
 module_init(ps3fb_init);
-#ifdef MODULE
 module_exit(ps3fb_exit);
-#endif
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("PS3 GPU Frame Buffer Driver");
