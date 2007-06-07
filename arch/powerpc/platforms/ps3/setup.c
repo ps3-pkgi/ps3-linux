@@ -243,15 +243,6 @@ static void ps3_kexec_cpu_down(int crash_shutdown, int secondary)
 
 	DBG(" <- %s:%d\n", __func__, __LINE__);
 }
-
-static void ps3_machine_kexec(struct kimage *image)
-{
-	DBG(" -> %s:%d\n", __func__, __LINE__);
-
-	default_machine_kexec(image); // needs ipi, never returns.
-
-	DBG(" <- %s:%d\n", __func__, __LINE__);
-}
 #endif
 
 define_machine(ps3) {
@@ -270,7 +261,7 @@ define_machine(ps3) {
 	.power_off			= ps3_power_off,
 #if defined(CONFIG_KEXEC)
 	.kexec_cpu_down			= ps3_kexec_cpu_down,
-	.machine_kexec			= ps3_machine_kexec,
+	.machine_kexec			= default_machine_kexec,
 	.machine_kexec_prepare		= default_machine_kexec_prepare,
 	.machine_crash_shutdown		= default_machine_crash_shutdown,
 #endif

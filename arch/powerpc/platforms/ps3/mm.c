@@ -17,7 +17,6 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
-#define DEBUG
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -33,7 +32,7 @@
 #if defined(DEBUG)
 #define DBG(fmt...) udbg_printf(fmt)
 #else
-#define DBG(fmt...) do { if (0) printk(fmt);} while (0)
+#define DBG(fmt...) do{if(0)printk(fmt);}while(0)
 #endif
 
 enum {

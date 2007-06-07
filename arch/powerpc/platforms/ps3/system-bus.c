@@ -18,8 +18,6 @@
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#define DEBUG
-
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/module.h>
@@ -449,17 +447,17 @@ static int ps3_system_bus_uevent(struct device *_dev, char **envp,
 }
 
 static ssize_t modalias_show(struct device *_dev, struct device_attribute *a,
-			     char *buf)
+	char *buf)
 {
 	struct ps3_system_bus_device *dev = ps3_dev_to_system_bus_dev(_dev);
-        int len = snprintf(buf, PAGE_SIZE, "ps3:%d\n", dev->match_id);
+	int len = snprintf(buf, PAGE_SIZE, "ps3:%d\n", dev->match_id);
 
-        return (len >= PAGE_SIZE) ? (PAGE_SIZE - 1) : len;
+	return (len >= PAGE_SIZE) ? (PAGE_SIZE - 1) : len;
 }
 
 static struct device_attribute ps3_system_bus_dev_attrs[] = {
-        __ATTR_RO(modalias),
-        __ATTR_NULL,
+	__ATTR_RO(modalias),
+	__ATTR_NULL,
 };
 
 struct bus_type ps3_system_bus_type = {

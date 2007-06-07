@@ -988,8 +988,6 @@ static int __devinit ps3fb_probe(struct ps3_system_bus_device *dev)
 	unsigned long offset;
 	struct task_struct *task;
 
-	printk(" -> %s:%u\n", __func__, __LINE__);
-
 	status = ps3_open_hv_device(dev);
 	if (status) {
 		printk(KERN_ERR "%s: ps3_open_hv_device failed\n", __func__);
@@ -1104,7 +1102,6 @@ static int __devinit ps3fb_probe(struct ps3_system_bus_device *dev)
 	ps3fb.task = task;
 	ps3av_register_flip_ctl(ps3fb_flip_ctl, &ps3fb);
 
-	printk(" <- %s:%u\n", __func__, __LINE__);
 	return 0;
 
 err_unregister_framebuffer:
@@ -1126,21 +1123,12 @@ err:
 	return retval;
 }
 
-static int __devexit ps3fb_remove(struct ps3_system_bus_device *dev)
-{
-	BUG();
-	return 0;
-}
-
 static int ps3fb_shutdown(struct ps3_system_bus_device *dev)
 {
 	int status;
 	struct fb_info *info = dev->core.driver_data;
 
-	printk(" -> %s:%d\n", __func__, __LINE__);
-
-	// is this stuff ok here??
-	// just set .shutdown = ps3fb_remove???
+	DPRINTK(" -> %s:%d\n", __func__, __LINE__);
 
 	ps3fb_flip_ctl(0, &ps3fb);	/* flip off */
 	ps3fb.dinfo->irq.mask = 0;
@@ -1172,7 +1160,7 @@ static int ps3fb_shutdown(struct ps3_system_bus_device *dev)
 		DPRINTK("lv1_gpu_memory_free failed: %d\n", status);
 
 	ps3_close_hv_device(dev);
-	printk(" <- %s:%d\n", __func__, __LINE__);
+	DPRINTK(" <- %s:%d\n", __func__, __LINE__);
 
 	return 0;
 }
@@ -1182,7 +1170,7 @@ static struct ps3_system_bus_driver ps3fb_driver = {
 	.core.name	= DEVICE_NAME,
 	.core.owner	= THIS_MODULE,
 	.probe		= ps3fb_probe,
-	.remove		= __devexit_p(ps3fb_remove),
+	.remove		= __devexit_p(ps3fb_shutdown),
 	.shutdown	= ps3fb_shutdown,
 };
 
@@ -1221,14 +1209,14 @@ static int __init ps3fb_init(void)
 
 static void __exit ps3fb_exit(void)
 {
-	printk(" -> %s:%d\n", __func__, __LINE__);
+	DPRINTK(" -> %s:%d\n", __func__, __LINE__);
 	ps3_system_bus_driver_unregister(&ps3fb_driver);
-	printk(" <- %s:%d\n", __func__, __LINE__);
+	DPRINTK(" <- %s:%d\n", __func__, __LINE__);
 }
 
 module_init(ps3fb_init);
-#if 0
-module_exit(ps3fb_exit);	/* FIXME: need to fix fbcon to support remove */
+#ifdef MODULE
+module_exit(ps3fb_exit);
 #endif
 
 MODULE_LICENSE("GPL");
