@@ -1700,27 +1700,6 @@ _GLOBAL(__start_initialization_multiplatform)
 	bl	.__mmu_off
 __mmu_off_return:
 
-	/* Test if this is a secondary cpu and if so send it off to
-	 * __secondary_hold with a thread number in r3.  Secondary processors
-	 * call _start with regs r3,r4,r5 zeroed.
-	 * Pass cpu number in r6???
-	 */
-	or.	r3, r31, r30
-	bne	1f
-	li	r3, 1
-	b	.__secondary_hold
-1:
-
-	/* The primary cpu waits here for all the expected secondary cpus to
-	 * enter the kernel, after which time it is safe to reclaim the
-	 * memory use by the bootwrapper.
-	 * How to know what to wait for???
-	 * !!! need to use the kexec entry mechanism here!!!!
-	*/
-1:	LOAD_REG_IMMEDIATE(r4, __secondary_hold_acknowledge)
-	cmpwi	r4, 0
-	beq	1b
-	mr	r3, r30
 	b	.__after_prom_start
 
 _STATIC(__boot_from_prom)

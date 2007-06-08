@@ -20,7 +20,7 @@
 #define	MAX_PROP_LEN		256 /* What should this be? */
 
 typedef void (*kernel_entry_t)(unsigned long, unsigned long, void *);
-void smp_secondary_release(kernel_entry_t kentry);
+void smp_secondary_release(void);
 
 /* Platform specific operations */
 struct platform_ops {
@@ -31,7 +31,7 @@ struct platform_ops {
 	void *	(*realloc)(void *ptr, unsigned long size);
 	void	(*exit)(void);
 	void *	(*vmlinux_alloc)(unsigned long size);
-	void	(*secondary_release)(kernel_entry_t kentry);
+	void	(*finish)(void);
 };
 extern struct platform_ops platform_ops;
 

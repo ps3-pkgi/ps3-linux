@@ -1,5 +1,5 @@
 /*
- *  PS3 zImage exception vector entry.
+ *  PS3 bootwrapper entry.
  *
  *  Copyright (C) 2007 Sony Computer Entertainment Inc.
  *  Copyright 2007 Sony Corp.
@@ -30,6 +30,7 @@
 __system_reset_entry:
 
 	/* Switch to 32-bit mode. */
+
 	mfmsr	r9
 	clrldi	r9,r9,1
 	mtmsrd	r9
@@ -43,5 +44,7 @@ __system_reset_entry:
 	li	r5, 0
 	beq	1f
 	b	smp_secondary_hold
+
 1:
+	bl	smp_secondary_wait
 	b	_zimage_start

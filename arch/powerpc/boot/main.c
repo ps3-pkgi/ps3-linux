@@ -206,14 +206,14 @@ void start(void)
 	if (console_ops.close)
 		console_ops.close();
 
+	if (platform_ops.finish)
+		platform_ops.finish();
+
 	kentry = (kernel_entry_t) vmlinux.addr;
 
-	if (platform_ops.secondary_release)
-		platform_ops.secondary_release(kentry);
-
-	if (ft_addr)
+	if (ft_addr) {
 		kentry(ft_addr, 0, NULL);
-	else
+	} else
 		kentry((unsigned long)initrd.addr, initrd.size,
 		       loader_info.promptr);
 

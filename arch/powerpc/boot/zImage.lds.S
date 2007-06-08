@@ -3,8 +3,6 @@ ENTRY(_zimage_start)
 EXTERN(_zimage_start)
 SECTIONS
 {
-  .vectors 0 : { *(.vectors) }
-
   . = (4*1024*1024);
   _start = .;
   .text      :

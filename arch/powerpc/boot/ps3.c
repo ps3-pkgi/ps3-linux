@@ -103,14 +103,14 @@ int platform_init(void)
 	const u32 heapsize = 0x4000000 - (u32)_end; /* 64M */
 
 	console_ops.write = ps3_console_write;
-	platform_ops.secondary_release = smp_secondary_release;
 	platform_ops.exit = ps3_exit;
+	platform_ops.vmlinux_alloc = NULL; /* relocate to zero */
+	platform_ops.fixups = ps3_fixups;
+	platform_ops.finish = smp_secondary_release;
 
 	printf("\n-- PS3 bootwrapper --\n");
 
 	simple_alloc_init(_end, heapsize, 32, 64);
-	platform_ops.vmlinux_alloc = platform_ops.malloc;
-	platform_ops.fixups = ps3_fixups;
 	ft_init(_dtb_start, 0, 4);
 
 	return 0;
