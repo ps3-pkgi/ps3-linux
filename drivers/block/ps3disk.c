@@ -27,6 +27,7 @@
 
 #include <asm/lv1call.h>
 #include <asm/ps3stor.h>
+#include <asm/firmware.h>
 
 
 #define DEVICE_NAME		"ps3disk"
@@ -487,6 +488,9 @@ static int __init ps3disk_init(void)
 {
 	int error;
 
+	if (!firmware_has_feature(FW_FEATURE_PS3_LV1))
+		return -ENODEV;
+
 	error = register_blkdev(ps3disk_major, DEVICE_NAME);
 	if (error <= 0) {
 		printk(KERN_ERR "%s:%u: register_blkdev failed %d\n", __func__,
@@ -504,6 +508,9 @@ static int __init ps3disk_init(void)
 
 static void __exit ps3disk_exit(void)
 {
+	if (!firmware_has_feature(FW_FEATURE_PS3_LV1))
+		return;
+
 	unregister_blkdev(ps3disk_major, DEVICE_NAME);
 
 	ps3_system_bus_driver_unregister(&ps3disk);

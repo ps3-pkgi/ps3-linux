@@ -755,6 +755,10 @@ int ps3_system_bus_driver_register(struct ps3_system_bus_driver *drv)
 	int result;
 
 	printk(" -> %s:%d: %s\n", __func__, __LINE__, drv->core.name);
+
+	if (!firmware_has_feature(FW_FEATURE_PS3_LV1))
+		return -ENODEV;
+
 	drv->core.bus = &ps3_system_bus_type;
 
 	result = driver_register(&drv->core);
@@ -767,6 +771,10 @@ EXPORT_SYMBOL_GPL(ps3_system_bus_driver_register);
 void ps3_system_bus_driver_unregister(struct ps3_system_bus_driver *drv)
 {
 	printk(" -> %s:%d: %s\n", __func__, __LINE__, drv->core.name);
+
+	if (!firmware_has_feature(FW_FEATURE_PS3_LV1))
+		return;
+
 	driver_unregister(&drv->core);
 	printk(" <- %s:%d: %s\n", __func__, __LINE__, drv->core.name);
 }
