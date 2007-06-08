@@ -229,9 +229,9 @@ static irqreturn_t ps3disk_interrupt(int irq, void *data)
 	struct ps3_storage_device *dev = data;
 	struct ps3disk_private *priv;
 	struct request *req;
-	int read;
+	int read, uptodate;
+	unsigned long num_sectors;
 	const char *op;
-	int uptodate;
 
 	dev->lv1_res = lv1_storage_get_async_status(dev->sbd.dev_id,
 						    &dev->lv1_tag,
@@ -265,9 +265,11 @@ static irqreturn_t ps3disk_interrupt(int irq, void *data)
 
 	if (req->cmd_type == REQ_TYPE_FLUSH) {
 		read = 0;
+		num_sectors = req->hard_cur_sectors;
 		op = "flush";
 	} else {
 		read = !rq_data_dir(req);
+		num_sectors = req->nr_sectors;
 		op = read ? "read" : "write";
 	}
 	if (dev->lv1_status) {
@@ -283,7 +285,11 @@ static irqreturn_t ps3disk_interrupt(int irq, void *data)
 	}
 
 	spin_lock(&priv->lock);
-	end_request(req, uptodate);
+	if (!end_that_request_first(req, uptodate, num_sectors)) {
+		add_disk_randomness(req->rq_disk);
+		blkdev_dequeue_request(req);
+		end_that_request_last(req, uptodate);
+	}
 	priv->req = NULL;
 	ps3disk_do_request(dev, priv->queue);
 	spin_unlock(&priv->lock);
