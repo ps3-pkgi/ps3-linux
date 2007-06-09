@@ -269,8 +269,9 @@ ps3)
 
     rm -f "$object/otheros.bld"
 
+    cp -a "$ofile" "$ofile.elf"
     ${CROSS}objcopy -O binary "$ofile" "$ofile"
-    cp -a "$ofile" "$ofile.ori"
+    cp -a "$ofile" "$ofile.bin.org"
 
 #    dd if="$ofile" of="$ofile" conv=notrunc skip=$overlay_dest seek=$system_reset_kernel bs=1 count=$overlay_size
     dd if="$ofile" of="$ofile" conv=notrunc skip=$system_reset_overlay seek=$overlay_dest bs=1 count=$overlay_size

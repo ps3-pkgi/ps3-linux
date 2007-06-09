@@ -242,7 +242,6 @@ static void ps3_hpte_clear(void)
 	BUG_ON(result);
 
 	ps3_mm_shutdown();
-
 	ps3_mm_vas_destroy();
 
 	DBG(" <- %s:%d\n", __func__, __LINE__);

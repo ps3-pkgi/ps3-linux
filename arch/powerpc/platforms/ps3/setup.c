@@ -227,19 +227,12 @@ static int __init ps3_probe(void)
 #if defined(CONFIG_KEXEC)
 static void ps3_kexec_cpu_down(int crash_shutdown, int secondary)
 {
-	int result;
-	u64 ppe_id;
-	u64 thread_id = secondary ? 1 : 0;
+	int cpu = smp_processor_id();
 
-	DBG(" -> %s:%d: (%d)\n", __func__, __LINE__, secondary);
-	ps3_smp_cleanup_cpu(thread_id);
+	DBG(" -> %s:%d: (%d)\n", __func__, __LINE__, cpu);
 
-	lv1_get_logical_ppe_id(&ppe_id);
-	result = lv1_configure_irq_state_bitmap(ppe_id, secondary ? 0 : 1, 0);
-
-	/* seems to fail on second call */
-	DBG("%s:%d: lv1_configure_irq_state_bitmap (%d) %s\n", __func__,
-		__LINE__, secondary, ps3_result(result));
+	ps3_smp_cleanup_cpu(cpu);
+	ps3_shutdown_IRQ(cpu);
 
 	DBG(" <- %s:%d\n", __func__, __LINE__);
 }
