@@ -35,11 +35,6 @@ static inline int __attribute__ ((format (printf, 1, 2))) DBG(
 	const char *fmt, ...) {return 0;}
 #endif
 
-extern char _start[];
-extern char _end[];
-extern char _dtb_start[];
-extern char _dtb_end[];
-
 BSS_STACK(4096);
 
 static void ps3_console_write(const char *buf, int len)
@@ -90,30 +85,69 @@ static int ps3_repository_read_rm_size(u64 *rm_size)
 	return result;
 }
 
-static void ps3_fixups(void)
+void ps3_copy_vectors(void)
 {
-	u64 rm_size;
+	extern char __system_reset_kernel[];
 
-	ps3_repository_read_rm_size(&rm_size);
-	dt_fixup_memory(0, rm_size);
+	memcpy((void*)0x100, __system_reset_kernel, 0x100);
+	flush_cache((void*)0x100, 0x100);
 }
 
-int platform_init(void)
+/* A buffer that may be edited by tools operating on a zImage binary so as to
+ * edit the command line passed to vmlinux (by setting /chosen/bootargs).
+ * The buffer is put in it's own section so that tools may locate it easier.
+ */
+static char cmdline[COMMAND_LINE_SIZE]
+	__attribute__((__section__("__builtin_cmdline")));
+
+static void prep_cmdline(void *chosen)
 {
-	const u32 heapsize = 0x4000000 - (u32)_end; /* 64M */
+	if (cmdline[0] == '\0')
+		getprop(chosen, "bootargs", cmdline, COMMAND_LINE_SIZE-1);
+	else
+		setprop_str(chosen, "bootargs", cmdline);
+
+	printf("cmdline: '%s'\n", cmdline);
+}
+
+void platform_init(void)
+{
+	extern char _end[];
+	extern char _dtb_start[];
+	extern char _initrd_start[];
+	extern char _initrd_end[];
+	const u32 heapsize = 0x2000000 - (u32)_end; /* 32M */
+	void *chosen;
+	unsigned long ft_addr;
+	u64 rm_size;
 
 	console_ops.write = ps3_console_write;
 	platform_ops.exit = ps3_exit;
-	platform_ops.vmlinux_alloc = NULL; /* relocate to zero */
-	platform_ops.fixups = ps3_fixups;
-	platform_ops.finish = smp_secondary_release;
 
 	printf("\n-- PS3 bootwrapper --\n");
+
+	ps3_copy_vectors();
 
 	simple_alloc_init(_end, heapsize, 32, 64);
 	ft_init(_dtb_start, 0, 4);
 
-	return 0;
+	chosen = finddevice("/chosen");
+
+	ps3_repository_read_rm_size(&rm_size);
+	dt_fixup_memory(0, rm_size);
+
+	if (_initrd_end > _initrd_start) {
+		setprop_val(chosen, "linux,initrd-start", (u32)(_initrd_start));
+		setprop_val(chosen, "linux,initrd-end", (u32)(_initrd_end));
+	}
+
+	prep_cmdline(chosen);
+
+	ft_addr = dt_ops.finalize();
+
+	printf(" flat tree at 0x%lx\n\r", ft_addr);
+
+	((kernel_entry_t)0)(ft_addr, 0, NULL);
 }
 
 void ps3_no_support(void)

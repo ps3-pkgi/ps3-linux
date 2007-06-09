@@ -20,14 +20,17 @@
 
 #include "ppc_asm.h"
 
+	.text
+
 /*
- * __system_reset_entry - PS3 first stage entry.
+ * __system_reset_overlay - The PS3 first stage entry.
+ *
+ * The bootwraper build script copies the 0x100 bytes at symbol
+ * __system_reset_overlay to offset 0x100 of the rom image.
  */
 
-	.section .vectors,"ax"
-	. = 0x100
-	.globl __system_reset_entry
-__system_reset_entry:
+	.globl __system_reset_overlay
+__system_reset_overlay:
 
 	/* Switch to 32-bit mode. */
 
@@ -43,8 +46,30 @@ __system_reset_entry:
 	li	r4, 0
 	li	r5, 0
 	beq	1f
-	b	smp_secondary_hold
 
+	/* Secondary goes to __secondary_hold in kernel. */
+
+	li	r4, 0x60
+	mtctr	r4
+	bctr
+
+	/* Primary goes to _zimage_start in wrapper. */
 1:
-	bl	smp_secondary_wait
-	b	_zimage_start
+	lis	r4, _zimage_start@ha
+	addi	r4, r4, _zimage_start@l
+	mtctr	r4
+	bctr
+
+/*
+ * __system_reset_kernel - Place holder for the kernel reset vector.
+ *
+ * The bootwrapper build script copies 0x100 bytes from offset 0x100
+ * of the rom image to the symbol __system_reset_kernel.  At runtime
+ * the bootwrapper program copies the 0x100 bytes at __system_reset_kernel
+ * to ram address 0x100.  This symbol must occupy 0x100 bytes.
+ */
+
+	.globl __system_reset_kernel
+__system_reset_kernel:
+
+	. = __system_reset_kernel + 0x100

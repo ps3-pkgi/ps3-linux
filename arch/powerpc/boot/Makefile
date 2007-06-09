@@ -42,7 +42,7 @@ zliblinuxheader := zlib.h zconf.h zutil.h
 $(addprefix $(obj)/,$(zlib) gunzip_util.o main.o): \
 	$(addprefix $(obj)/,$(zliblinuxheader)) $(addprefix $(obj)/,$(zlibheader))
 
-src-plat-$(CONFIG_PPC_PS3) += ps3-head.S smp.S ps3.c ps3-hvcall.S
+src-plat-$(CONFIG_PPC_PS3) += ps3-head.S ps3.c ps3-hvcall.S
 inc-plat-$(CONFIG_PPC_PS3) += lv1call.h
 
 src-wlib := string.S crt0.S stdio.c main.c flatdevtree.c flatdevtree_misc.c \
@@ -129,7 +129,7 @@ endif
 
 # args (to if_changed): 1 = (this rule), 2 = platform, 3 = dts 4=dtb 5=initrd
 quiet_cmd_wrap	= WRAP    $@
-      cmd_wrap	=$(CONFIG_SHELL) $(wrapper) -c -o $@ -p $2 $(CROSSWRAP) \
+      cmd_wrap	=$(CONFIG_SHELL) -x $(wrapper) -c -o $@ -p $2 $(CROSSWRAP) \
 		$(if $3, -s $3)$(if $4, -d $4)$(if $5, -i $5) vmlinux
 
 image-$(CONFIG_PPC_PSERIES)		+= zImage.pseries
@@ -196,6 +196,7 @@ $(obj)/zImage.iseries: vmlinux
 	$(STRIP) -s -R .comment $< -o $@
 
 $(obj)/zImage.ps3: vmlinux  $(wrapper) $(wrapperbits) $(srctree)/$(src)/dts/ps3.dts
+	$(STRIP) -s -R .comment $< -o vmlinux.strip
 	$(call cmd,wrap,ps3,$(srctree)/$(src)/dts/ps3.dts,,)
 
 $(obj)/zImage.initrd.ps3: vmlinux  $(wrapper) $(wrapperbits) $(srctree)/$(src)/dts/ps3.dts $(obj)/ramdisk.image.gz

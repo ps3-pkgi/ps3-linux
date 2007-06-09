@@ -19,8 +19,7 @@
 #define	MAX_PATH_LEN		256
 #define	MAX_PROP_LEN		256 /* What should this be? */
 
-typedef void (*kernel_entry_t)(unsigned long, unsigned long, void *);
-void smp_secondary_release(void);
+typedef void (*kernel_entry_t)(unsigned long r3, unsigned long r4, void *r5);
 
 /* Platform specific operations */
 struct platform_ops {
@@ -31,7 +30,6 @@ struct platform_ops {
 	void *	(*realloc)(void *ptr, unsigned long size);
 	void	(*exit)(void);
 	void *	(*vmlinux_alloc)(unsigned long size);
-	void	(*finish)(void);
 };
 extern struct platform_ops platform_ops;
 

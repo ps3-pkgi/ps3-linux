@@ -230,7 +230,7 @@ static int ps3_ohci_driver_register(struct ps3_system_bus_driver *drv)
 {
 	return firmware_has_feature(FW_FEATURE_PS3_LV1)
 		? ps3_system_bus_driver_register(drv)
-		: -ENODEV;
+		: 0;
 }
 
 static void ps3_ohci_driver_unregister(struct ps3_system_bus_driver *drv)
