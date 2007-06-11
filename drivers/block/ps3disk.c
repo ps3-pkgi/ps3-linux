@@ -509,17 +509,17 @@ static int __init ps3disk_init(void)
 	pr_info("%s:%u: registered block device major %d\n", __func__,
 		__LINE__, ps3disk_major);
 
-	return ps3_system_bus_driver_register(&ps3disk);
+	error = ps3_system_bus_driver_register(&ps3disk);
+	if (error)
+		unregister_blkdev(ps3disk_major, DEVICE_NAME);
+
+	return error;
 }
 
 static void __exit ps3disk_exit(void)
 {
-	if (!firmware_has_feature(FW_FEATURE_PS3_LV1))
-		return;
-
-	unregister_blkdev(ps3disk_major, DEVICE_NAME);
-
 	ps3_system_bus_driver_unregister(&ps3disk);
+	unregister_blkdev(ps3disk_major, DEVICE_NAME);
 }
 
 module_init(ps3disk_init);

@@ -87,9 +87,11 @@ enum lv1_atapi_in_out {
 
 static int ps3rom_slave_configure(struct scsi_device *scsi_dev)
 {
+	struct ps3rom_private *priv;
 	struct ps3_storage_device *dev;
 
-	dev = (struct ps3_storage_device *)scsi_dev->host->hostdata[0];
+	priv = (struct ps3rom_private *)scsi_dev->host->hostdata;
+	dev = priv->dev;
 	dev_dbg(&dev->sbd.core, "%s:%u: id %u, lun %u, channel %u\n", __func__,
 		__LINE__, scsi_dev->id, scsi_dev->lun, scsi_dev->channel);
 

@@ -897,6 +897,11 @@ static int ps3av_probe(struct ps3_system_bus_device *dev)
 	dev_dbg(&dev->core, " -> %s:%d\n", __func__, __LINE__);
 	dev_dbg(&dev->core, "  timeout=%d\n", timeout);
 
+	if (ps3av) {
+		dev_err(&dev->core, "Only one ps3av device is supported\n");
+		return -EBUSY;
+	}
+
 	ps3av = kzalloc(sizeof(*ps3av), GFP_KERNEL);
 	if (!ps3av)
 		return -ENOMEM;

@@ -96,10 +96,10 @@ static int ps3stor_probe_access(struct ps3_storage_device *dev)
 			 "one will be used",
 			 __func__, __LINE__, n);
 	dev->region_idx = __ffs(dev->accessible_regions);
-	dev_dbg(&dev->sbd.core,
-		"First accessible region has index %u start %lu size %lu\n",
-		dev->region_idx, dev->regions[dev->region_idx].start,
-		dev->regions[dev->region_idx].size);
+	dev_info(&dev->sbd.core,
+		 "First accessible region has index %u start %lu size %lu\n",
+		 dev->region_idx, dev->regions[dev->region_idx].start,
+		 dev->regions[dev->region_idx].size);
 
 	return 0;
 }
