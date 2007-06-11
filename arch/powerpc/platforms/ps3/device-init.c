@@ -741,7 +741,7 @@ static int __init ps3_start_probe_thread(enum ps3_bus_type bus_type)
 		return -ENODEV;
 	}
 
-	task = kthread_run(ps3_probe_thread, &repo, "ps3-probe");
+	task = kthread_run(ps3_probe_thread, &repo, "ps3-probe-%u", bus_type);
 
 	if (IS_ERR(task)) {
 		result = PTR_ERR(task);

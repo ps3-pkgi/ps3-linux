@@ -42,7 +42,6 @@ struct ps3_vuart_work {
  */
 
 struct ps3_vuart_port_driver {
-	//struct ps3_system_bus_device dev;
 	struct ps3_system_bus_driver core;
 	int (*probe)(struct ps3_system_bus_device *);
 	int (*remove)(struct ps3_system_bus_device *);
