@@ -34,13 +34,19 @@ static struct device ps3_system_bus = {
         .bus_id         = "ps3_system",
 };
 
-// FIXME: need device usage counters!
+/* FIXME: need device usage counters! */
 struct {
 	struct mutex mutex;
 	int sb_11; // usb 0
 	int sb_12; // usb 1
 	int gpu;
 } static usage_hack;
+
+static ps3_is_device(struct ps3_system_bus_device *dev, unsigned int bus_id,
+	unsigned int dev_id)
+{
+	return dev->bus_id == bus_id && dev->dev_id == dev_id;
+}
 
 static int ps3_open_hv_device_sb(struct ps3_system_bus_device *dev)
 {
@@ -49,7 +55,7 @@ static int ps3_open_hv_device_sb(struct ps3_system_bus_device *dev)
 	BUG_ON(!dev->bus_id);
 	mutex_lock(&usage_hack.mutex);
 
-	if(dev->bus_id == 1 && dev->dev_id == 1) {
+	if(ps3_is_device(dev, 1, 1)) {
 		usage_hack.sb_11++;
 		if (usage_hack.sb_11 > 1) {
 			result = 0;
@@ -57,7 +63,7 @@ static int ps3_open_hv_device_sb(struct ps3_system_bus_device *dev)
 		}
 	}
 
-	if(dev->bus_id == 1 && dev->dev_id == 2) {
+	if(ps3_is_device(dev, 1, 2)) {
 		usage_hack.sb_12++;
 		if (usage_hack.sb_12 > 1) {
 			result = 0;
@@ -85,7 +91,7 @@ static int ps3_close_hv_device_sb(struct ps3_system_bus_device *dev)
 	BUG_ON(!dev->bus_id);
 	mutex_lock(&usage_hack.mutex);
 
-	if(dev->bus_id == 1 && dev->dev_id == 1) {
+	if(ps3_is_device(dev, 1, 1)) {
 		usage_hack.sb_11--;
 		if (usage_hack.sb_11) {
 			result = 0;
@@ -93,7 +99,7 @@ static int ps3_close_hv_device_sb(struct ps3_system_bus_device *dev)
 		}
 	}
 
-	if(dev->bus_id == 1 && dev->dev_id == 2) {
+	if(ps3_is_device(dev, 1, 2)) {
 		usage_hack.sb_12--;
 		if (usage_hack.sb_12) {
 			result = 0;

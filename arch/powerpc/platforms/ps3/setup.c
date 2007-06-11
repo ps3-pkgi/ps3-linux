@@ -39,7 +39,8 @@
 #if defined(DEBUG)
 #define DBG(fmt...) udbg_printf(fmt)
 #else
-#define DBG(fmt...) do{if(0)printk(fmt);}while(0)
+static inline int __attribute__ ((format (printf, 1, 2))) DBG(
+	const char *fmt, ...) {return 0;}
 #endif
 
 #if !defined(CONFIG_SMP)
