@@ -156,7 +156,3 @@ void platform_init(void)
 
 	ps3_exit();
 }
-
-void start(void)
-{
-}

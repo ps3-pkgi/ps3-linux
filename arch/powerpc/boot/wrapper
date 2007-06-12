@@ -281,6 +281,5 @@ ps3)
         seek=$overlay_dest bs=1 count=$overlay_size
 
     gzip --force -9 --stdout "$ofile.bin" > "$object/otheros.bld"
-    # rm $ofile.bin
     ;;
 esac
