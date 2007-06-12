@@ -657,7 +657,7 @@ static int dma_sb_region_create(struct ps3_dma_region* r)
 
 	BUG_ON(!r);
 
-	if(!r->dev->bus_id) {
+	if (!r->dev->bus_id) {
 		pr_info("%s:%d: %u:%u no dma\n", __func__, __LINE__,
 			r->dev->bus_id, r->dev->dev_id);
 		return 0;
@@ -723,7 +723,7 @@ static int dma_sb_region_free(struct ps3_dma_region* r)
 
 	BUG_ON(!r);
 
-	if(!r->dev->bus_id) {
+	if (!r->dev->bus_id) {
 		pr_info("%s:%d: %u:%u no dma\n", __func__, __LINE__,
 			r->dev->bus_id, r->dev->dev_id);
 		return 0;
