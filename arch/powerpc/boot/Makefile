@@ -23,14 +23,13 @@ BOOTCFLAGS    := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		 -fno-strict-aliasing -Os -msoft-float -pipe \
 		 -fomit-frame-pointer -fno-builtin -fPIC -nostdinc \
 		 -isystem $(shell $(CROSS32CC) -print-file-name=include)
-BOOTAFLAGS	:= -D__ASSEMBLY__ $(BOOTCFLAGS) -nostdinc
+BOOTAFLAGS	:= -D__ASSEMBLY__ $(BOOTCFLAGS) -traditional -nostdinc
 
 ifeq ($(call cc-option-yn, -fstack-protector),y)
 BOOTCFLAGS	+= -fno-stack-protector
 endif
 
 BOOTCFLAGS	+= -I$(obj) -I$(srctree)/$(obj)
-BOOTAFLAGS	+= -I$(obj) -I$(srctree)/$(obj)
 
 $(obj)/44x.o: BOOTCFLAGS += -mcpu=440
 $(obj)/ebony.o: BOOTCFLAGS += -mcpu=440
@@ -42,8 +41,7 @@ zliblinuxheader := zlib.h zconf.h zutil.h
 $(addprefix $(obj)/,$(zlib) gunzip_util.o main.o): \
 	$(addprefix $(obj)/,$(zliblinuxheader)) $(addprefix $(obj)/,$(zlibheader))
 
-src-plat-$(CONFIG_PPC_PS3) += ps3-head.S ps3.c ps3-hvcall.S
-inc-plat-$(CONFIG_PPC_PS3) += lv1call.h
+src-plat-$(CONFIG_PPC_PS3) += ps3-head.S ps3-hvcall.S ps3.c
 
 src-wlib := string.S crt0.S stdio.c main.c flatdevtree.c flatdevtree_misc.c \
 		ns16550.c serial.c simple_alloc.c div64.S util.S \
@@ -57,7 +55,6 @@ src-boot := $(addprefix $(obj)/, $(src-boot))
 obj-boot := $(addsuffix .o, $(basename $(src-boot)))
 obj-wlib := $(addsuffix .o, $(basename $(addprefix $(obj)/, $(src-wlib))))
 obj-plat := $(addsuffix .o, $(basename $(addprefix $(obj)/, $(src-plat))))
-inc-plat := $(addprefix $(obj)/,$(inc-plat-y))
 
 quiet_cmd_copy_zlib = COPY    $@
       cmd_copy_zlib = sed "s@__attribute_used__@@;s@<linux/\([^>]*\).*@\"\1\"@" $< > $@
@@ -75,9 +72,6 @@ $(addprefix $(obj)/,$(zlibheader)): $(obj)/%: $(srctree)/lib/zlib_inflate/%
 	$(call cmd,copy_zlibheader)
 
 $(addprefix $(obj)/,$(zliblinuxheader)): $(obj)/%: $(srctree)/include/linux/%
-	$(call cmd,copy_zliblinuxheader)
-
-$(addprefix $(obj)/,$(inc-plat-y)): $(obj)/%: $(srctree)/include/asm-powerpc/%
 	$(call cmd,copy_zliblinuxheader)
 
 $(obj)/empty.c:
@@ -109,7 +103,7 @@ $(obj)/wrapper.a: $(obj-wlib) FORCE
 hostprogs-y	:= addnote addRamDisk hack-coff mktree
 
 targets		+= $(patsubst $(obj)/%,%,$(obj-boot) wrapper.a)
-extra-y		:= $(obj)/wrapper.a  $(inc-plat) $(obj-plat) $(obj)/empty.o \
+extra-y		:= $(obj)/wrapper.a $(obj-plat) $(obj)/empty.o \
 		   $(obj)/zImage.lds $(obj)/zImage.coff.lds $(obj)/zImage.ps3.lds
 
 wrapper		:=$(srctree)/$(src)/wrapper
@@ -239,7 +233,7 @@ install: $(CONFIGURE) $(addprefix $(obj)/, $(image-y))
 
 # anything not in $(targets)
 clean-files += $(image-) $(initrd-) zImage zImage.initrd cuImage.* \
-	treeImage.* zImage.dts zImage.dts_initrd
+	treeImage.* zImage.dts zImage.dts_initrd otheros.bld
 
 # clean up files cached by wrapper
 clean-kernel := vmlinux.strip vmlinux.bin

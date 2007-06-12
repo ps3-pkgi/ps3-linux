@@ -1,9 +1,8 @@
 /*
- *  PS3 hvcall interface.
+ *  PS3 bootwrapper hvcalls.
  *
- *  Copyright (C) 2006 Sony Computer Entertainment Inc.
- *  Copyright 2006 Sony Corp.
- *  Copyright 2003, 2004 (c) MontaVista Software, Inc.
+ *  Copyright (C) 2007 Sony Computer Entertainment Inc.
+ *  Copyright 2007 Sony Corp.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -22,6 +21,10 @@
 #include "ppc_asm.h"
 
 /*
+ * The PS3 hypervisor uses a 64 bit "C" language calling convention.
+ * The routines here marshal arguments between the 32 bit wrapper
+ * program and the 64 bit hvcalls.
+ *
  *  wrapper           lv1
  *  32-bit (h,l)      64-bit
  *
@@ -36,75 +39,81 @@
  *
  */
 
-.macro global name
+.macro GLOBAL name
 	.section ".text"
 	.balign 4
 	.globl \name
 \name:
 .endm
 
-.macro no_support name
+.macro NO_SUPPORT name
 	GLOBAL \name
 	b ps3_no_support
 .endm
 
-.macro hvcall
+.macro HVCALL num
+	li r11, \num
 	.long 0x44000022
 	extsw r3, r3
 .endm
 
-.macro save_lr offset=4
+.macro SAVE_LR offset=4
 	mflr r0
 	stw r0, \offset(r1)
 .endm
 
-.macro load_lr offset=4
+.macro LOAD_LR offset=4
 	lwz r0, \offset(r1)
 	mtlr r0
 .endm
 
-.macro load_64_reg target,high,low
+.macro LOAD_64_REG target,high,low
 	sldi r11, \high, 32
 	or \target, r11, \low
 .endm
 
-.macro load_64_stack target,offset
+.macro LOAD_64_STACK target,offset
 	ld \target, \offset(r1)
 .endm
 
-.macro load_r3
+.macro LOAD_R3
 	LOAD_64_REG r3,r3,r4
 .endm
 
-.macro load_r4
+.macro LOAD_R4
 	LOAD_64_REG r4,r5,r6
 .endm
 
-.macro load_r5
+.macro LOAD_R5
 	LOAD_64_REG r5,r7,r8
 .endm
 
-.macro load_r6
+.macro LOAD_R6
 	LOAD_64_REG r6,r9,r10
 .endm
 
-.macro load_r7
+.macro LOAD_R7
 	LOAD_64_STACK r7,8
 .endm
 
-.macro load_r8
+.macro LOAD_R8
 	LOAD_64_STACK r8,16
 .endm
 
-.macro load_r9
+.macro LOAD_R9
 	LOAD_64_STACK r9,24
 .endm
 
-.macro load_r10
+.macro LOAD_R10
 	LOAD_64_STACK r10,32
 .endm
 
-.macro load_regs_5
+.macro LOAD_REGS_0
+	stwu 1,-16(1)
+	stw 3, 8(1)
+.endm
+
+.macro LOAD_REGS_5
 	LOAD_R3
 	LOAD_R4
 	LOAD_R5
@@ -112,186 +121,64 @@
 	LOAD_R7
 .endm
 
-.macro load_regs_6
+.macro LOAD_REGS_6
 	LOAD_REGS_5
 	LOAD_R8
 .endm
 
-.macro load_regs_8
+.macro LOAD_REGS_8
 	LOAD_REGS_6
 	LOAD_R9
 	LOAD_R10
 .endm
 
-.macro store_regs_0_1
+.macro STORE_REGS_0_1
 	lwz r11, 8(r1)
 	std r4, 0(r11)
+	mr r4, r3
+	li r3, 0
+	addi r1,r1,16
 .endm
 
-.macro store_regs_5_2
+.macro STORE_REGS_5_2
 	lwz r11, 16(r1)
 	std r4, 0(r11)
 	lwz r11, 24(r1)
 	std r5, 0(r11)
 .endm
 
-.macro store_regs_6_1
+.macro STORE_REGS_6_1
 	lwz r11, 24(r1)
 	std r4, 0(r11)
 .endm
 
-#define LV1_N_IN_0_OUT(API_NAME, API_NUMBER)	\
-GLOBAL _##API_NAME;				\
-	SAVE_LR;				\
-	LOAD_REGS_8;				\
-	li      r11, API_NUMBER;		\
-	HVCALL;					\
-	LOAD_LR;				\
+GLOBAL lv1_get_logical_ppe_id
+	SAVE_LR
+	LOAD_REGS_0
+	HVCALL 69
+	STORE_REGS_0_1
+	LOAD_LR
 	blr
 
-#define LV1_0_IN_0_OUT LV1_N_IN_0_OUT
-#define LV1_1_IN_0_OUT LV1_N_IN_0_OUT
-#define LV1_2_IN_0_OUT LV1_N_IN_0_OUT
-#define LV1_3_IN_0_OUT LV1_N_IN_0_OUT
-#define LV1_4_IN_0_OUT LV1_N_IN_0_OUT
-#define LV1_5_IN_0_OUT LV1_N_IN_0_OUT
-#define LV1_6_IN_0_OUT LV1_N_IN_0_OUT
-#define LV1_7_IN_0_OUT LV1_N_IN_0_OUT
-
-.macro save_r5
-	stw r5, 8(r1)
-.endm
-
-.macro save_r6
-	stw r6, 12(r1)
-.endm
-
-.macro save_1
-	SAVE_R5
-	SAVE_R6
-.endm
-
-#define LV1_0_IN_1_OUT(API_NAME, API_NUMBER)	\
-GLOBAL _##API_NAME;				\
-	SAVE_LR;				\
-	stwu r1,-16(r1);			\
-	stw r3, 8(r1);				\
-	li      r11, API_NUMBER;		\
-	HVCALL;					\
-	lwz r11, 8(r1);				\
-	std r4, 0(r11);				\
-	mr r4, r3;				\
-	li r3, 0;				\
-	addi r1,r1,16;				\
-	LOAD_LR;				\
+GLOBAL lv1_get_logical_partition_id
+	SAVE_LR
+	LOAD_REGS_0
+	HVCALL 74
+	STORE_REGS_0_1
+	LOAD_LR
 	blr
 
-#define LV1_0_IN_2_OUT(API_NAME, API_NUMBER)	\
-	NO_SUPPORT _##API_NAME
-
-#define LV1_0_IN_3_OUT(API_NAME, API_NUMBER)	\
-	NO_SUPPORT _##API_NAME
-
-#define LV1_0_IN_7_OUT(API_NAME, API_NUMBER)	\
-	NO_SUPPORT _##API_NAME
-
-#define LV1_1_IN_1_OUT(API_NAME, API_NUMBER)	\
-	NO_SUPPORT _##API_NAME
-
-#define LV1_1_IN_2_OUT(API_NAME, API_NUMBER)	\
-	NO_SUPPORT _##API_NAME
-
-#define LV1_1_IN_3_OUT(API_NAME, API_NUMBER)	\
-	NO_SUPPORT _##API_NAME
-
-#define LV1_1_IN_4_OUT(API_NAME, API_NUMBER)	\
-	NO_SUPPORT _##API_NAME
-
-#define LV1_1_IN_5_OUT(API_NAME, API_NUMBER)	\
-	NO_SUPPORT _##API_NAME
-
-#define LV1_1_IN_6_OUT(API_NAME, API_NUMBER)	\
-	NO_SUPPORT
-
-#define LV1_1_IN_7_OUT(API_NAME, API_NUMBER)	\
-	NO_SUPPORT _##API_NAME
-
-#define LV1_2_IN_1_OUT(API_NAME, API_NUMBER)	\
-	NO_SUPPORT _##API_NAME
-
-#define LV1_2_IN_2_OUT(API_NAME, API_NUMBER)	\
-	NO_SUPPORT _##API_NAME
-
-#define LV1_2_IN_3_OUT(API_NAME, API_NUMBER)	\
-	NO_SUPPORT _##API_NAME
-
-#define LV1_2_IN_4_OUT(API_NAME, API_NUMBER)	\
-	NO_SUPPORT _##API_NAME
-
-#define LV1_2_IN_5_OUT(API_NAME, API_NUMBER)	\
-	NO_SUPPORT _##API_NAME
-
-#define LV1_3_IN_1_OUT(API_NAME, API_NUMBER)	\
-	NO_SUPPORT _##API_NAME
-
-#define LV1_3_IN_2_OUT(API_NAME, API_NUMBER)	\
-	NO_SUPPORT _##API_NAME
-
-#define LV1_3_IN_3_OUT(API_NAME, API_NUMBER)	\
-	NO_SUPPORT _##API_NAME
-
-#define LV1_4_IN_1_OUT(API_NAME, API_NUMBER)	\
-	NO_SUPPORT _##API_NAME
-
-#define LV1_4_IN_2_OUT(API_NAME, API_NUMBER)	\
-	NO_SUPPORT _##API_NAME
-
-#define LV1_4_IN_3_OUT(API_NAME, API_NUMBER)	\
-	NO_SUPPORT _##API_NAME
-
-#define LV1_5_IN_1_OUT(API_NAME, API_NUMBER)	\
-	NO_SUPPORT _##API_NAME
-
-#define LV1_5_IN_2_OUT(API_NAME, API_NUMBER)	\
-GLOBAL _##API_NAME;				\
-	SAVE_LR;				\
-	LOAD_REGS_5;				\
-	li      r11, API_NUMBER;		\
-	HVCALL;					\
-	STORE_REGS_5_2;				\
-	LOAD_LR;				\
+GLOBAL lv1_get_repository_node_value
+	SAVE_LR
+	LOAD_REGS_5
+	HVCALL 91
+	STORE_REGS_5_2
+	LOAD_LR
 	blr
 
-#define LV1_5_IN_3_OUT(API_NAME, API_NUMBER)	\
-	NO_SUPPORT _##API_NAME
-
-#define LV1_6_IN_1_OUT(API_NAME, API_NUMBER)	\
-GLOBAL _##API_NAME;				\
-	SAVE_LR;				\
-	LOAD_REGS_6;				\
-	li      r11, API_NUMBER;		\
-	HVCALL;					\
-	STORE_REGS_6_1;				\
-	LOAD_LR;				\
+GLOBAL lv1_panic
+	SAVE_LR
+	LOAD_REGS_8
+	HVCALL 255
+	LOAD_LR
 	blr
-
-#define LV1_6_IN_2_OUT(API_NAME, API_NUMBER)	\
-	NO_SUPPORT _##API_NAME
-
-#define LV1_6_IN_3_OUT(API_NAME, API_NUMBER)	\
-	NO_SUPPORT _##API_NAME
-
-#define LV1_7_IN_1_OUT(API_NAME, API_NUMBER)	\
-	NO_SUPPORT _##API_NAME
-
-#define LV1_7_IN_6_OUT(API_NAME, API_NUMBER)	\
-	NO_SUPPORT _##API_NAME
-
-#define LV1_8_IN_1_OUT(API_NAME, API_NUMBER)	\
-	NO_SUPPORT _##API_NAME
-
-/* the lv1 underscored call definitions expand here */
-
-#define LV1_CALL(name, in, out, num) LV1_##in##_IN_##out##_OUT(lv1_##name, num)
-#include "lv1call.h"
-

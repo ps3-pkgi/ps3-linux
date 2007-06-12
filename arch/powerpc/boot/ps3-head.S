@@ -53,8 +53,17 @@ __system_reset_overlay:
 	mtctr	r4
 	bctr
 
-	/* Primary goes to _zimage_start in wrapper. */
+	/* Primary waits for __secondary_hold_acknowledge. */
 1:
+	li	r5, 0x10 /* __secondary_hold_acknowledge */
+	or	28, 28, 28 /* db8cyc */
+
+	ld	r4, 0(r5)
+	cmpdi	r4, 0
+	beq	1b
+
+	/* Primary goes to _zimage_start in wrapper. */
+
 	lis	r4, _zimage_start@ha
 	addi	r4, r4, _zimage_start@l
 	mtctr	r4

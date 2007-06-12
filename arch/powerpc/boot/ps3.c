@@ -26,7 +26,12 @@
 #include "stdio.h"
 #include "page.h"
 #include "ops.h"
-#include "lv1call.h"
+
+extern s64 lv1_panic(u64 in_1);
+extern s64 lv1_get_logical_partition_id(u64 *out_1);
+extern s64 lv1_get_logical_ppe_id(u64 *out_1);
+extern s64 lv1_get_repository_node_value(u64 in_1, u64 in_2, u64 in_3,
+	u64 in_4, u64 in_5, u64 *out_1, u64 *out_2);
 
 #ifdef DEBUG
 #define DBG(fmt...) printf(fmt)
@@ -36,6 +41,23 @@ static inline int __attribute__ ((format (printf, 1, 2))) DBG(
 #endif
 
 BSS_STACK(4096);
+
+/* A buffer that may be edited by tools operating on a zImage binary so as to
+ * edit the command line passed to vmlinux (by setting /chosen/bootargs).
+ * The buffer is put in it's own section so that tools may locate it easier.
+ */
+static char cmdline[COMMAND_LINE_SIZE]
+	__attribute__((__section__("__builtin_cmdline")));
+
+static void prep_cmdline(void *chosen)
+{
+	if (cmdline[0] == '\0')
+		getprop(chosen, "bootargs", cmdline, COMMAND_LINE_SIZE-1);
+	else
+		setprop_str(chosen, "bootargs", cmdline);
+
+	printf("cmdline: '%s'\n", cmdline);
+}
 
 static void ps3_console_write(const char *buf, int len)
 {
@@ -50,7 +72,7 @@ static void ps3_exit(void)
 
 static int ps3_repository_read_rm_size(u64 *rm_size)
 {
-	int result;
+	s64 result;
 	u64 lpar_id;
 	u64 ppe_id;
 	u64 v2;
@@ -82,7 +104,7 @@ static int ps3_repository_read_rm_size(u64 *rm_size)
 		(unsigned long)lpar_id);
 	printf("%s:%d: rm_size %llxh \n", __func__, __LINE__, *rm_size);
 
-	return result;
+	return result ? -1 : 0;
 }
 
 void ps3_copy_vectors(void)
@@ -93,30 +115,13 @@ void ps3_copy_vectors(void)
 	flush_cache((void*)0x100, 0x100);
 }
 
-/* A buffer that may be edited by tools operating on a zImage binary so as to
- * edit the command line passed to vmlinux (by setting /chosen/bootargs).
- * The buffer is put in it's own section so that tools may locate it easier.
- */
-static char cmdline[COMMAND_LINE_SIZE]
-	__attribute__((__section__("__builtin_cmdline")));
-
-static void prep_cmdline(void *chosen)
-{
-	if (cmdline[0] == '\0')
-		getprop(chosen, "bootargs", cmdline, COMMAND_LINE_SIZE-1);
-	else
-		setprop_str(chosen, "bootargs", cmdline);
-
-	printf("cmdline: '%s'\n", cmdline);
-}
-
 void platform_init(void)
 {
 	extern char _end[];
 	extern char _dtb_start[];
 	extern char _initrd_start[];
 	extern char _initrd_end[];
-	const u32 heapsize = 0x2000000 - (u32)_end; /* 32M */
+	const u32 heapsize = 0x1000000 - (u32)_end; /* 16MiB */
 	void *chosen;
 	unsigned long ft_addr;
 	u64 rm_size;
@@ -125,8 +130,6 @@ void platform_init(void)
 	platform_ops.exit = ps3_exit;
 
 	printf("\n-- PS3 bootwrapper --\n");
-
-	ps3_copy_vectors();
 
 	simple_alloc_init(_end, heapsize, 32, 64);
 	ft_init(_dtb_start, 0, 4);
@@ -145,13 +148,15 @@ void platform_init(void)
 
 	ft_addr = dt_ops.finalize();
 
+	ps3_copy_vectors();
+
 	printf(" flat tree at 0x%lx\n\r", ft_addr);
 
 	((kernel_entry_t)0)(ft_addr, 0, NULL);
+
+	ps3_exit();
 }
 
-void ps3_no_support(void)
+void start(void)
 {
-	printf("\n*** bootwrapper BUG: ps3_no_support() called!\n");
-	ps3_exit();
 }
