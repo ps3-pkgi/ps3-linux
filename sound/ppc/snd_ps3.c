@@ -88,7 +88,7 @@ MODULE_PARM_DESC(start_delay, "time to insert silent data in milisec");
  * name: register offset value; PS3_AUDIO_XXXX
  */
 #define AUDIOREGPTR(chip, name) \
-	(volatile uint32_t *)(chip->mapped_mmio_vaddr + name)
+	(__force volatile uint32_t *)(chip->mapped_mmio_vaddr + name)
 
 #define AUDIOREG(chip, name) *(AUDIOREGPTR(chip, name))
 
@@ -746,7 +746,7 @@ static int snd_ps3_allocate_irq(void)
 {
 	int ret;
 	u64 lpar_addr, lpar_size;
-	u64 * mapped;
+	u64 __iomem * mapped;
 
 	// FIXME: move this to device_init (H/W probe)
 
@@ -759,13 +759,12 @@ static int snd_ps3_allocate_irq(void)
 	}
 
 	mapped = ioremap(lpar_addr, lpar_size);
-
 	if (!mapped) {
 		printk(KERN_ERR "%s: ioremap 1 failed \n", __func__);
 		return -ENXIO;
 	}
 
-	the_card.audio_irq_outlet = *mapped;
+	the_card.audio_irq_outlet = in_be64(mapped);
 
 	iounmap(mapped);
 	lv1_gpu_device_unmap(1);

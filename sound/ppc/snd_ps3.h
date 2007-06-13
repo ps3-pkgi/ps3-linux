@@ -69,7 +69,7 @@ struct snd_ps3_card_info {
 	u64 audio_lpar_size;
 
 	/* registers */
-	void * mapped_mmio_vaddr;
+	void __iomem * mapped_mmio_vaddr;
 
 	/* irq */
 	u64 audio_irq_outlet;

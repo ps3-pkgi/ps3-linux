@@ -1,6 +1,3 @@
-//#define NO_ATAPI_FOR_READ_WRITE
-#define ALWAYS_USE_DMA_PROTO		// FIXME always safe to use DMA_PROTO?
-
 /*
  * PS3 ROM Storage Driver
  *
@@ -109,11 +106,7 @@ static int fill_from_dev_buffer(struct scsi_cmnd *cmd, const void *buf)
 		return 0;
 
 	if (!cmd->request_buffer)
-		return DID_ERROR << 16;
-
-	if (cmd->sc_data_direction != DMA_BIDIRECTIONAL &&
-	    cmd->sc_data_direction != DMA_FROM_DEVICE)
-		return DID_ERROR << 16;
+		return -1;
 
 	sgpnt = cmd->request_buffer;
 	active = 1;
@@ -121,7 +114,7 @@ static int fill_from_dev_buffer(struct scsi_cmnd *cmd, const void *buf)
 		if (active) {
 			kaddr = kmap_atomic(sgpnt->page, KM_USER0);
 			if (!kaddr)
-				return DID_ERROR << 16;
+				return -1;
 			len = sgpnt->length;
 			if ((req_len + len) > buflen) {
 				active = 0;
@@ -154,10 +147,6 @@ static int fetch_to_dev_buffer(struct scsi_cmnd *cmd, void *buf)
 	if (!cmd->request_buffer)
 		return -1;
 
-	if (cmd->sc_data_direction != DMA_BIDIRECTIONAL &&
-	    cmd->sc_data_direction != DMA_TO_DEVICE)
-		return -1;
-
 	sgpnt = cmd->request_buffer;
 	for (k = 0, req_len = 0, fin = 0; k < cmd->use_sg; ++k, ++sgpnt) {
 		kaddr = kmap_atomic(sgpnt->page, KM_USER0);
@@ -177,21 +166,75 @@ static int fetch_to_dev_buffer(struct scsi_cmnd *cmd, void *buf)
 	return req_len;
 }
 
-static int decode_lv1_status(u64 status, unsigned char *sense_key,
-			     unsigned char *asc, unsigned char *ascq)
+static int ps3rom_atapi_request(struct ps3_storage_device *dev,
+				struct scsi_cmnd *cmd)
 {
-	if (((status >> 24) & 0xff) != SAM_STAT_CHECK_CONDITION)
-		return -1;
+	struct lv1_atapi_cmnd_block atapi_cmnd;
+	unsigned char opcode = cmd->cmnd[0];
+	int res;
+	u64 lpar;
 
-	*sense_key = (status >> 16) & 0xff;
-	*asc       = (status >>  8) & 0xff;
-	*ascq      =  status        & 0xff;
+	dev_dbg(&dev->sbd.core, "%s:%u: send ATAPI command 0x%02x\n", __func__,
+		__LINE__, opcode);
+
+	memset(&atapi_cmnd, 0, sizeof(struct lv1_atapi_cmnd_block));
+	memcpy(&atapi_cmnd.pkt, cmd->cmnd, 12);
+	atapi_cmnd.pktlen = 12;
+	atapi_cmnd.block_size = 1; /* transfer size is block_size * blocks */
+	atapi_cmnd.blocks = atapi_cmnd.arglen = cmd->request_bufflen;
+	atapi_cmnd.buffer = dev->bounce_lpar;
+
+	switch (cmd->sc_data_direction) {
+	case DMA_FROM_DEVICE:
+		if (cmd->request_bufflen >= CD_FRAMESIZE)
+			atapi_cmnd.proto = DMA_PROTO;
+		else
+			atapi_cmnd.proto = PIO_DATA_IN_PROTO;
+		atapi_cmnd.in_out = DIR_READ;
+		break;
+
+	case DMA_TO_DEVICE:
+		if (cmd->request_bufflen >= CD_FRAMESIZE)
+			atapi_cmnd.proto = DMA_PROTO;
+		else
+			atapi_cmnd.proto = PIO_DATA_OUT_PROTO;
+		atapi_cmnd.in_out = DIR_WRITE;
+		res = fetch_to_dev_buffer(cmd, dev->bounce_buf);
+		if (res < 0)
+			return DID_ERROR << 16;
+		break;
+
+	default:
+		atapi_cmnd.proto = NON_DATA_PROTO;
+		break;
+	}
+
+	lpar = ps3_mm_phys_to_lpar(__pa(&atapi_cmnd));
+	res = lv1_storage_send_device_command(dev->sbd.dev_id,
+					      LV1_STORAGE_SEND_ATAPI_COMMAND,
+					      lpar, sizeof(atapi_cmnd),
+					      atapi_cmnd.buffer,
+					      atapi_cmnd.arglen, &dev->tag);
+	if (res == LV1_DENIED_BY_POLICY) {
+		dev_dbg(&dev->sbd.core,
+			"%s:%u: ATAPI command 0x%02x denied by policy\n",
+			__func__, __LINE__, opcode);
+		return DID_ERROR << 16;
+	}
+
+	if (res) {
+		dev_err(&dev->sbd.core,
+			"%s:%u: ATAPI command 0x%02x failed %d\n", __func__,
+			__LINE__, opcode, res);
+		return DID_ERROR << 16;
+	}
+
 	return 0;
 }
 
 static inline unsigned int srb6_lba(const struct scsi_cmnd *cmd)
 {
-	BUG_ON(cmd->cmnd[1] & 0xe0);	// FIXME lun == 0
+	/* LUN is always zero */
 	return cmd->cmnd[1] << 16 | cmd->cmnd[2] << 8 | cmd->cmnd[3];
 }
 
@@ -211,101 +254,6 @@ static inline unsigned int srb10_len(const struct scsi_cmnd *cmd)
 	return cmd->cmnd[7] << 8 | cmd->cmnd[8];
 }
 
-static void ps3rom_end_command(struct scsi_cmnd *cmd, int result)
-{
-	struct ps3rom_private *priv;
-	struct ps3_storage_device *dev;
-
-	priv = (struct ps3rom_private *)cmd->device->host->hostdata;
-	dev = priv->dev;
-
-	dev_dbg(&dev->sbd.core, "%s:%u: command 0x%02x result 0x%x\n",
-		__func__, __LINE__, cmd->cmnd[0], result);
-
-	cmd->result = result;
-	priv->cmd = NULL;
-	cmd->scsi_done(cmd);
-}
-
-static int ps3rom_send_atapi_command(struct ps3_storage_device *dev,
-				     struct lv1_atapi_cmnd_block *cmd)
-{
-	int res;
-
-	dev_dbg(&dev->sbd.core, "%s:%u: send ATAPI command 0x%02x\n", __func__,
-		__LINE__, cmd->pkt[0]);
-
-	res = lv1_storage_send_device_command(dev->sbd.dev_id,
-					      LV1_STORAGE_SEND_ATAPI_COMMAND,
-					      ps3_mm_phys_to_lpar(__pa(cmd)),
-					      sizeof(*cmd), cmd->buffer,
-					      cmd->arglen, &dev->tag);
-	if (res == LV1_DENIED_BY_POLICY)
-		dev_dbg(&dev->sbd.core,
-			"%s:%u: ATAPI command 0x%02x denied by policy\n",
-			__func__, __LINE__, cmd->pkt[0]);
-	else if (res)
-		dev_err(&dev->sbd.core,
-			"%s:%u: ATAPI command 0x%02x failed %d\n", __func__,
-			__LINE__, cmd->pkt[0], res);
-
-	return res;
-}
-
-static int ps3rom_atapi_request(struct ps3_storage_device *dev,
-				struct scsi_cmnd *cmd)
-{
-	struct lv1_atapi_cmnd_block atapi_cmnd;
-	unsigned char *cmnd = cmd->cmnd;
-	int res;
-
-	memset(&atapi_cmnd, 0, sizeof(struct lv1_atapi_cmnd_block));
-	memcpy(&atapi_cmnd.pkt, cmnd, 12);
-	atapi_cmnd.pktlen = 12;
-
-	switch (cmd->sc_data_direction) {
-	case DMA_FROM_DEVICE:
-#ifdef ALWAYS_USE_DMA_PROTO
-		atapi_cmnd.proto = DMA_PROTO;
-#else
-		if (cmd->cmnd[0] == GPCMD_READ_CD)
-			atapi_cmnd.proto = DMA_PROTO;
-		else
-			atapi_cmnd.proto = PIO_DATA_IN_PROTO;
-#endif
-		atapi_cmnd.in_out = DIR_READ;
-		break;
-
-	case DMA_TO_DEVICE:
-#ifdef ALWAYS_USE_DMA_PROTO
-		// FIXME always safe to use DMA_PROTO?
-		atapi_cmnd.proto = DMA_PROTO;
-#else
-		atapi_cmnd.proto = PIO_DATA_OUT_PROTO;
-#endif
-		atapi_cmnd.in_out = DIR_WRITE;
-		// FIXME check error
-		fetch_to_dev_buffer(cmd, dev->bounce_buf);
-		break;
-
-	default:
-		atapi_cmnd.proto = NON_DATA_PROTO;
-		break;
-	}
-
-	atapi_cmnd.block_size = 1; /* transfer size is block_size * blocks */
-
-	atapi_cmnd.blocks = atapi_cmnd.arglen = cmd->request_bufflen;
-	atapi_cmnd.buffer = dev->bounce_lpar;
-
-	res = ps3rom_send_atapi_command(dev, &atapi_cmnd);
-	if (res)
-		return DID_ERROR << 16;
-
-	return 0;
-}
-
-#ifdef NO_ATAPI_FOR_READ_WRITE
 static int ps3rom_read_request(struct ps3_storage_device *dev,
 			       struct scsi_cmnd *cmd, u32 start_sector,
 			       u32 sectors)
@@ -336,8 +284,9 @@ static int ps3rom_write_request(struct ps3_storage_device *dev,
 	dev_dbg(&dev->sbd.core, "%s:%u: write %u sectors starting at %u\n",
 		__func__, __LINE__, sectors, start_sector);
 
-	// FIXME check error
-	fetch_to_dev_buffer(cmd, dev->bounce_buf);
+	res = fetch_to_dev_buffer(cmd, dev->bounce_buf);
+	if (res < 0)
+		return DID_ERROR << 16;
 
 	res = lv1_storage_write(dev->sbd.dev_id,
 				dev->regions[dev->region_idx].id, start_sector,
@@ -350,7 +299,78 @@ static int ps3rom_write_request(struct ps3_storage_device *dev,
 
 	return 0;
 }
-#endif // NO_ATAPI_FOR_READ_WRITE
+
+static int ps3rom_queuecommand(struct scsi_cmnd *cmd,
+			       void (*done)(struct scsi_cmnd *))
+{
+	struct ps3rom_private *priv;
+	struct ps3_storage_device *dev;
+	unsigned char opcode;
+	int res;
+
+#ifdef DEBUG
+	scsi_print_command(cmd);
+#endif
+
+	priv = (struct ps3rom_private *)cmd->device->host->hostdata;
+	dev = priv->dev;
+	priv->cmd = cmd;
+	cmd->scsi_done = done;
+
+	opcode = cmd->cmnd[0];
+	/*
+	 * While we can submit READ/WRITE SCSI commands as ATAPI commands,
+	 * it's recommended to use lv1_storage_{read,write}() instead
+	 */
+	switch (opcode) {
+	case READ_6:
+		res = ps3rom_read_request(dev, cmd, srb6_lba(cmd),
+					  srb6_len(cmd));
+		break;
+
+	case READ_10:
+		res = ps3rom_read_request(dev, cmd, srb10_lba(cmd),
+					  srb10_len(cmd));
+		break;
+
+	case WRITE_6:
+		res = ps3rom_write_request(dev, cmd, srb6_lba(cmd),
+					   srb6_len(cmd));
+		break;
+
+	case WRITE_10:
+		res = ps3rom_write_request(dev, cmd, srb10_lba(cmd),
+					   srb10_len(cmd));
+		break;
+
+	default:
+		res = ps3rom_atapi_request(dev, cmd);
+		break;
+	}
+
+	if (res) {
+		memset(cmd->sense_buffer, 0, SCSI_SENSE_BUFFERSIZE);
+		cmd->result = res;
+		cmd->sense_buffer[0] = 0x70;
+		cmd->sense_buffer[2] = ILLEGAL_REQUEST;
+		priv->cmd = NULL;
+		cmd->scsi_done(cmd);
+	}
+
+	return 0;
+}
+
+static int decode_lv1_status(u64 status, unsigned char *sense_key,
+			     unsigned char *asc, unsigned char *ascq)
+{
+	if (((status >> 24) & 0xff) != SAM_STAT_CHECK_CONDITION)
+		return -1;
+
+	*sense_key = (status >> 16) & 0xff;
+	*asc       = (status >>  8) & 0xff;
+	*ascq      =  status        & 0xff;
+	return 0;
+}
 
 static irqreturn_t ps3rom_interrupt(int irq, void *data)
 {
@@ -358,7 +378,8 @@ static irqreturn_t ps3rom_interrupt(int irq, void *data)
 	struct Scsi_Host *host;
 	struct ps3rom_private *priv;
 	struct scsi_cmnd *cmd;
-	unsigned char opcode, sense_key, asc, ascq;
+	int res;
+	unsigned char sense_key, asc, ascq;
 
 	dev->lv1_res = lv1_storage_get_async_status(dev->sbd.dev_id,
 						    &dev->lv1_tag,
@@ -382,131 +403,45 @@ static irqreturn_t ps3rom_interrupt(int irq, void *data)
 	host = ps3rom_priv(dev);
 	priv = (struct ps3rom_private *)host->hostdata;
 	cmd = priv->cmd;
-	opcode = cmd->cmnd[0];
 
-#ifdef NO_ATAPI_FOR_READ_WRITE
-	if (opcode == READ_6 || opcode == READ_10) {
-		/* read request */
-		if (dev->lv1_status) {
-			memset(cmd->sense_buffer, 0, SCSI_SENSE_BUFFERSIZE);
-			decode_lv1_status(dev->lv1_status,
-					  &cmd->sense_buffer[2],
-					  &cmd->sense_buffer[12],
-					  &cmd->sense_buffer[13]);
-			cmd->sense_buffer[7] = 16 - 6;	// FIXME hardcoded numbers?
-			ps3rom_end_command(cmd, SAM_STAT_CHECK_CONDITION);
-		} else {
-			// FIXME check error
-			fill_from_dev_buffer(cmd, dev->bounce_buf);
-
-			ps3rom_end_command(cmd, DID_OK << 16);
-		}
-	} else if (opcode == WRITE_6 || opcode == WRITE_10) {
-		/* write request */
-		if (dev->lv1_status) {
-			memset(cmd->sense_buffer, 0, SCSI_SENSE_BUFFERSIZE);
-			decode_lv1_status(dev->lv1_status,
-					  &cmd->sense_buffer[2],
-					  &cmd->sense_buffer[12],
-					  &cmd->sense_buffer[13]);
-			cmd->sense_buffer[7] = 16 - 6;	// FIXME hardcoded numbers?
-			ps3rom_end_command(cmd, SAM_STAT_CHECK_CONDITION);
-		} else {
-			ps3rom_end_command(cmd, DID_OK << 16);
-		}
-	} else
-#endif // NO_ATAPI_FOR_READ_WRITE
-	{
-		/* ATAPI request */
-		if (!dev->lv1_status) {
-			/* OK, completed */
-			if (cmd->sc_data_direction == DMA_FROM_DEVICE) {
-				// FIXME check error
-				fill_from_dev_buffer(cmd, dev->bounce_buf);
+	if (!dev->lv1_status) {
+		/* OK, completed */
+		if (cmd->sc_data_direction == DMA_FROM_DEVICE) {
+			res = fill_from_dev_buffer(cmd, dev->bounce_buf);
+			if (res) {
+				cmd->result = DID_ERROR << 16;
+				goto done;
 			}
-			ps3rom_end_command(cmd, DID_OK << 16);
-		} else if (opcode == REQUEST_SENSE) {
-			/* scsi spec says request sense should never get error */
-			dev_err(&dev->sbd.core,
-				"%s:%u: end error without autosense\n",
-				__func__, __LINE__);
-			ps3rom_end_command(cmd,
-					   DID_ERROR << 16 |
-					   CHECK_CONDITION << 1);
-		} else if (decode_lv1_status(dev->lv1_status, &sense_key, &asc,
-					     &ascq)) {
-			/* FIXME: is better other error code ? */
-			ps3rom_end_command(cmd, DID_ERROR << 16);
-		} else {
-			/* lv1 may have issued autosense ... */
-			cmd->sense_buffer[0]  = 0x70;
-			cmd->sense_buffer[2]  = sense_key;
-			cmd->sense_buffer[7]  = 16 - 6;
-			cmd->sense_buffer[12] = asc;
-			cmd->sense_buffer[13] = ascq;
-			ps3rom_end_command(cmd, SAM_STAT_CHECK_CONDITION);
 		}
+		cmd->result = DID_OK << 16;
+		goto done;
 	}
+
+	if (cmd->cmnd[0] == REQUEST_SENSE) {
+		/* SCSI spec says request sense should never get error */
+		dev_err(&dev->sbd.core, "%s:%u: end error without autosense\n",
+			__func__, __LINE__);
+		cmd->result = DID_ERROR << 16 | SAM_STAT_CHECK_CONDITION;
+		goto done;
+	}
+
+	if (decode_lv1_status(dev->lv1_status, &sense_key, &asc, &ascq)) {
+		cmd->result = DID_ERROR << 16;
+		goto done;
+	}
+
+	cmd->sense_buffer[0]  = 0x70;
+	cmd->sense_buffer[2]  = sense_key;
+	cmd->sense_buffer[7]  = 16 - 6;
+	cmd->sense_buffer[12] = asc;
+	cmd->sense_buffer[13] = ascq;
+	cmd->result = SAM_STAT_CHECK_CONDITION;
+
+done:
+	priv->cmd = NULL;
+	cmd->scsi_done(cmd);
 	return IRQ_HANDLED;
 }
-
-static int ps3rom_queuecommand(struct scsi_cmnd *cmd,
-			       void (*done)(struct scsi_cmnd *))
-{
-	struct ps3rom_private *priv;
-	struct ps3_storage_device *dev;
-	unsigned char opcode;
-	int res;
-
-#ifdef DEBUG
-	scsi_print_command(cmd);
-#endif
-
-	priv = (struct ps3rom_private *)cmd->device->host->hostdata;
-	dev = priv->dev;
-	priv->cmd = cmd;
-	cmd->scsi_done = done;
-
-	opcode = cmd->cmnd[0];
-
-	switch (opcode) {
-#ifdef NO_ATAPI_FOR_READ_WRITE
-	case READ_6:
-		res = ps3rom_read_request(dev, cmd, srb6_lba(cmd),
-					  srb6_len(cmd));
-		break;
-
-	case READ_10:
-		res = ps3rom_read_request(dev, cmd, srb10_lba(cmd),
-					  srb10_len(cmd));
-		break;
-
-	case WRITE_6:
-		res = ps3rom_write_request(dev, cmd, srb6_lba(cmd),
-					   srb6_len(cmd));
-		break;
-
-	case WRITE_10:
-		res = ps3rom_write_request(dev, cmd, srb10_lba(cmd),
-					   srb10_len(cmd));
-		break;
-#endif // NO_ATAPI_FOR_READ_WRITE
-
-	default:
-		res = ps3rom_atapi_request(dev, cmd);
-		break;
-	}
-
-	if (res) {
-		memset(cmd->sense_buffer, 0, SCSI_SENSE_BUFFERSIZE);
-		cmd->sense_buffer[0] = 0x70;
-		cmd->sense_buffer[2] = ILLEGAL_REQUEST;
-		ps3rom_end_command(cmd, res);
-	}
-
-	return 0;
-}
-
 
 static struct scsi_host_template ps3rom_host_template = {
 	.name =			DEVICE_NAME,
@@ -604,7 +539,6 @@ static int ps3rom_remove(struct ps3_system_bus_device *_dev)
 	scsi_host_put(host);
 	return 0;
 }
-
 
 static struct ps3_system_bus_driver ps3rom = {
 	.match_id	= PS3_MATCH_ID_STOR_ROM,

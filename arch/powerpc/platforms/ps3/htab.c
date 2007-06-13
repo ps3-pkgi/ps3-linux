@@ -280,7 +280,7 @@ void __init ps3_map_htab(void)
 
 	result = lv1_map_htab(0, &htab_addr);
 
-	htab = (hpte_t *)ioremap_flags(htab_addr, htab_size,
+	htab = (__force hpte_t *)ioremap_flags(htab_addr, htab_size,
 				   pgprot_val(PAGE_READONLY_X));
 
 	DBG("%s:%d: lpar %016lxh, virt %016lxh\n", __func__, __LINE__,
