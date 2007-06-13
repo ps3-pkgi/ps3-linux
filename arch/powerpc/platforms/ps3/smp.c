@@ -27,10 +27,9 @@
 #include "platform.h"
 
 #if defined(DEBUG)
-#define DBG(fmt...) udbg_printf(fmt)
+#define DBG udbg_printf
 #else
-static inline int __attribute__ ((format (printf, 1, 2))) DBG(
-	const char *fmt, ...) {return 0;}
+#define DBG pr_debug
 #endif
 
 static irqreturn_t ipi_function_handler(int irq, void *msg)
