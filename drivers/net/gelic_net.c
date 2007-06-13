@@ -1,5 +1,5 @@
 /*
- *  PS3 Platfom gelic network driver.
+ *  PS3 gelic network driver.
  *
  * Copyright (C) 2007 Sony Computer Entertainment Inc.
  * Copyright 2007 Sony Corporation
@@ -29,7 +29,6 @@
  */
 
 #undef DEBUG
-#undef GELIC_RING_CHAIN
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -196,13 +195,9 @@ static int gelic_net_init_chain(struct gelic_net_card *card,
 	chain->head = start_descr;
 	chain->tail = start_descr;
 
-
-#ifdef GELIC_RING_CHAIN
-	(descr - 1)->next_descr_addr = start_descr->bus_addr;
-#else
 	/* do not chain last hw descriptor */
 	(descr - 1)->next_descr_addr = 0;
-#endif
+
 	return 0;
 
 iommu_error:
@@ -868,15 +863,11 @@ static int gelic_net_decode_one_descr(struct gelic_net_card *card)
 	enum gelic_net_descr_status status;
 	struct gelic_net_descr_chain *chain = &card->rx_chain;
 	struct gelic_net_descr *descr = chain->tail;
-#ifndef GELIC_RING_CHAIN
 	int dmac_chain_ended;
-#endif
 
 	status = gelic_net_get_descr_status(descr);
-#ifndef GELIC_RING_CHAIN
 	/* is this descriptor terminated with next_descr == NULL? */
 	dmac_chain_ended = descr->dmac_cmd_status & GELIC_NET_DMAC_CMDSTAT_RXDCEIS;
-#endif
 
 	if (status == GELIC_NET_DESCR_CARDOWNED) {
 		return 0;
@@ -906,9 +897,8 @@ static int gelic_net_decode_one_descr(struct gelic_net_card *card)
 	gelic_net_pass_skb_up(descr, card); /* 1: skb_up sccess */
 
 refill:
-#ifndef GELIC_RING_CHAIN
 	descr->next_descr_addr = 0; /* unlink the descr */
-#endif
+
 	/* change the descriptor state: */
 	gelic_net_set_descr_status(descr, GELIC_NET_DESCR_NOT_IN_USE);
 
@@ -921,12 +911,11 @@ refill:
 	chain->tail = descr->next;
 	descr->prev->next_descr_addr = descr->bus_addr;
 
-#ifndef GELIC_RING_CHAIN
 	if (dmac_chain_ended) {
 		gelic_net_enable_rxdmac(card);
 		dev_dbg(ctodev(card), "reenable rx dma\n");
 	}
-#endif
+
 	return 1;
 }
 
