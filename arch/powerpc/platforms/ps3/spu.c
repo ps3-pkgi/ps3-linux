@@ -201,16 +201,17 @@ static int __init setup_areas(struct spu *spu)
 		goto fail_ioremap;
 	}
 
-	spu->problem = ioremap_flags(spu->problem_phys,
-				     sizeof(struct spu_problem),
-				     _PAGE_NO_CACHE);
+	spu->problem = ioremap(spu->problem_phys,
+		sizeof(struct spu_problem));
+
 	if (!spu->problem) {
 		pr_debug("%s:%d: ioremap problem failed\n", __func__, __LINE__);
 		goto fail_ioremap;
 	}
 
-	spu->priv2 = ioremap_flags(spu_pdata(spu)->priv2_addr,
-				   sizeof(struct spu_priv2), _PAGE_NO_CACHE);
+	spu->priv2 = ioremap(spu_pdata(spu)->priv2_addr,
+		sizeof(struct spu_priv2));
+
 	if (!spu->priv2) {
 		pr_debug("%s:%d: ioremap priv2 failed\n", __func__, __LINE__);
 		goto fail_ioremap;
