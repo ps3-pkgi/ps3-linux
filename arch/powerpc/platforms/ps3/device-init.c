@@ -37,7 +37,7 @@
  * structure members, and registers the device instance with the system bus.
  */
 
-static int __devinit ps3_setup_gelic_device(
+static int __init ps3_setup_gelic_device(
 	const struct ps3_repository_device *repo)
 {
 	int result;
@@ -104,7 +104,7 @@ fail_malloc:
 	return result;
 }
 
-static int __devinit ps3_setup_uhc_device(
+static int __init_refok ps3_setup_uhc_device(
 	const struct ps3_repository_device *repo, enum ps3_match_id match_id,
 	enum ps3_interrupt_type interrupt_type, enum ps3_reg_type reg_type)
 {
@@ -194,21 +194,21 @@ fail_malloc:
 	return result;
 }
 
-static int __devinit ps3_setup_ehci_device(
+static int __init ps3_setup_ehci_device(
 	const struct ps3_repository_device *repo)
 {
 	return ps3_setup_uhc_device(repo, PS3_MATCH_ID_EHCI,
 		PS3_INTERRUPT_TYPE_SB_EHCI, PS3_REG_TYPE_SB_EHCI);
 }
 
-static int __devinit ps3_setup_ohci_device(
+static int __init ps3_setup_ohci_device(
 	const struct ps3_repository_device *repo)
 {
 	return ps3_setup_uhc_device(repo, PS3_MATCH_ID_OHCI,
 		PS3_INTERRUPT_TYPE_SB_OHCI, PS3_REG_TYPE_SB_OHCI);
 }
 
-static int __devinit ps3_setup_vuart_device(enum ps3_match_id match_id,
+static int __init ps3_setup_vuart_device(enum ps3_match_id match_id,
 	unsigned int port_number)
 {
 	int result;
@@ -550,7 +550,7 @@ static int __init ps3_register_sound_devices(void)
 	return result;
 }
 
-static int __devinit ps3_register_graphics_devices(void)
+static int __init ps3_register_graphics_devices(void)
 {
 	int result;
 	struct layout {
