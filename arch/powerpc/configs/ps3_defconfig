@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.22-rc4
-# Fri Jun  8 14:13:00 2007
+# Thu Jun 14 13:17:59 2007
 #
 CONFIG_PPC64=y
 CONFIG_64BIT=y
@@ -535,6 +535,7 @@ CONFIG_USB_NET_MCS7830=m
 #
 CONFIG_INPUT=y
 # CONFIG_INPUT_FF_MEMLESS is not set
+# CONFIG_INPUT_POLLDEV is not set
 
 #
 # Userland interfaces
