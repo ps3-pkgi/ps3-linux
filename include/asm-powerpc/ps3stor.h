@@ -40,10 +40,8 @@ struct ps3_storage_device {
 	u64 blk_size;
 
 	u64 tag;
-	int lv1_res;
-	u64 lv1_tag;
 	u64 lv1_status;
-	struct completion irq_done;
+	struct completion done;
 
 	unsigned long bounce_size;
 	void *bounce_buf;

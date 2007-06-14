@@ -28,25 +28,23 @@
 static irqreturn_t ps3stor_interrupt(int irq, void *data)
 {
 	struct ps3_storage_device *dev = data;
+	int res;
+	u64 tag, status;
 
-	dev->lv1_res = lv1_storage_get_async_status(dev->sbd.dev_id,
-						    &dev->lv1_tag,
-						    &dev->lv1_status);
-	/*
-	 * lv1_status = -1 may mean that ATAPI transport completed OK, but
-	 * ATAPI command itself resulted CHECK CONDITION
-	 * so, upper layer should issue REQUEST_SENSE to check the sense data
-	 */
+	res = lv1_storage_get_async_status(dev->sbd.dev_id, &tag, &status);
 
-	if (dev->lv1_tag != dev->tag)
+	if (tag != dev->tag)
 		dev_err(&dev->sbd.core,
 			"%s:%u: tag mismatch, got %lx, expected %lx\n",
-			__func__, __LINE__, dev->lv1_tag, dev->tag);
-	if (dev->lv1_res)
+			__func__, __LINE__, tag, dev->tag);
+
+	if (res) {
 		dev_err(&dev->sbd.core, "%s:%u: res=%d status=0x%lx\n",
-			__func__, __LINE__, dev->lv1_res, dev->lv1_status);
-	else
-		complete(&dev->irq_done);
+			__func__, __LINE__, res, status);
+	} else {
+		dev->lv1_status = status;
+		complete(&dev->done);
+	}
 	return IRQ_HANDLED;
 }
 
@@ -73,9 +71,9 @@ static int ps3stor_probe_access(struct ps3_storage_device *dev)
 		res = ps3stor_read_write_sectors(dev, dev->bounce_lpar, 0, 1,
 						 0);
 		if (res) {
-			dev_dbg(&dev->sbd.core,
-				"%s:%u: read failed, region %u is not accessible\n",
-				__func__, __LINE__, i);
+			dev_dbg(&dev->sbd.core, "%s:%u: read failed, "
+				"region %u is not accessible\n", __func__,
+				__LINE__, i);
 			continue;
 		}
 
@@ -249,7 +247,7 @@ u64 ps3stor_read_write_sectors(struct ps3_storage_device *dev, u64 lpar,
 	dev_dbg(&dev->sbd.core, "%s:%u: %s %lu sectors starting at %lu\n",
 		__func__, __LINE__, op, sectors, start_sector);
 
-	init_completion(&dev->irq_done);
+	init_completion(&dev->done);
 	res = write ? lv1_storage_write(dev->sbd.dev_id, region_id,
 					start_sector, sectors, 0, lpar,
 					&dev->tag)
@@ -262,7 +260,7 @@ u64 ps3stor_read_write_sectors(struct ps3_storage_device *dev, u64 lpar,
 		return -1;
 	}
 
-	wait_for_completion(&dev->irq_done);
+	wait_for_completion(&dev->done);
 	if (dev->lv1_status) {
 		dev_dbg(&dev->sbd.core, "%s:%u: %s failed 0x%lx\n", __func__,
 			__LINE__, op, dev->lv1_status);
@@ -297,7 +295,7 @@ u64 ps3stor_send_command(struct ps3_storage_device *dev, u64 cmd, u64 arg1,
 	dev_dbg(&dev->sbd.core, "%s:%u: send device command 0x%lx\n", __func__,
 		__LINE__, cmd);
 
-	init_completion(&dev->irq_done);
+	init_completion(&dev->done);
 
 	res = lv1_storage_send_device_command(dev->sbd.dev_id, cmd, arg1,
 					      arg2, arg3, arg4, &dev->tag);
@@ -308,15 +306,17 @@ u64 ps3stor_send_command(struct ps3_storage_device *dev, u64 cmd, u64 arg1,
 		return -1;
 	}
 
-	wait_for_completion(&dev->irq_done);
-	if (dev->lv1_status)
+	wait_for_completion(&dev->done);
+	if (dev->lv1_status) {
 		dev_dbg(&dev->sbd.core, "%s:%u: command 0x%lx failed 0x%lx\n",
 			__func__, __LINE__, cmd, dev->lv1_status);
-	else
-		dev_dbg(&dev->sbd.core, "%s:%u: command 0x%lx completed\n",
-			__func__, __LINE__, cmd);
+		return dev->lv1_status;
+	}
 
-	return dev->lv1_status;
+	dev_dbg(&dev->sbd.core, "%s:%u: command 0x%lx completed\n", __func__,
+		__LINE__, cmd);
+
+	return 0;
 }
 EXPORT_SYMBOL_GPL(ps3stor_send_command);
 

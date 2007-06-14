@@ -379,24 +379,24 @@ static irqreturn_t ps3rom_interrupt(int irq, void *data)
 	struct ps3rom_private *priv;
 	struct scsi_cmnd *cmd;
 	int res;
+	u64 tag, status;
 	unsigned char sense_key, asc, ascq;
 
-	dev->lv1_res = lv1_storage_get_async_status(dev->sbd.dev_id,
-						    &dev->lv1_tag,
-						    &dev->lv1_status);
+	res = lv1_storage_get_async_status(dev->sbd.dev_id, &tag, &status);
 	/*
-	 * lv1_status = -1 may mean that ATAPI transport completed OK, but
+	 * status = -1 may mean that ATAPI transport completed OK, but
 	 * ATAPI command itself resulted CHECK CONDITION
 	 * so, upper layer should issue REQUEST_SENSE to check the sense data
 	 */
 
-	if (dev->lv1_tag != dev->tag)
+	if (tag != dev->tag)
 		dev_err(&dev->sbd.core,
 			"%s:%u: tag mismatch, got %lx, expected %lx\n",
-			__func__, __LINE__, dev->lv1_tag, dev->tag);
-	if (dev->lv1_res) {
+			__func__, __LINE__, tag, dev->tag);
+
+	if (res) {
 		dev_err(&dev->sbd.core, "%s:%u: res=%d status=0x%lx\n",
-			__func__, __LINE__, dev->lv1_res, dev->lv1_status);
+			__func__, __LINE__, res, status);
 		return IRQ_HANDLED;
 	}
 
@@ -404,7 +404,7 @@ static irqreturn_t ps3rom_interrupt(int irq, void *data)
 	priv = (struct ps3rom_private *)host->hostdata;
 	cmd = priv->cmd;
 
-	if (!dev->lv1_status) {
+	if (!status) {
 		/* OK, completed */
 		if (cmd->sc_data_direction == DMA_FROM_DEVICE) {
 			res = fill_from_dev_buffer(cmd, dev->bounce_buf);
@@ -425,7 +425,7 @@ static irqreturn_t ps3rom_interrupt(int irq, void *data)
 		goto done;
 	}
 
-	if (decode_lv1_status(dev->lv1_status, &sense_key, &asc, &ascq)) {
+	if (decode_lv1_status(status, &sense_key, &asc, &ascq)) {
 		cmd->result = DID_ERROR << 16;
 		goto done;
 	}

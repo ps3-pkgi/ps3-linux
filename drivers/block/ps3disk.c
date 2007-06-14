@@ -48,7 +48,7 @@
 
 
 struct ps3disk_private {
-	spinlock_t lock;
+	spinlock_t lock;		/* Request queue spinlock */
 	struct request_queue *queue;
 	struct gendisk *gendisk;
 	unsigned int blocking_factor;
@@ -229,27 +229,21 @@ static irqreturn_t ps3disk_interrupt(int irq, void *data)
 	struct ps3_storage_device *dev = data;
 	struct ps3disk_private *priv;
 	struct request *req;
-	int read, uptodate;
+	int res, read, uptodate;
+	u64 tag, status;
 	unsigned long num_sectors;
 	const char *op;
 
-	dev->lv1_res = lv1_storage_get_async_status(dev->sbd.dev_id,
-						    &dev->lv1_tag,
-						    &dev->lv1_status);
-	/*
-	 * lv1_status = -1 may mean that ATAPI transport completed OK, but
-	 * ATAPI command itself resulted CHECK CONDITION
-	 * so, upper layer should issue REQUEST_SENSE to check the sense data
-	 */
+	res = lv1_storage_get_async_status(dev->sbd.dev_id, &tag, &status);
 
-	if (dev->lv1_tag != dev->tag)
+	if (tag != dev->tag)
 		dev_err(&dev->sbd.core,
 			"%s:%u: tag mismatch, got %lx, expected %lx\n",
-			__func__, __LINE__, dev->lv1_tag, dev->tag);
+			__func__, __LINE__, tag, dev->tag);
 
-	if (dev->lv1_res) {
+	if (res) {
 		dev_err(&dev->sbd.core, "%s:%u: res=%d status=0x%lx\n",
-			__func__, __LINE__, dev->lv1_res, dev->lv1_status);
+			__func__, __LINE__, res, status);
 		return IRQ_HANDLED;
 	}
 
@@ -259,7 +253,8 @@ static irqreturn_t ps3disk_interrupt(int irq, void *data)
 		dev_dbg(&dev->sbd.core,
 			"%s:%u non-block layer request completed\n", __func__,
 			__LINE__);
-		complete(&dev->irq_done);
+		dev->lv1_status = status;
+		complete(&dev->done);
 		return IRQ_HANDLED;
 	}
 
@@ -272,9 +267,9 @@ static irqreturn_t ps3disk_interrupt(int irq, void *data)
 		num_sectors = req->nr_sectors;
 		op = read ? "read" : "write";
 	}
-	if (dev->lv1_status) {
+	if (status) {
 		dev_dbg(&dev->sbd.core, "%s:%u: %s failed 0x%lx\n", __func__,
-			__LINE__, op, dev->lv1_status);
+			__LINE__, op, status);
 		uptodate = 0;
 	} else {
 		dev_dbg(&dev->sbd.core, "%s:%u: %s completed\n", __func__,
@@ -299,14 +294,14 @@ static irqreturn_t ps3disk_interrupt(int irq, void *data)
 
 static int ps3disk_sync_cache(struct ps3_storage_device *dev)
 {
-	int res;
+	u64 res;
 
 	dev_dbg(&dev->sbd.core, "%s:%u: sync cache\n", __func__, __LINE__);
 
 	res = ps3stor_send_command(dev, LV1_STORAGE_ATA_HDDOUT, 0, 0, 0, 0);
 	if (res) {
 		dev_err(&dev->sbd.core, "%s:%u: sync cache failed 0x%lx\n",
-			__func__, __LINE__, dev->lv1_status);
+			__func__, __LINE__, res);
 		return -EIO;
 	}
 	return 0;

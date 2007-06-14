@@ -32,7 +32,7 @@
 
 
 struct ps3flash_private {
-	struct mutex mutex;
+	struct mutex mutex;	/* Bounce buffer mutex */
 };
 #define ps3flash_priv(dev)	((dev)->sbd.core.driver_data)
 
@@ -119,8 +119,8 @@ static ssize_t ps3flash_read(struct file *file, char __user *buf, size_t count,
 	if (*pos+count > size) {
 		dev_dbg(&dev->sbd.core,
 			"%s:%u Truncating count from %zu to %llu\n", __func__,
-			__LINE__, count, size-*pos);
-		count = size-*pos;
+			__LINE__, count, size - *pos);
+		count = size - *pos;
 	}
 
 	start_sector = do_div_llr(*pos, dev->blk_size, &offset);
@@ -168,6 +168,7 @@ static ssize_t ps3flash_write(struct file *file, const char __user *buf,
 	    end_read_sector, start_read_sector, head, tail, offset;
 	ssize_t res;
 	size_t remaining, n;
+	unsigned int sec_off;
 
 	dev_dbg(&dev->sbd.core,
 		"%s:%u: Writing %zu bytes at position %lld from user 0x%p\n",
@@ -180,8 +181,8 @@ static ssize_t ps3flash_write(struct file *file, const char __user *buf,
 	if (*pos+count > size) {
 		dev_dbg(&dev->sbd.core,
 			"%s:%u Truncating count from %zu to %llu\n", __func__,
-			__LINE__, count, size-*pos);
-		count = size-*pos;
+			__LINE__, count, size - *pos);
+		count = size - *pos;
 	}
 
 	chunk_sectors = dev->bounce_size / dev->blk_size;
@@ -223,8 +224,9 @@ static ssize_t ps3flash_write(struct file *file, const char __user *buf,
 		} else {
 			if (head) {
 				/* Read head */
-			dev_dbg(&dev->sbd.core, "head: %lu sectors at %lu\n",
-				head, start_write_sector);
+				dev_dbg(&dev->sbd.core,
+					"head: %lu sectors at %lu\n", head,
+					start_write_sector);
 				res = ps3flash_read_sectors(dev,
 							    start_write_sector,
 							    head, 0);
@@ -236,11 +238,11 @@ static ssize_t ps3flash_write(struct file *file, const char __user *buf,
 				/* Read tail */
 				dev_dbg(&dev->sbd.core,
 					"tail: %lu sectors at %lu\n", tail,
-					start_read_sector-start_write_sector);
+					start_read_sector);
+				sec_off = start_read_sector-start_write_sector;
 				res = ps3flash_read_sectors(dev,
 							    start_read_sector,
-							    tail,
-							    start_read_sector-start_write_sector);
+							    tail, sec_off);
 				if (res < 0)
 					goto fail;
 			}
