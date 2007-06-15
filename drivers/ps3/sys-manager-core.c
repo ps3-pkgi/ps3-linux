@@ -52,7 +52,7 @@ void ps3_sys_manager_power_off(void)
 
 	printk(KERN_EMERG "System Halted, OK to turn off power\n");
 	local_irq_disable();
-	while(1)
+	while (1)
 		(void)0;
 }
 
@@ -63,6 +63,6 @@ void ps3_sys_manager_restart(void)
 
 	printk(KERN_EMERG "System Halted, OK to turn off power\n");
 	local_irq_disable();
-	while(1)
+	while (1)
 		(void)0;
 }

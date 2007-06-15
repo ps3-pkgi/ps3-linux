@@ -67,7 +67,7 @@ static void ps3_exit(void)
 {
 	printf("ps3_exit\n");
 	lv1_panic(0); /* zero = no reboot */
-	while(1);
+	while (1);
 }
 
 static int ps3_repository_read_rm_size(u64 *rm_size)
@@ -111,8 +111,8 @@ void ps3_copy_vectors(void)
 {
 	extern char __system_reset_kernel[];
 
-	memcpy((void*)0x100, __system_reset_kernel, 0x100);
-	flush_cache((void*)0x100, 0x100);
+	memcpy((void *)0x100, __system_reset_kernel, 0x100);
+	flush_cache((void *)0x100, 0x100);
 }
 
 void platform_init(void)

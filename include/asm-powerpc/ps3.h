@@ -87,7 +87,6 @@ struct ps3_dma_region {
 	enum ps3_dma_region_type region_type;
 	unsigned long len;
 	unsigned long offset;
- 	//unsigned long iopte_flag;
 
 	/* driver variables  (set by ps3_dma_region_create) */
 	unsigned long bus_addr;
@@ -103,7 +102,7 @@ struct ps3_dma_region_ops {
 	int (*map)(struct ps3_dma_region *,
 		   unsigned long virt_addr,
 		   unsigned long len,
-		   unsigned long * bus_addr,
+		   unsigned long *bus_addr,
 		   u64 iopte_pp);
 	int (*unmap)(struct ps3_dma_region *,
 		     unsigned long bus_addr,
@@ -145,7 +144,7 @@ struct ps3_mmio_region_ops;
 
 struct ps3_mmio_region {
 	struct ps3_system_bus_device *dev;
-	const struct ps3_mmio_region_ops * mmio_ops;
+	const struct ps3_mmio_region_ops *mmio_ops;
 	unsigned long bus_addr;
 	unsigned long len;
 	enum ps3_mmio_page_size page_size;
@@ -345,7 +344,7 @@ struct ps3_system_bus_device {
 
 /*	struct iommu_table *iommu_table; -- waiting for BenH's cleanups */
 	struct device core;
-	void* driver_priv; /* private driver variables */
+	void *driver_priv; /* private driver variables */
 };
 
 int ps3_open_hv_device(struct ps3_system_bus_device *dev);

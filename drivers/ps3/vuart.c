@@ -392,7 +392,7 @@ static int ps3_vuart_raw_write(struct ps3_system_bus_device *dev,
  * Do not call ps3_vuart_raw_read directly, use ps3_vuart_read.
  */
 
-static int ps3_vuart_raw_read(struct ps3_system_bus_device *dev, void* buf,
+static int ps3_vuart_raw_read(struct ps3_system_bus_device *dev, void *buf,
 	unsigned int bytes, unsigned long *bytes_read)
 {
 	int result;
@@ -485,7 +485,7 @@ struct list_buffer {
  * then enqueued for transmision via the transmit interrupt.
  */
 
-int ps3_vuart_write(struct ps3_system_bus_device *dev, const void* buf,
+int ps3_vuart_write(struct ps3_system_bus_device *dev, const void *buf,
 	unsigned int bytes)
 {
 	static unsigned long dbg_number;
@@ -572,7 +572,7 @@ static int ps3_vuart_queue_rx_bytes(struct ps3_system_bus_device *dev,
 	if (result)
 		return -EIO;
 
-	if(!bytes)
+	if (!bytes)
 		return 0;
 
 	/* Add some extra space for recently arrived data. */
@@ -610,7 +610,7 @@ static int ps3_vuart_queue_rx_bytes(struct ps3_system_bus_device *dev,
  * be statified by bytes held in the list buffers -EAGAIN is returned.
  */
 
-int ps3_vuart_read(struct ps3_system_bus_device *dev, void* buf,
+int ps3_vuart_read(struct ps3_system_bus_device *dev, void *buf,
 	unsigned int bytes)
 {
 	int result;
@@ -689,7 +689,7 @@ int ps3_vuart_read_async(struct ps3_system_bus_device *dev, unsigned int bytes)
 	struct ps3_vuart_port_priv *priv = to_port_priv(dev);
 	unsigned long flags;
 
-	if(priv->rx_list.work.trigger) {
+	if (priv->rx_list.work.trigger) {
 		dev_dbg(&dev->core, "%s:%d: warning, multiple calls\n",
 			__func__, __LINE__);
 		return -EAGAIN;
@@ -700,7 +700,7 @@ int ps3_vuart_read_async(struct ps3_system_bus_device *dev, unsigned int bytes)
 	PREPARE_WORK(&priv->rx_list.work.work, ps3_vuart_work);
 
 	spin_lock_irqsave(&priv->rx_list.lock, flags);
-	if(priv->rx_list.bytes_held >= bytes) {
+	if (priv->rx_list.bytes_held >= bytes) {
 		dev_dbg(&dev->core, "%s:%d: schedule_work %xh bytes\n",
 			__func__, __LINE__, bytes);
 		schedule_work(&priv->rx_list.work.work);
@@ -809,7 +809,7 @@ static int ps3_vuart_handle_interrupt_rx(struct ps3_system_bus_device *dev)
 		return result;
 	}
 
-	if(priv->rx_list.work.trigger && priv->rx_list.bytes_held
+	if (priv->rx_list.work.trigger && priv->rx_list.bytes_held
 		>= priv->rx_list.work.trigger) {
 		dev_dbg(&dev->core, "%s:%d: schedule_work %lxh bytes\n",
 			__func__, __LINE__, priv->rx_list.work.trigger);
@@ -876,7 +876,7 @@ static int ps3_vuart_handle_port_interrupt(struct ps3_system_bus_device *dev)
 }
 
 struct vuart_bus_priv {
-	struct ports_bmp* bmp;
+	struct ports_bmp *bmp;
 	unsigned int virq;
 	struct semaphore probe_mutex;
 	int use_count;
@@ -1012,7 +1012,7 @@ static int ps3_vuart_probe(struct ps3_system_bus_device *dev)
 
 	BUG_ON(!drv);
 
-	if(dev->port_number >= PORT_COUNT) {
+	if (dev->port_number >= PORT_COUNT) {
 		BUG();
 		return -EINVAL;
 	}
@@ -1135,7 +1135,7 @@ static int ps3_vuart_remove(struct ps3_system_bus_device *dev)
 	dev_dbg(&dev->core, " -> %s:%d: match_id %d\n", __func__, __LINE__,
 		dev->match_id);
 
-	if(!dev->core.driver) {
+	if (!dev->core.driver) {
 		dev_dbg(&dev->core, "%s:%d: no driver bound\n", __func__,
 			__LINE__);
 		up(&vuart_bus_priv.probe_mutex);
@@ -1186,7 +1186,7 @@ static int ps3_vuart_shutdown(struct ps3_system_bus_device *dev)
 	dev_dbg(&dev->core, " -> %s:%d: match_id %d\n", __func__, __LINE__,
 		dev->match_id);
 
-	if(!dev->core.driver) {
+	if (!dev->core.driver) {
 		dev_dbg(&dev->core, "%s:%d: no driver bound\n", __func__,
 			__LINE__);
 		up(&vuart_bus_priv.probe_mutex);

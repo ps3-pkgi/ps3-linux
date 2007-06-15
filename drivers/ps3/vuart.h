@@ -34,7 +34,7 @@ struct ps3_vuart_stats {
 struct ps3_vuart_work {
 	struct work_struct work;
 	unsigned long trigger;
-	struct ps3_system_bus_device* dev; /* to convert work to device */
+	struct ps3_system_bus_device *dev; /* to convert work to device */
 };
 
 /**
@@ -73,9 +73,9 @@ static inline struct ps3_system_bus_device *ps3_vuart_work_to_system_bus_dev(
 	return vw->dev;
 }
 
-int ps3_vuart_write(struct ps3_system_bus_device *dev, const void* buf,
+int ps3_vuart_write(struct ps3_system_bus_device *dev, const void *buf,
 	unsigned int bytes);
-int ps3_vuart_read(struct ps3_system_bus_device *dev, void* buf,
+int ps3_vuart_read(struct ps3_system_bus_device *dev, void *buf,
 	unsigned int bytes);
 int ps3_vuart_read_async(struct ps3_system_bus_device *dev, unsigned int bytes);
 void ps3_vuart_cancel_async(struct ps3_system_bus_device *dev);

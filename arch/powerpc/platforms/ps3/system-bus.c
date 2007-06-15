@@ -31,14 +31,14 @@
 #include "platform.h"
 
 static struct device ps3_system_bus = {
-        .bus_id         = "ps3_system",
+	.bus_id = "ps3_system",
 };
 
 /* FIXME: need device usage counters! */
 struct {
 	struct mutex mutex;
-	int sb_11; // usb 0
-	int sb_12; // usb 1
+	int sb_11; /* usb 0 */
+	int sb_12; /* usb 0 */
 	int gpu;
 } static usage_hack;
 
@@ -165,7 +165,7 @@ int ps3_open_hv_device(struct ps3_system_bus_device *dev)
 	BUG_ON(!dev);
 	pr_debug("%s:%d: match_id: %u\n", __func__, __LINE__, dev->match_id);
 
-	switch(dev->match_id) {
+	switch (dev->match_id) {
 	case PS3_MATCH_ID_EHCI:
 	case PS3_MATCH_ID_OHCI:
 	case PS3_MATCH_ID_GELIC:
@@ -203,7 +203,7 @@ int ps3_close_hv_device(struct ps3_system_bus_device *dev)
 	BUG_ON(!dev);
 	pr_debug("%s:%d: match_id: %u\n", __func__, __LINE__, dev->match_id);
 
-	switch(dev->match_id) {
+	switch (dev->match_id) {
 	case PS3_MATCH_ID_EHCI:
 	case PS3_MATCH_ID_OHCI:
 	case PS3_MATCH_ID_GELIC:
@@ -441,7 +441,7 @@ static int ps3_system_bus_uevent(struct device *_dev, char **envp,
 				 int num_envp, char *buffer, int buffer_size)
 {
 	struct ps3_system_bus_device *dev = ps3_dev_to_system_bus_dev(_dev);
-	int i=0, length = 0;
+	int i = 0, length = 0;
 
 	if (add_uevent_var(envp, num_envp, &i, buffer, buffer_size,
 			   &length, "MODALIAS=ps3:%d",
@@ -483,7 +483,7 @@ static int __init ps3_system_bus_init(void)
 	if (!firmware_has_feature(FW_FEATURE_PS3_LV1))
 		return -ENODEV;
 
- 	printk(" -> %s:%d\n", __func__, __LINE__);
+	pr_debug(" -> %s:%d\n", __func__, __LINE__);
 
 	mutex_init(&usage_hack.mutex);
 
@@ -493,7 +493,7 @@ static int __init ps3_system_bus_init(void)
 	result = bus_register(&ps3_system_bus_type);
 	BUG_ON(result);
 
-	printk(" <- %s:%d\n", __func__, __LINE__);
+	pr_debug(" <- %s:%d\n", __func__, __LINE__);
 	return result;
 }
 
@@ -574,7 +574,8 @@ static dma_addr_t ps3_sb_map_single(struct device *_dev, void *ptr, size_t size,
 	return bus_addr;
 }
 
-static dma_addr_t ps3_ioc0_map_single(struct device *_dev, void *ptr, size_t size,
+static dma_addr_t ps3_ioc0_map_single(struct device *_dev, void *ptr,
+				      size_t size,
 				      enum dma_data_direction direction)
 {
 	struct ps3_system_bus_device *dev = ps3_dev_to_system_bus_dev(_dev);
@@ -649,7 +650,8 @@ static int ps3_sb_map_sg(struct device *_dev, struct scatterlist *sg, int nents,
 #endif
 }
 
-static int ps3_ioc0_map_sg(struct device *_dev, struct scatterlist *sg, int nents,
+static int ps3_ioc0_map_sg(struct device *_dev, struct scatterlist *sg,
+			   int nents,
 			   enum dma_data_direction direction)
 {
 	BUG();
@@ -760,7 +762,7 @@ int ps3_system_bus_driver_register(struct ps3_system_bus_driver *drv)
 {
 	int result;
 
-	printk(" -> %s:%d: %s\n", __func__, __LINE__, drv->core.name);
+	pr_debug(" -> %s:%d: %s\n", __func__, __LINE__, drv->core.name);
 
 	if (!firmware_has_feature(FW_FEATURE_PS3_LV1))
 		return -ENODEV;
@@ -768,7 +770,7 @@ int ps3_system_bus_driver_register(struct ps3_system_bus_driver *drv)
 	drv->core.bus = &ps3_system_bus_type;
 
 	result = driver_register(&drv->core);
-	printk(" <- %s:%d: %s\n", __func__, __LINE__, drv->core.name);
+	pr_debug(" <- %s:%d: %s\n", __func__, __LINE__, drv->core.name);
 	return result;
 }
 
@@ -776,9 +778,9 @@ EXPORT_SYMBOL_GPL(ps3_system_bus_driver_register);
 
 void ps3_system_bus_driver_unregister(struct ps3_system_bus_driver *drv)
 {
-	printk(" -> %s:%d: %s\n", __func__, __LINE__, drv->core.name);
+	pr_debug(" -> %s:%d: %s\n", __func__, __LINE__, drv->core.name);
 	driver_unregister(&drv->core);
-	printk(" <- %s:%d: %s\n", __func__, __LINE__, drv->core.name);
+	pr_debug(" <- %s:%d: %s\n", __func__, __LINE__, drv->core.name);
 }
 
 EXPORT_SYMBOL_GPL(ps3_system_bus_driver_unregister);

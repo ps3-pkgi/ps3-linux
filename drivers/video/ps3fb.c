@@ -952,9 +952,8 @@ static int ps3fb_set_sync(void)
 					   L1GPU_CONTEXT_ATTRIBUTE_DISPLAY_SYNC,
 					   0, L1GPU_DISPLAY_SYNC_VSYNC, 0, 0);
 	if (status) {
-		printk(KERN_ERR
-		       "%s: lv1_gpu_context_attribute DISPLAY_SYNC failed: %d\n",
-		       __func__, status);
+		printk(KERN_ERR "%s: lv1_gpu_context_attribute DISPLAY_SYNC "
+		       "failed: %d\n", __func__, status);
 		return -1;
 	}
 #endif
@@ -964,9 +963,8 @@ static int ps3fb_set_sync(void)
 					   1, L1GPU_DISPLAY_SYNC_VSYNC, 0, 0);
 
 	if (status) {
-		printk(KERN_ERR
-		       "%s: lv1_gpu_context_attribute DISPLAY_MODE failed: %d\n",
-		       __func__, status);
+		printk(KERN_ERR "%s: lv1_gpu_context_attribute DISPLAY_MODE "
+		       "failed: %d\n", __func__, status);
 		return -1;
 	}
 #endif
@@ -1176,7 +1174,7 @@ static struct ps3_system_bus_driver ps3fb_driver = {
 
 static int __init ps3fb_setup(void)
 {
-	char *options, *this_opt;
+	char *options;
 
 #ifdef MODULE
 	return 0;
@@ -1188,7 +1186,11 @@ static int __init ps3fb_setup(void)
 	if (!options || !*options)
 		return 0;
 
-	while ((this_opt = strsep(&options, ",")) != NULL) {
+	while (1) {
+		char *this_opt = strsep(&options, ",");
+
+		if (!this_opt)
+			break;
 		if (!*this_opt)
 			continue;
 		if (!strncmp(this_opt, "mode:", 5))

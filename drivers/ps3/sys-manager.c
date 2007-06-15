@@ -68,7 +68,7 @@ struct ps3_sys_manager_header {
 
 #define dump_sm_header(_h) _dump_sm_header(_h, __func__, __LINE__)
 static void __maybe_unused _dump_sm_header(
-	const struct ps3_sys_manager_header* h, const char *func, int line)
+	const struct ps3_sys_manager_header *h, const char *func, int line)
 {
 	pr_debug("%s:%d: version:      %xh\n", func, line, h->version);
 	pr_debug("%s:%d: size:         %xh\n", func, line, h->size);
@@ -421,6 +421,11 @@ static int ps3_sys_manager_handle_event(struct ps3_system_bus_device *dev)
 		dev_dbg(&dev->core, "%s:%d: POWER_PRESSED\n",
 			__func__, __LINE__);
 		ps3_sm_force_power_off = 1;
+		/*
+		 * A memory barrier is use here to sync memory since
+		 * ps3_sys_manager_final_restart() could be called on
+		 * another cpu.
+		 */
 		wmb();
 		kill_cad_pid(SIGINT, 1); /* ctrl_alt_del */
 		break;
@@ -432,6 +437,11 @@ static int ps3_sys_manager_handle_event(struct ps3_system_bus_device *dev)
 		dev_dbg(&dev->core, "%s:%d: RESET_PRESSED\n",
 			__func__, __LINE__);
 		ps3_sm_force_power_off = 0;
+		/*
+		 * A memory barrier is use here to sync memory since
+		 * ps3_sys_manager_final_restart() could be called on
+		 * another cpu.
+		 */
 		wmb();
 		kill_cad_pid(SIGINT, 1); /* ctrl_alt_del */
 		break;
@@ -523,7 +533,7 @@ static int ps3_sys_manager_handle_msg(struct ps3_system_bus_device *dev)
 
 	BUILD_BUG_ON(sizeof(header) != 16);
 
-	if(header.size != 16 || (header.payload_size != 8
+	if (header.size != 16 || (header.payload_size != 8
 		&& header.payload_size != 16)) {
 		dump_sm_header(&header);
 		BUG();
@@ -603,7 +613,7 @@ static void ps3_sys_manager_final_restart(struct ps3_system_bus_device *dev)
 
 	/* Check if we got here via a power button event. */
 
-	if(ps3_sm_force_power_off) {
+	if (ps3_sm_force_power_off) {
 		dev_dbg(&dev->core, "%s:%d: forcing poweroff\n",
 			__func__, __LINE__);
 		ps3_sys_manager_final_power_off(dev);

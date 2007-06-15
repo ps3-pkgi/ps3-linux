@@ -644,7 +644,7 @@ static void _dump_bmp(struct ps3_private* pd, const char* func, int line)
 }
 
 #define dump_mask(_x) _dump_mask(_x, __func__, __LINE__)
-static void __maybe_unused _dump_mask(struct ps3_private* pd,
+static void __maybe_unused _dump_mask(struct ps3_private *pd,
 	const char* func, int line)
 {
 	unsigned long flags;

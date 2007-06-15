@@ -402,10 +402,10 @@ int __devinit ps3_repository_find_devices(enum ps3_bus_type bus_type,
 		for (repo.dev_index = 0; ; repo.dev_index++) {
 			result = ps3_repository_find_device(&repo);
 
-			if(result == -ENODEV) {
+			if (result == -ENODEV) {
 				result = 0;
 				break;
-			} else if(result)
+			} else if (result)
 				break;
 
 			result = callback(&repo);

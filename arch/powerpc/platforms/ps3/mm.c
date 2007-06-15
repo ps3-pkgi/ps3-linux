@@ -115,8 +115,8 @@ struct map {
 };
 
 #define debug_dump_map(x) _debug_dump_map(x, __func__, __LINE__)
-static void __maybe_unused _debug_dump_map(const struct map* m,
-	const char* func, int line)
+static void __maybe_unused _debug_dump_map(const struct map *m,
+	const char *func, int line)
 {
 	DBG("%s:%d: map.total     = %lxh\n", func, line, m->total);
 	DBG("%s:%d: map.rm.size   = %lxh\n", func, line, m->rm.size);
@@ -357,7 +357,7 @@ static unsigned long dma_sb_lpar_to_bus(struct ps3_dma_region *r,
 
 #define dma_dump_region(_a) _dma_dump_region(_a, __func__, __LINE__)
 static void  __maybe_unused _dma_dump_region(const struct ps3_dma_region *r,
-	const char* func, int line)
+	const char *func, int line)
 {
 	DBG("%s:%d: dev        %u:%u\n", func, line, r->dev->bus_id,
 		r->dev->dev_id);
@@ -366,7 +366,7 @@ static void  __maybe_unused _dma_dump_region(const struct ps3_dma_region *r,
 	DBG("%s:%d: len        %lxh\n", func, line, r->len);
 	DBG("%s:%d: offset     %lxh\n", func, line, r->offset);
 }
-  
+
   /**
  * dma_chunk - A chunk of dma pages mapped by the io controller.
  * @region - The dma region that owns this chunk.
@@ -434,7 +434,7 @@ static struct dma_chunk * dma_find_chunk(struct ps3_dma_region *r,
 	return NULL;
 }
 
-static struct dma_chunk * dma_find_chunk_lpar(struct ps3_dma_region *r,
+static struct dma_chunk *dma_find_chunk_lpar(struct ps3_dma_region *r,
 	unsigned long lpar_addr, unsigned long len)
 {
 	struct dma_chunk *c;
@@ -484,7 +484,7 @@ static int dma_ioc0_free_chunk(struct dma_chunk *c)
 	int result = 0;
 	int iopage;
 	unsigned long offset;
-	struct ps3_dma_region * r = c->region;
+	struct ps3_dma_region *r = c->region;
 
 	DBG("%s:start\n", __func__);
 	for (iopage = 0; iopage < (c->len >> r->page_size); iopage++) {
@@ -610,8 +610,9 @@ static int dma_ioc0_map_pages(struct ps3_dma_region *r, unsigned long phys_addr,
 				       r->ioid,
 				       iopte_flag);
 		if (result) {
-			printk("%s:%d: lv1_map_device_dma_region failed: %s\n",
-			    __func__, __LINE__, ps3_result(result));
+			printk(KERN_WARNING "%s:%d: lv1_map_device_dma_region "
+				"failed: %s\n", __func__, __LINE__,
+				ps3_result(result));
 			goto fail_map;
 		}
 		DBG("%s: pg=%d bus=%#lx, lpar=%#lx, ioid=%#x\n", __func__,
@@ -648,7 +649,7 @@ fail_alloc:
  * will make the HV call to create the region.
  */
 
-static int dma_sb_region_create(struct ps3_dma_region* r)
+static int dma_sb_region_create(struct ps3_dma_region *r)
 {
 	int result;
 
@@ -685,7 +686,7 @@ static int dma_sb_region_create(struct ps3_dma_region* r)
 	return result;
 }
 
-static int dma_ioc0_region_create(struct ps3_dma_region* r)
+static int dma_ioc0_region_create(struct ps3_dma_region *r)
 {
 	int result;
 
@@ -714,7 +715,7 @@ static int dma_ioc0_region_create(struct ps3_dma_region* r)
  * will make the HV call to free the region.
  */
 
-static int dma_sb_region_free(struct ps3_dma_region* r)
+static int dma_sb_region_free(struct ps3_dma_region *r)
 {
 	int result;
 	struct dma_chunk *c;
@@ -745,7 +746,7 @@ static int dma_sb_region_free(struct ps3_dma_region* r)
 	return result;
 }
 
-static int dma_ioc0_region_free(struct ps3_dma_region* r)
+static int dma_ioc0_region_free(struct ps3_dma_region *r)
 {
 	int result;
 	struct dma_chunk *c, *n;
@@ -904,8 +905,8 @@ static int dma_sb_unmap_area(struct ps3_dma_region *r, unsigned long bus_addr,
 	if (!c) {
 		unsigned long aligned_bus = _ALIGN_DOWN(bus_addr,
 			1 << r->page_size);
-		unsigned long aligned_len = _ALIGN_UP(len + bus_addr - aligned_bus,
-						      1 << r->page_size);
+		unsigned long aligned_len = _ALIGN_UP(len + bus_addr
+			- aligned_bus, 1 << r->page_size);
 		DBG("%s:%d: not found: bus_addr %lxh\n",
 			__func__, __LINE__, bus_addr);
 		DBG("%s:%d: not found: len %lxh\n",
@@ -941,7 +942,8 @@ static int dma_ioc0_unmap_area(struct ps3_dma_region *r,
 	if (!c) {
 		unsigned long aligned_bus = _ALIGN_DOWN(bus_addr,
 							1 << r->page_size);
-		unsigned long aligned_len = _ALIGN_UP(len + bus_addr - aligned_bus,
+		unsigned long aligned_len = _ALIGN_UP(len + bus_addr
+						      - aligned_bus,
 						      1 << r->page_size);
 		DBG("%s:%d: not found: bus_addr %lxh\n",
 		    __func__, __LINE__, bus_addr);
@@ -979,7 +981,7 @@ static int dma_sb_region_create_linear(struct ps3_dma_region *r)
 	int result;
 	unsigned long virt_addr, len, tmp;
 
-	if (r->len > 16*1024*1024) {	// FIXME
+	if (r->len > 16*1024*1024) {	/* FIXME: need proper fix */
 		/* force 16M dma pages for linear mapping */
 		if (r->page_size != PS3_DMA_16M) {
 			pr_info("%s:%d: forcing 16M pages for linear map\n",

@@ -472,7 +472,8 @@ int ps3av_set_audio_mode(u32 ch, u32 fs, u32 word_bits, u32 format, u32 source)
 	/* audio active */
 	res = ps3av_cmd_audio_active(1, ps3av->audio_port);
 	if (res < 0)
-		dev_dbg(&ps3av->dev->core, "ps3av_cmd_audio_active ON failed\n");
+		dev_dbg(&ps3av->dev->core,
+			"ps3av_cmd_audio_active ON failed\n");
 
 	return 0;
 }
@@ -978,10 +979,8 @@ static void ps3av_shutdown(struct ps3_system_bus_device *dev)
 }
 
 static struct ps3_vuart_port_driver ps3av_driver = {
-	.core = {
-		.match_id = PS3_MATCH_ID_AV_SETTINGS,
-		.core = {.name = "ps3_av",},
-	},
+	.core.match_id = PS3_MATCH_ID_AV_SETTINGS,
+	.core.core.name = "ps3_av",
 	.probe = ps3av_probe,
 	.remove = ps3av_remove,
 	.shutdown = ps3av_shutdown,

@@ -587,7 +587,7 @@ static int ps3_register_repository_device(
 {
 	int result;
 
-	switch(repo->dev_type) {
+	switch (repo->dev_type) {
 	case PS3_DEV_TYPE_SB_GELIC:
 		result = ps3_setup_gelic_device(repo);
 		if (result) {
