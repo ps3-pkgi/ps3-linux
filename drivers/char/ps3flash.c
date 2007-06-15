@@ -342,6 +342,7 @@ static int __devinit ps3flash_probe(struct ps3_system_bus_device *_dev)
 	if (error)
 		goto fail_free_priv;
 
+	ps3flash_misc.parent = &dev->sbd.core;
 	error = misc_register(&ps3flash_misc);
 	if (error) {
 		dev_err(&dev->sbd.core, "%s:%u: misc_register failed %d\n",
