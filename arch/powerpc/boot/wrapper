@@ -277,7 +277,7 @@ ps3)
 
     msg=$(dd if="$ofile.bin" of="$ofile.bin" conv=notrunc \
         skip=$overlay_dest seek=$system_reset_kernel      \
-        bs=$overlay_size count=1 2>&1)
+        count=$overlay_size bs=1 2>&1)
 
     if [ $? -ne "0" ]; then
        echo $msg
@@ -286,7 +286,7 @@ ps3)
 
     msg=$(dd if="$ofile.bin" of="$ofile.bin" conv=notrunc \
         skip=$system_reset_overlay seek=$overlay_dest     \
-        bs=$overlay_size count=1 2>&1)
+        count=$overlay_size bs=1 2>&1)
 
     if [ $? -ne "0" ]; then
        echo $msg
