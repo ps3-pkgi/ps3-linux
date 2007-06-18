@@ -18,6 +18,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include <linux/ata.h>
 #include <linux/dma-mapping.h>
 #include <linux/blkdev.h>
 #include <linux/freezer.h>
@@ -44,6 +45,7 @@
 
 #define PS3DISK_NAME		"ps3d%c"
 
+#define LV1_STORAGE_SEND_ATA_COMMAND	(2)
 #define LV1_STORAGE_ATA_HDDOUT		(0x23)
 
 
@@ -53,8 +55,38 @@ struct ps3disk_private {
 	struct gendisk *gendisk;
 	unsigned int blocking_factor;
 	struct request *req;
+	u64 raw_capacity;
+	unsigned char model[ATA_ID_PROD_LEN+1];
 };
 #define ps3disk_priv(dev)	((dev)->sbd.core.driver_data)
+
+struct lv1_ata_cmnd_block {
+	u16	features;
+	u16	sector_count;
+	u16	LBA_low;
+	u16	LBA_mid;
+	u16	LBA_high;
+	u8	device;
+	u8	command;
+	u32	is_ext;
+	u32	proto;
+	u32	in_out;
+	u32	size;
+	u64	buffer;
+	u32	arglen;
+};
+
+enum lv1_ata_proto {
+	NON_DATA_PROTO     = 0,
+	PIO_DATA_IN_PROTO  = 1,
+	PIO_DATA_OUT_PROTO = 2,
+	DMA_PROTO = 3
+};
+
+enum lv1_ata_in_out {
+	DIR_WRITE = 0,			/* memory -> device */
+	DIR_READ = 1			/* device -> memory */
+};
 
 static int ps3disk_major = PS3DISK_MAJOR;
 
@@ -307,6 +339,80 @@ static int ps3disk_sync_cache(struct ps3_storage_device *dev)
 	return 0;
 }
 
+
+#define ata_le_id_u64(id, n)	\
+	( ((u64) le16_to_cpu((id)[(n) + 3]) << 48) |	\
+	  ((u64) le16_to_cpu((id)[(n) + 2]) << 32) |	\
+	  ((u64) le16_to_cpu((id)[(n) + 1]) << 16) |	\
+	  ((u64) le16_to_cpu((id)[(n) + 0])) )
+
+static void ata_le_id_string(const __le16 *id, unsigned char *s,
+			     unsigned int ofs, unsigned int len)
+{
+	unsigned int c;
+
+	while (len > 0) {
+		c = le16_to_cpu(id[ofs]) >> 8;
+		*s = c;
+		s++;
+
+		c = le16_to_cpu(id[ofs]) & 0xff;
+		*s = c;
+		s++;
+
+		ofs++;
+		len -= 2;
+	}
+}
+
+static void ata_le_id_c_string(const __le16 *id, unsigned char *s,
+			       unsigned int ofs, unsigned int len)
+{
+	unsigned char *p;
+
+	WARN_ON(!(len & 1));
+
+	ata_le_id_string(id, s, ofs, len - 1);
+
+	p = s + strnlen(s, len - 1);
+	while (p > s && p[-1] == ' ')
+		p--;
+	*p = '\0';
+}
+
+static int ps3disk_identify(struct ps3_storage_device *dev)
+{
+	struct ps3disk_private *priv = ps3disk_priv(dev);
+	struct lv1_ata_cmnd_block ata_cmnd;
+	__le16 *id = dev->bounce_buf;
+	u64 res;
+
+	dev_dbg(&dev->sbd.core, "%s:%u: identify disk\n", __func__, __LINE__);
+
+	memset(&ata_cmnd, 0, sizeof(struct lv1_ata_cmnd_block));
+	ata_cmnd.command = ATA_CMD_ID_ATA;
+	ata_cmnd.sector_count = 1;
+	ata_cmnd.size = ata_cmnd.arglen = ATA_ID_WORDS * 2;
+	ata_cmnd.buffer = dev->bounce_lpar;
+	ata_cmnd.proto = PIO_DATA_IN_PROTO;
+	ata_cmnd.in_out = DIR_READ;
+
+	res = ps3stor_send_command(dev, LV1_STORAGE_SEND_ATA_COMMAND,
+				   ps3_mm_phys_to_lpar(__pa(&ata_cmnd)),
+				   sizeof(ata_cmnd), ata_cmnd.buffer,
+				   ata_cmnd.arglen);
+	if (res) {
+		dev_err(&dev->sbd.core, "%s:%u: identify disk failed 0x%lx\n",
+			__func__, __LINE__, res);
+		return -EIO;
+	}
+
+	/* All we're interested in are raw capacity and model name */
+	priv->raw_capacity = ata_le_id_u64(id, 100);	/* lba_capacity_2 */
+	ata_le_id_c_string(id, priv->model, ATA_ID_PROD, sizeof(priv->model));
+	return 0;
+}
+
 static void ps3disk_prepare_flush(request_queue_t *q, struct request *req)
 {
 	struct ps3_storage_device *dev = q->queuedata;
@@ -384,6 +490,10 @@ static int __devinit ps3disk_probe(struct ps3_system_bus_device *_dev)
 	if (error)
 		goto fail_free_bounce;
 
+	error = ps3disk_identify(dev);
+	if (error)
+		goto fail_teardown;
+
 	/* override the interrupt handler */
 	free_irq(dev->irq, dev);
 	error = request_irq(dev->irq, ps3disk_interrupt, IRQF_DISABLED,
@@ -440,6 +550,11 @@ static int __devinit ps3disk_probe(struct ps3_system_bus_device *_dev)
 	priv->blocking_factor = dev->blk_size/KERNEL_SECTOR_SIZE;
 	set_capacity(gendisk,
 		     dev->regions[dev->region_idx].size*priv->blocking_factor);
+
+	dev_info(&dev->sbd.core,
+		 "%s is a %s (%lu MiB total, %lu MiB for OtherOS)\n",
+		 gendisk->disk_name, priv->model, priv->raw_capacity >> 11,
+		 get_capacity(gendisk) >> 11);
 
 	add_disk(gendisk);
 	return 0;

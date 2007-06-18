@@ -67,8 +67,8 @@ enum lv1_atapi_proto {
 };
 
 enum lv1_atapi_in_out {
-	DIR_WRITE = 0, /* memory -> device */
-	DIR_READ = 1 /* device -> memory */
+	DIR_WRITE = 0,		/* memory -> device */
+	DIR_READ = 1		/* device -> memory */
 };
 
 
