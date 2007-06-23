@@ -359,7 +359,7 @@ struct gelic_wireless {
 	u8 cmd_send_flg;
 
 	struct iw_public_data wireless_data;
-	u8 *data_buf; /* data buffer for lv1_net_control */
+	void *data_buf; /* data buffer for lv1_net_control */
 
 	u8 wireless; /* wireless support */
 	u8 state;

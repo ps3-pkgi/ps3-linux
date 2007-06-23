@@ -127,10 +127,10 @@ static void gelic_net_set_descr_status(struct gelic_net_descr *descr,
 	/* and write it back */
 	descr->dmac_cmd_status = cmd_status;
 	/*
-	 * dma_cmd_status field is that gelic hardware would check
-	 * whether the descriptor is valid or not.   Usually
-	 * caller of this function wants to talk that to the hardware,
-	 * so we assure here the hardware to see the change.
+	 * dma_cmd_status field is used to indicate whether the descriptor
+	 * is valid or not.
+	 * Usually caller of this function wants to inform that to the
+	 * hardware, so we assure here the hardware sees the change.
 	 */
 	wmb();
 }
@@ -235,8 +235,7 @@ static int gelic_net_prepare_rx_descr(struct gelic_net_card *card,
 		dev_info(ctodev(card), "%s: ERROR status \n", __func__);
 	}
 	/* we need to round up the buffer size to a multiple of 128 */
-	bufsize = (GELIC_NET_MAX_MTU + GELIC_NET_RXBUF_ALIGN - 1) &
-		(~(GELIC_NET_RXBUF_ALIGN - 1));
+	bufsize = ALIGN(GELIC_NET_MAX_MTU, GELIC_NET_RXBUF_ALIGN);
 
 	/* and we need to have it 128 byte aligned, therefore we allocate a
 	 * bit more */
@@ -261,7 +260,7 @@ static int gelic_net_prepare_rx_descr(struct gelic_net_card *card,
 	/* io-mmu-map the skb */
 	descr->buf_addr = dma_map_single(ctodev(card), descr->skb->data,
 					 GELIC_NET_MAX_MTU,
-					 DMA_BIDIRECTIONAL);
+					 DMA_FROM_DEVICE);
 	if (!descr->buf_addr) {
 		dev_kfree_skb_any(descr->skb);
 		descr->skb = NULL;
@@ -289,7 +288,7 @@ static void gelic_net_release_rx_chain(struct gelic_net_card *card)
 			dma_unmap_single(ctodev(card),
 					 descr->buf_addr,
 					 descr->skb->len,
-					 DMA_BIDIRECTIONAL);
+					 DMA_FROM_DEVICE);
 			descr->buf_addr = 0;
 			dev_kfree_skb_any(descr->skb);
 			descr->skb = NULL;
@@ -360,11 +359,11 @@ static void gelic_net_release_tx_descr(struct gelic_net_card *card,
 		/* 2nd descriptor */
 		skb = descr->skb;
 		dma_unmap_single(ctodev(card), descr->buf_addr, skb->len,
-				 DMA_BIDIRECTIONAL);
+				 DMA_TO_DEVICE);
 		dev_kfree_skb_any(skb);
 	} else {
 		dma_unmap_single(ctodev(card), descr->buf_addr,
-				 descr->buf_size, DMA_BIDIRECTIONAL);
+				 descr->buf_size, DMA_TO_DEVICE);
 	}
 
 	descr->buf_addr = 0;
@@ -425,7 +424,7 @@ static void gelic_net_release_tx_chain(struct gelic_net_card *card, int stop)
 		release = 1;
 	}
 out:
-	if (!stop && release && netif_queue_stopped(card->netdev))
+	if (!stop && release)
 		netif_wake_queue(card->netdev);
 }
 
@@ -679,7 +678,7 @@ static int gelic_net_prepare_tx_descr_v(struct gelic_net_card *card,
 
 	/* first descr */
 	buf[0] = dma_map_single(ctodev(card), &descr->vlan,
-			     vlan_len, DMA_BIDIRECTIONAL);
+			     vlan_len, DMA_TO_DEVICE);
 
 	if (!buf[0]) {
 		dev_err(ctodev(card),
@@ -704,7 +703,7 @@ static int gelic_net_prepare_tx_descr_v(struct gelic_net_card *card,
 
 	buf[1] = dma_map_single(ctodev(card), skb->data + GELIC_NET_VLAN_POS,
 			     skb->len - GELIC_NET_VLAN_POS,
-			     DMA_BIDIRECTIONAL);
+			     DMA_TO_DEVICE);
 
 	if (!buf[1]) {
 		dev_err(ctodev(card),
@@ -712,7 +711,7 @@ static int gelic_net_prepare_tx_descr_v(struct gelic_net_card *card,
 			skb->data + GELIC_NET_VLAN_POS,
 			skb->len - GELIC_NET_VLAN_POS);
 		dma_unmap_single(ctodev(card), buf[0], vlan_len,
-				 DMA_BIDIRECTIONAL);
+				 DMA_TO_DEVICE);
 		return -ENOMEM;
 	}
 
@@ -795,8 +794,8 @@ static int gelic_net_xmit(struct sk_buff *skb, struct net_device *netdev)
 		descr->prev->next_descr_addr = descr->bus_addr;
 kick:
 	/*
-	 * as hardware descriptor is modified above lines,
-	 * ensure the hardware to see it
+	 * as hardware descriptor is modified in the above lines,
+	 * ensure that the hardware sees it
 	 */
 	wmb();
 	if (gelic_net_kick_txdma(card, card->tx_chain.tail))
@@ -833,9 +832,8 @@ static void gelic_net_pass_skb_up(struct gelic_net_descr *descr,
 	/* unmap skb buffer */
 	skb = descr->skb;
 	dma_unmap_single(ctodev(card), descr->buf_addr, GELIC_NET_MAX_MTU,
-			 DMA_BIDIRECTIONAL);
+			 DMA_FROM_DEVICE);
 
-	skb->dev = netdev;
 	skb_put(skb, descr->valid_size? descr->valid_size : descr->result_size);
 	if (!descr->valid_size)
 		dev_info(ctodev(card), "buffer full %x %x %x\n",
@@ -889,9 +887,9 @@ static int gelic_net_decode_one_descr(struct gelic_net_card *card)
 	dmac_chain_ended =
 		descr->dmac_cmd_status & GELIC_NET_DMAC_CMDSTAT_RXDCEIS;
 
-	if (status == GELIC_NET_DESCR_CARDOWNED) {
+	if (status == GELIC_NET_DESCR_CARDOWNED)
 		return 0;
-	}
+
 	if (status == GELIC_NET_DESCR_NOT_IN_USE) {
 		dev_dbg(ctodev(card), "dormant descr? %p\n", descr);
 		return 0;
