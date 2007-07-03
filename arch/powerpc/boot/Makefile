@@ -17,6 +17,7 @@
 #	CROSS32_COMPILE is setup as a prefix just like CROSS_COMPILE
 #	in the toplevel makefile.
 
+
 all: $(obj)/zImage
 
 BOOTCFLAGS    := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
@@ -138,7 +139,7 @@ image-$(CONFIG_PPC_CELLEB)		+= zImage.pseries
 image-$(CONFIG_PPC_CHRP)		+= zImage.chrp
 image-$(CONFIG_PPC_EFIKA)		+= zImage.chrp
 image-$(CONFIG_PPC_PMAC)		+= zImage.pmac
-image-$(CONFIG_PPC_HOLLY)		+= zImage.holly-elf
+image-$(CONFIG_PPC_HOLLY)		+= zImage.holly
 image-$(CONFIG_PPC_PRPMC2800)		+= zImage.prpmc2800
 image-$(CONFIG_PPC_ISERIES)		+= zImage.iseries
 image-$(CONFIG_DEFAULT_UIMAGE)		+= uImage
@@ -163,32 +164,24 @@ targets	+= $(image-y) $(initrd-y)
 
 $(addprefix $(obj)/, $(initrd-y)): $(obj)/ramdisk.image.gz
 
-dts-  := $(patsubst zImage%, zImage.dts%, $(image-n) $(image-))
-dts-y := $(patsubst zImage%, zImage.dts%, $(image-y))
-dts-y := $(filter-out $(image-y), $(dts-y))
-targets	+= $(image-y) $(dts-y)
-
-dts_initrd-  := $(patsubst zImage%, zImage.dts_initrd%, $(image-n) $(image-))
-dts_initrd-y := $(patsubst zImage%, zImage.dts_initrd%, $(image-y))
-dts_initrd-y := $(filter-out $(image-y), $(dts_initrd-y))
-targets	+= $(image-y) $(dts_initrd-y)
-
-$(addprefix $(obj)/, $(dts_initrd-y)): $(obj)/ramdisk.image.gz
+# If CONFIG_WANT_DEVICE_TREE is set and CONFIG_DEVICE_TREE isn't an
+# empty string, define 'dts' to be path to the dts
+# CONFIG_DEVICE_TREE will have "" around it, make sure to strip them
+ifeq ($(CONFIG_WANT_DEVICE_TREE),y)
+ifneq ($(CONFIG_DEVICE_TREE),"")
+dts = $(if $(shell echo $(CONFIG_DEVICE_TREE) | grep '^/'),\
+	,$(srctree)/$(src)/dts/)$(CONFIG_DEVICE_TREE:"%"=%)
+endif
+endif
 
 # Don't put the ramdisk on the pattern rule; when its missing make will try
 # the pattern rule with less dependencies that also matches (even with the
 # hard dependency listed).
-$(obj)/zImage.dts_initrd.%: vmlinux $(wrapperbits) $(dts) $(obj)/ramdisk.image.gz
+$(obj)/zImage.initrd.%: vmlinux $(wrapperbits) $(dts)
 	$(call if_changed,wrap,$*,$(dts),,$(obj)/ramdisk.image.gz)
 
-$(obj)/zImage.dts.%: vmlinux $(wrapperbits) $(dts)
+$(obj)/zImage.%: vmlinux $(wrapperbits) $(dts)
 	$(call if_changed,wrap,$*,$(dts))
-
-$(obj)/zImage.initrd.%: vmlinux $(wrapperbits)
-	$(call if_changed,wrap,$*,,,$(obj)/ramdisk.image.gz)
-
-$(obj)/zImage.%: vmlinux $(wrapperbits)
-	$(call if_changed,wrap,$*)
 
 $(obj)/zImage.iseries: vmlinux
 	$(STRIP) -s -R .comment $< -o $@
@@ -200,18 +193,8 @@ $(obj)/zImage.ps3: vmlinux  $(wrapper) $(wrapperbits) $(srctree)/$(src)/dts/ps3.
 $(obj)/zImage.initrd.ps3: vmlinux  $(wrapper) $(wrapperbits) $(srctree)/$(src)/dts/ps3.dts $(obj)/ramdisk.image.gz
 	$(call cmd,wrap,ps3,$(srctree)/$(src)/dts/ps3.dts,,$(obj)/ramdisk.image.gz)
 
-$(obj)/zImage.holly-elf: vmlinux $(wrapperbits)
-	$(call if_changed,wrap,holly,$(obj)/dts/holly.dts,,)
-
-$(obj)/zImage.initrd.holly-elf: vmlinux $(wrapperbits) $(obj)/ramdisk.image.gz
-	$(call if_changed,wrap,holly,$(obj)/dts/holly.dts,,$(obj)/ramdisk.image.gz)
-
 $(obj)/uImage: vmlinux $(wrapperbits)
 	$(call if_changed,wrap,uboot)
-
-# CONFIG_DEVICE_TREE will have "" around it, make sure to strip them
-dts = $(if $(shell echo $(CONFIG_DEVICE_TREE) | grep '^/'),\
-	,$(srctree)/$(src)/dts/)$(CONFIG_DEVICE_TREE:"%"=%)
 
 $(obj)/cuImage.%: vmlinux $(dts) $(wrapperbits)
 	$(call if_changed,wrap,cuboot-$*,$(dts))
@@ -226,18 +209,13 @@ $(obj)/zImage:		$(addprefix $(obj)/, $(image-y))
 	@rm -f $@; ln $< $@
 $(obj)/zImage.initrd:	$(addprefix $(obj)/, $(initrd-y))
 	@rm -f $@; ln $< $@
-$(obj)/zImage.dts:	$(addprefix $(obj)/, $(dts-y))
-	@rm -f $@; ln $< $@
-$(obj)/zImage.dts_initrd:	$(addprefix $(obj)/, $(dts_initrd-y))
-	@rm -f $@; ln $< $@
-
 
 install: $(CONFIGURE) $(addprefix $(obj)/, $(image-y))
 	sh -x $(srctree)/$(src)/install.sh "$(KERNELRELEASE)" vmlinux System.map "$(INSTALL_PATH)" $<
 
 # anything not in $(targets)
-clean-files += $(image-) $(initrd-) zImage zImage.initrd cuImage.* \
-	treeImage.* zImage.dts zImage.dts_initrd otheros.bld
+clean-files += $(image-) $(initrd-) zImage zImage.initrd cuImage.* treeImage.* \
+	otheros.bld
 
 # clean up files cached by wrapper
 clean-kernel := vmlinux.strip vmlinux.bin
