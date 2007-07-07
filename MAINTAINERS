@@ -2934,6 +2934,7 @@ PS3 NETWORK SUPPORT
 P:	Masakazu Mokuno
 M:	mokuno@sm.sony.co.jp
 L:	netdev@vger.kernel.org
+L:	cbe-oss-dev@ozlabs.org
 S:	Supported
 
 PS3 PLATFORM SUPPORT

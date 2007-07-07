@@ -2,11 +2,9 @@
  *  PS3 gelic network driver.
  *
  * Copyright (C) 2007 Sony Computer Entertainment Inc.
- * Copyright 2007 Sony Corporation
+ * Copyright 2006, 2007 Sony Corporation
  *
- *  this file is based on: spider_net.c
- *
- * Network device driver for Cell Processor-Based Blade
+ * This file is based on: spider_net.c
  *
  * (C) Copyright IBM Corp. 2005
  *
@@ -47,7 +45,7 @@
 #include <asm/ps3.h>
 #include <asm/lv1call.h>
 
-#include "gelic_net.h"
+#include "ps3_gelic_net.h"
 
 #define DRV_NAME "Gelic Network Driver"
 #define DRV_VERSION "1.0"

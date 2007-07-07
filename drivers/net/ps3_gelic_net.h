@@ -2,11 +2,9 @@
  *  PS3 Platfom gelic network driver.
  *
  * Copyright (C) 2007 Sony Computer Entertainment Inc.
- * Copyright 2007 Sony Corporation.
+ * Copyright 2006, 2007 Sony Corporation.
  *
- *  this file is based on: spider_net.h
- *
- * Network device driver for Cell Processor-Based Blade
+ * This file is based on: spider_net.h
  *
  * (C) Copyright IBM Corp. 2005
  *

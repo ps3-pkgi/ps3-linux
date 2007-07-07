@@ -2,7 +2,7 @@
  * gelic_wireless.c: wireless extension for gelic_net
  *
  * Copyright (C) 2007 Sony Computer Entertainment Inc.
- * Copyright 2007 Sony Corporation
+ * Copyright 2006, 2007 Sony Corporation
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published
@@ -28,7 +28,7 @@
 #include <asm/ps3.h>
 #include <asm/lv1call.h>
 
-#include "gelic_net.h"
+#include "ps3_gelic_net.h"
 
 static struct iw_handler_def gelicw_handler_def;
 
