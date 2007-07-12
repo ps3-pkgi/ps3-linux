@@ -806,7 +806,7 @@ kick:
 error:
 	card->netdev_stats.tx_dropped++;
 	spin_unlock_irqrestore(&card->tx_dma_lock, flags);
-	return NETDEV_TX_LOCKED;
+	return NETDEV_TX_BUSY;
 }
 
 /**
