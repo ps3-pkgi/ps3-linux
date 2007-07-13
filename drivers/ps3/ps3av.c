@@ -567,93 +567,82 @@ static void ps3avd(struct work_struct *work)
 	complete(&ps3av->done);
 }
 
-static int ps3av_vid2table_id(int vid)
-{
-	int i;
-
-	for (i = 1; i < ARRAY_SIZE(video_mode_table); i++)
-		if (video_mode_table[i].vid == vid)
-			return i;
-	return -1;
-}
-
-#define SHIFT_60	32
-#define SHIFT_50	16
-#define SHIFT_VESA	0
-
-#define PS3AV_MODE_TUPLE(maskname, type, vidname)	\
-	{ \
-		.mask = (u64)PS3AV_RESBIT_##maskname << SHIFT_##type, \
-		.vid = PS3AV_CMD_VIDEO_VID_##vidname \
-	}
+#define SHIFT_50	0
+#define SHIFT_60	4
+#define SHIFT_VESA	8
 
 static const struct {
-	u64 mask;
-	int vid;
+	unsigned mask : 19;
+	unsigned id :  4;
 } ps3av_preferred_modes[] = {
-	PS3AV_MODE_TUPLE(WUXGA, VESA, WUXGA),
-
-	PS3AV_MODE_TUPLE(1920x1080P, 60, 1080P_60HZ),
-	PS3AV_MODE_TUPLE(1920x1080P, 50, 1080P_50HZ),
-
-	PS3AV_MODE_TUPLE(1920x1080I, 60, 1080I_60HZ),
-	PS3AV_MODE_TUPLE(1920x1080I, 50, 1080I_50HZ),
-
-	PS3AV_MODE_TUPLE(SXGA, VESA, SXGA),
-	PS3AV_MODE_TUPLE(WXGA, VESA, WXGA),
-
-	PS3AV_MODE_TUPLE(1280x720P, 60, 720P_60HZ),
-	PS3AV_MODE_TUPLE(1280x720P, 50, 720P_50HZ),
-
-	PS3AV_MODE_TUPLE(720x480P, 60, 480P),
-	PS3AV_MODE_TUPLE(720x576P, 50, 576P),
+	{ .mask = PS3AV_RESBIT_WUXGA		<< SHIFT_VESA,	.id = 13 },
+	{ .mask = PS3AV_RESBIT_1920x1080P	<< SHIFT_60,	.id = 5 },
+	{ .mask = PS3AV_RESBIT_1920x1080P	<< SHIFT_50,	.id = 10 },
+	{ .mask = PS3AV_RESBIT_1920x1080I	<< SHIFT_60,	.id = 4 },
+	{ .mask = PS3AV_RESBIT_1920x1080I	<< SHIFT_50,	.id = 9 },
+	{ .mask = PS3AV_RESBIT_SXGA		<< SHIFT_VESA,	.id = 12 },
+	{ .mask = PS3AV_RESBIT_WXGA		<< SHIFT_VESA,	.id = 11 },
+	{ .mask = PS3AV_RESBIT_1280x720P	<< SHIFT_60,	.id = 3 },
+	{ .mask = PS3AV_RESBIT_1280x720P	<< SHIFT_50,	.id = 8 },
+	{ .mask = PS3AV_RESBIT_720x480P		<< SHIFT_60,	.id = 2 },
+	{ .mask = PS3AV_RESBIT_720x576P		<< SHIFT_50,	.id = 7 },
 };
 
-static int ps3av_resbit2vid(u64 res_50, u64 res_60, u64 res_vesa)
+static int ps3av_resbit2id(u32 res_50, u32 res_60, u32 res_vesa)
 {
 	unsigned int i;
-	u64 res_all = res_50 << SHIFT_50 | res_60 << SHIFT_60 |
-		      res_vesa << SHIFT_VESA;
+	u32 res_all;
+
+	/*
+	 * We mask off the resolution bits we care about and combine the
+	 * results in one bitfield, so make sure there's no overlap
+	 */
+	BUILD_BUG_ON(PS3AV_RES_MASK_50 << SHIFT_50 &
+		     PS3AV_RES_MASK_60 << SHIFT_60);
+	BUILD_BUG_ON(PS3AV_RES_MASK_50 << SHIFT_50 &
+		     PS3AV_RES_MASK_VESA << SHIFT_VESA);
+	BUILD_BUG_ON(PS3AV_RES_MASK_60 << SHIFT_60 &
+		     PS3AV_RES_MASK_VESA << SHIFT_VESA);
+	res_all = (res_50 & PS3AV_RES_MASK_50) << SHIFT_50 |
+		  (res_60 & PS3AV_RES_MASK_60) << SHIFT_60 |
+		  (res_vesa & PS3AV_RES_MASK_VESA) << SHIFT_VESA;
 
 	if (!res_all)
-		return -1;
+		return 0;
 
 	for (i = 0; i < ARRAY_SIZE(ps3av_preferred_modes); i++)
 		if (res_all & ps3av_preferred_modes[i].mask)
-			return ps3av_preferred_modes[i].vid;
+			return ps3av_preferred_modes[i].id;
 
-	return -1;
+	return 0;
 }
 
-static int ps3av_hdmi_get_vid(struct ps3av_info_monitor *info)
+static int ps3av_hdmi_get_id(struct ps3av_info_monitor *info)
 {
-	u32 res_50, res_60, res_vesa;
-	int vid = -1;
+	int id;
 
 	/* check native resolution */
-	res_50 = info->res_50.native & PS3AV_RES_MASK_50;
-	res_60 = info->res_60.native & PS3AV_RES_MASK_60;
-	res_vesa = info->res_vesa.native & PS3AV_RES_MASK_VESA;
-	vid = ps3av_resbit2vid(res_50, res_60, res_vesa);
-	if (vid != -1) {
-		pr_info("%s: Using native resolution %d\n", __func__, vid);
-		return vid;
+	id = ps3av_resbit2id(info->res_50.native, info->res_60.native,
+			     info->res_vesa.native);
+	if (id) {
+		pr_info("%s: Using native mode %d\n", __func__, id);
+		return id;
 	}
 
 	/* check supported resolutions */
-	res_50 = info->res_50.res_bits & PS3AV_RES_MASK_50;
-	res_60 = info->res_60.res_bits & PS3AV_RES_MASK_60;
-	res_vesa = info->res_vesa.res_bits & PS3AV_RES_MASK_VESA;
-	vid = ps3av_resbit2vid(res_50, res_60, res_vesa);
-	if (vid != -1) {
-		pr_info("%s: Using supported resolution %d\n", __func__, vid);
-		return vid;
+	id = ps3av_resbit2id(info->res_50.res_bits, info->res_60.res_bits,
+			     info->res_vesa.res_bits);
+	if (id) {
+		pr_info("%s: Using supported mode %d\n", __func__, id);
+		return id;
 	}
 
-	vid = ps3av->region & PS3AV_REGION_60 ? PS3AV_DEFAULT_HDMI_VID_REG_60
-					      : PS3AV_DEFAULT_HDMI_VID_REG_50;
-	pr_info("%s: Using default resolution %d\n", __func__, vid);
-	return vid;
+	if (ps3av->region & PS3AV_REGION_60)
+		id = PS3AV_DEFAULT_HDMI_MODE_ID_REG_60;
+	else
+		id = PS3AV_DEFAULT_HDMI_MODE_ID_REG_50;
+	pr_info("%s: Using default mode %d\n", __func__, id);
+	return id;
 }
 
 static void ps3av_monitor_info_dump(const struct ps3av_pkt_av_get_monitor_info *monitor_info)
@@ -720,6 +709,10 @@ static const struct ps3av_monitor_quirk {
 	{
 		.monitor_name	= "DELL 2007WFP",
 		.clear_60	= PS3AV_RESBIT_1920x1080I
+	}, {
+		.monitor_name	= "L226WTQ",
+		.clear_60	= PS3AV_RESBIT_1920x1080I |
+				  PS3AV_RESBIT_1920x1080P
 	}
 };
 
@@ -740,19 +733,19 @@ static void ps3av_fixup_monitor_info(struct ps3av_info_monitor *info)
 			info->res_50.native &= ~quirk->clear_50;
 			info->res_vesa.res_bits &= ~quirk->clear_vesa;
 			info->res_vesa.native &= ~quirk->clear_vesa;
+			break;
 		}
-		break;
 	}
 }
 
 static int ps3av_auto_videomode(struct ps3av_pkt_av_get_hw_conf *av_hw_conf)
 {
-	int i, res, vid = -1, dvi = 0, rgb = 0;
+	int i, res, id = 0, dvi = 0, rgb = 0;
 	struct ps3av_pkt_av_get_monitor_info monitor_info;
 	struct ps3av_info_monitor *info;
 
-	/* get vid for hdmi */
-	for (i = 0; i < av_hw_conf->num_of_hdmi && vid == -1; i++) {
+	/* get mode id for hdmi */
+	for (i = 0; i < av_hw_conf->num_of_hdmi && !id; i++) {
 		res = ps3av_cmd_video_get_monitor_info(&monitor_info,
 						       PS3AV_CMD_AVPORT_HDMI_0 +
 						       i);
@@ -763,28 +756,29 @@ static int ps3av_auto_videomode(struct ps3av_pkt_av_get_hw_conf *av_hw_conf)
 
 		info = &monitor_info.info;
 		ps3av_fixup_monitor_info(info);
+
 		switch (info->monitor_type) {
 		case PS3AV_MONITOR_TYPE_DVI:
 			dvi = PS3AV_MODE_DVI;
 			/* fall through */
 		case PS3AV_MONITOR_TYPE_HDMI:
-			vid = ps3av_hdmi_get_vid(info);
+			id = ps3av_hdmi_get_id(info);
 			break;
 		}
 	}
 
-	if (vid == -1) {
+	if (!id) {
 		/* no HDMI interface or HDMI is off */
 		if (ps3av->region & PS3AV_REGION_60)
-			vid = PS3AV_DEFAULT_AVMULTI_VID_REG_60;
+			id = PS3AV_DEFAULT_AVMULTI_MODE_ID_REG_60;
 		else
-			vid = PS3AV_DEFAULT_AVMULTI_VID_REG_50;
+			id = PS3AV_DEFAULT_AVMULTI_MODE_ID_REG_50;
 		if (ps3av->region & PS3AV_REGION_RGB)
 			rgb = PS3AV_MODE_RGB;
-		pr_info("%s: Using avmulti resolution %d\n", __func__, vid);
+		pr_info("%s: Using avmulti mode %d\n", __func__, id);
 	}
 
-	return (ps3av_vid2table_id(vid) | dvi | rgb);
+	return id | dvi | rgb;
 }
 
 static int ps3av_get_hw_conf(struct ps3av *ps3av)
@@ -863,7 +857,6 @@ int ps3av_get_auto_mode(void)
 }
 
 EXPORT_SYMBOL_GPL(ps3av_get_auto_mode);
-
 
 int ps3av_get_mode(void)
 {
