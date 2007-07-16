@@ -289,6 +289,15 @@ static inline char *task_cap(struct task_struct *p, char *buffer)
 			    cap_t(p->cap_effective));
 }
 
+static inline char *task_context_switch_counts(struct task_struct *p,
+						char *buffer)
+{
+	return buffer + sprintf(buffer, "voluntary_ctxt_switches:\t%lu\n"
+			    "nonvoluntary_ctxt_switches:\t%lu\n",
+			    p->nvcsw,
+			    p->nivcsw);
+}
+
 int proc_pid_status(struct task_struct *task, char * buffer)
 {
 	char * orig = buffer;
@@ -307,6 +316,7 @@ int proc_pid_status(struct task_struct *task, char * buffer)
 #if defined(CONFIG_S390)
 	buffer = task_show_regs(task, buffer);
 #endif
+	buffer = task_context_switch_counts(task, buffer);
 	return buffer - orig;
 }
 
@@ -440,8 +450,9 @@ static int do_task_stat(struct task_struct *task, char * buffer, int whole)
 
 	/* Temporary variable needed for gcc-2.96 */
 	/* convert timespec -> nsec*/
-	start_time = (unsigned long long)task->start_time.tv_sec * NSEC_PER_SEC
-				+ task->start_time.tv_nsec;
+	start_time =
+		(unsigned long long)task->real_start_time.tv_sec * NSEC_PER_SEC
+				+ task->real_start_time.tv_nsec;
 	/* convert nsec -> ticks */
 	start_time = nsec_to_clock_t(start_time);
 
