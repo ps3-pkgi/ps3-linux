@@ -112,7 +112,7 @@ static int fill_from_dev_buffer(struct scsi_cmnd *cmd, const void *buf)
 	active = 1;
 	for (k = 0, req_len = 0, act_len = 0; k < cmd->use_sg; ++k, ++sgpnt) {
 		if (active) {
-			kaddr = kmap_atomic(sgpnt->page, KM_USER0);
+			kaddr = kmap_atomic(sgpnt->page, KM_IRQ0);
 			if (!kaddr)
 				return -1;
 			len = sgpnt->length;
@@ -121,7 +121,8 @@ static int fill_from_dev_buffer(struct scsi_cmnd *cmd, const void *buf)
 				len = buflen - req_len;
 			}
 			memcpy(kaddr + sgpnt->offset, buf + req_len, len);
-			kunmap_atomic(kaddr, KM_USER0);
+			flush_kernel_dcache_page(sgpnt->page);
+			kunmap_atomic(kaddr, KM_IRQ0);
 			act_len += len;
 		}
 		req_len += sgpnt->length;
@@ -149,7 +150,7 @@ static int fetch_to_dev_buffer(struct scsi_cmnd *cmd, void *buf)
 
 	sgpnt = cmd->request_buffer;
 	for (k = 0, req_len = 0, fin = 0; k < cmd->use_sg; ++k, ++sgpnt) {
-		kaddr = kmap_atomic(sgpnt->page, KM_USER0);
+		kaddr = kmap_atomic(sgpnt->page, KM_IRQ0);
 		if (!kaddr)
 			return -1;
 		len = sgpnt->length;
@@ -158,7 +159,7 @@ static int fetch_to_dev_buffer(struct scsi_cmnd *cmd, void *buf)
 			fin = 1;
 		}
 		memcpy(buf + req_len, kaddr + sgpnt->offset, len);
-		kunmap_atomic(kaddr, KM_USER0);
+		kunmap_atomic(kaddr, KM_IRQ0);
 		if (fin)
 			return req_len + len;
 		req_len += sgpnt->length;

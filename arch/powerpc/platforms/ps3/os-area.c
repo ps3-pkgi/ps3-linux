@@ -1,5 +1,5 @@
 /*
- *  PS3 'Other OS' area data.
+ *  PS3 flash memory os area.
  *
  *  Copyright (C) 2006 Sony Computer Entertainment Inc.
  *  Copyright 2006 Sony Corp.
@@ -38,7 +38,7 @@ enum {
  * struct os_area_header - os area header segment.
  * @magic_num: Always 'cell_ext_os_area'.
  * @hdr_version: Header format version number.
- * @os_area_offset: Starting segment number of os image area.
+ * @other_os_data_offset: Starting segment number of other os data area.
  * @ldr_area_offset: Starting segment number of bootloader image area.
  * @ldr_format: HEADER_LDR_FORMAT flag.
  * @ldr_size: Size of bootloader image in bytes.
@@ -52,7 +52,7 @@ enum {
 struct os_area_header {
 	s8 magic_num[16];
 	u32 hdr_version;
-	u32 os_area_offset;
+	u32 other_os_data_offset;
 	u32 ldr_area_offset;
 	u32 _reserved_1;
 	u32 ldr_format;
@@ -109,10 +109,10 @@ struct os_area_params {
 };
 
 /**
- * struct saved_params - Static working copies of data from the 'Other OS' area.
+ * struct saved_params - Static working copies of data from the PS3 'os area'.
  *
- * For the convinience of the guest, the HV makes a copy of the 'Other OS' area
- * in flash to a high address in the boot memory region and then puts that RAM
+ * For the convinience of the guest, the HV makes a copy of the os area in
+ * flash to a high address in the boot memory region and then puts that RAM
  * address and the byte count into the repository for retreval by the guest.
  * We copy the data we want into a static variable and allow the memory setup
  * by the HV to be claimed by the lmb manager.
@@ -136,17 +136,17 @@ struct saved_params {
 static void _dump_header(const struct os_area_header *h, const char *func,
 	int line)
 {
-	pr_debug("%s:%d: h.magic_num:         '%s'\n", func, line,
+	pr_debug("%s:%d: h.magic_num:      '%s'\n", func, line,
 		h->magic_num);
-	pr_debug("%s:%d: h.hdr_version:       %u\n", func, line,
+	pr_debug("%s:%d: h.hdr_version:     %u\n", func, line,
 		h->hdr_version);
-	pr_debug("%s:%d: h.os_area_offset:   %u\n", func, line,
-		h->os_area_offset);
+	pr_debug("%s:%d: h.other_os_data_offset:  %u\n", func, line,
+		h->other_os_data_offset);
 	pr_debug("%s:%d: h.ldr_area_offset: %u\n", func, line,
 		h->ldr_area_offset);
-	pr_debug("%s:%d: h.ldr_format:        %u\n", func, line,
+	pr_debug("%s:%d: h.ldr_format:      %u\n", func, line,
 		h->ldr_format);
-	pr_debug("%s:%d: h.ldr_size:          %xh\n", func, line,
+	pr_debug("%s:%d: h.ldr_size:        %xh\n", func, line,
 		h->ldr_size);
 }
 
@@ -188,7 +188,7 @@ static int __init verify_header(const struct os_area_header *header)
 		return -1;
 	}
 
-	if (header->os_area_offset > header->ldr_area_offset) {
+	if (header->other_os_data_offset > header->ldr_area_offset) {
 		pr_debug("%s:%d offsets failed\n", __func__, __LINE__);
 		return -1;
 	}
@@ -201,8 +201,8 @@ int __init ps3_os_area_init(void)
 	int result;
 	u64 lpar_addr;
 	unsigned int size;
-	struct os_area_header *header;
-	struct os_area_params *params;
+	const struct os_area_header *header;
+	const struct os_area_params *params;
 
 	result = ps3_repository_read_boot_dat_info(&lpar_addr, &size);
 
@@ -212,8 +212,9 @@ int __init ps3_os_area_init(void)
 		return result;
 	}
 
-	header = (struct os_area_header *)__va(lpar_addr);
-	params = (struct os_area_params *)__va(lpar_addr + OS_AREA_SEGMENT_SIZE);
+	header = (const struct os_area_header *)__va(lpar_addr);
+	params = (const struct os_area_params *)__va(lpar_addr
+		+ OS_AREA_SEGMENT_SIZE);
 
 	result = verify_header(header);
 

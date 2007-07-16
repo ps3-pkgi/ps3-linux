@@ -109,13 +109,14 @@ static void ps3disk_scatter_gather(struct ps3_storage_device *dev,
 			bio_sectors(bio), sector);
 		bio_for_each_segment(bvec, bio, j) {
 			size = bio_cur_sectors(bio)*KERNEL_SECTOR_SIZE;
-			buf = __bio_kmap_atomic(bio, j, KM_USER0);
+			buf = __bio_kmap_atomic(bio, j, KM_IRQ0);
 			if (gather)
 				memcpy(dev->bounce_buf+offset, buf, size);
 			else
 				memcpy(buf, dev->bounce_buf+offset, size);
 			offset += size;
-			__bio_kunmap_atomic(bio, KM_USER0);
+			flush_kernel_dcache_page(bio_iovec_idx(bio, j)->bv_page);
+			__bio_kunmap_atomic(bio, KM_IRQ0);
 		}
 		sectors += bio_sectors(bio);
 		i++;
