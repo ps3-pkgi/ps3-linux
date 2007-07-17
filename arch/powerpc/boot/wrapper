@@ -252,7 +252,7 @@ treeboot*)
 ps3)
     # The ps3's loader supports loading gzipped binary images from flash
     # rom to addr zero. The loader enters the image at addr 0x100.  A
-    # bootwrapper overlay is used to arrange for the kernel to be loaded
+    # bootwrapper overlay is use to arrange for the kernel to be loaded
     # to addr zero and to have a suitable bootwrapper entry at 0x100.
     # To construct the rom image, 0x100 bytes from offset 0x100 in the
     # kernel is copied to the bootwrapper symbol __system_reset_kernel.

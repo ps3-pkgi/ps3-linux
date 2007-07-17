@@ -17,7 +17,6 @@
 #	CROSS32_COMPILE is setup as a prefix just like CROSS_COMPILE
 #	in the toplevel makefile.
 
-
 all: $(obj)/zImage
 
 BOOTCFLAGS    := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
@@ -44,8 +43,8 @@ $(addprefix $(obj)/,$(zlib) gunzip_util.o main.o): \
 
 src-wlib := string.S crt0.S stdio.c main.c flatdevtree.c flatdevtree_misc.c \
 		ns16550.c serial.c simple_alloc.c div64.S util.S \
-		gunzip_util.c elf_util.c $(zlib) devtree.c \
-		44x.c ebony.c mv64x60.c mpsc.c mv64x60_i2c.c
+		gunzip_util.c elf_util.c $(zlib) devtree.c oflib.c ofconsole.c \
+		44x.c ebony.c mv64x60.c mpsc.c mv64x60_i2c.c cuboot.c
 src-plat := of.c cuboot-83xx.c cuboot-85xx.c holly.c \
 		cuboot-ebony.c treeboot-ebony.c prpmc2800.c \
 		ps3-head.S ps3-hvcall.S ps3.c
@@ -183,6 +182,11 @@ $(obj)/zImage.initrd.%: vmlinux $(wrapperbits) $(dts)
 $(obj)/zImage.%: vmlinux $(wrapperbits) $(dts)
 	$(call if_changed,wrap,$*,$(dts))
 
+# This cannot be in the root of $(src) as the zImage rule always adds a $(obj)
+# prefix
+$(obj)/vmlinux.strip: vmlinux
+	$(STRIP) -s -R .comment $< -o $@
+
 $(obj)/zImage.iseries: vmlinux
 	$(STRIP) -s -R .comment $< -o $@
 
@@ -204,6 +208,11 @@ $(obj)/treeImage.initrd.%: vmlinux $(dts) $(wrapperbits)
 
 $(obj)/treeImage.%: vmlinux $(dts) $(wrapperbits)
 	$(call if_changed,wrap,treeboot-$*,$(dts))
+
+# If there isn't a platform selected then just strip the vmlinux.
+ifeq (,$(image-y))
+image-y := vmlinux.strip
+endif
 
 $(obj)/zImage:		$(addprefix $(obj)/, $(image-y))
 	@rm -f $@; ln $< $@

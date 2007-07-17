@@ -422,7 +422,7 @@ static int ps3_sys_manager_handle_event(struct ps3_system_bus_device *dev)
 			__func__, __LINE__);
 		ps3_sm_force_power_off = 1;
 		/*
-		 * A memory barrier is used here to sync memory since
+		 * A memory barrier is use here to sync memory since
 		 * ps3_sys_manager_final_restart() could be called on
 		 * another cpu.
 		 */
@@ -438,7 +438,7 @@ static int ps3_sys_manager_handle_event(struct ps3_system_bus_device *dev)
 			__func__, __LINE__);
 		ps3_sm_force_power_off = 0;
 		/*
-		 * A memory barrier is used here to sync memory since
+		 * A memory barrier is use here to sync memory since
 		 * ps3_sys_manager_final_restart() could be called on
 		 * another cpu.
 		 */

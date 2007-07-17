@@ -1695,11 +1695,9 @@ _GLOBAL(__start_initialization_multiplatform)
 2:
 
 	/* Switch off MMU if not already */
-	LOAD_REG_IMMEDIATE(r4, __mmu_off_return - KERNELBASE)
+	LOAD_REG_IMMEDIATE(r4, .__after_prom_start - KERNELBASE)
 	add	r4,r4,r30
 	bl	.__mmu_off
-__mmu_off_return:
-
 	b	.__after_prom_start
 
 _STATIC(__boot_from_prom)
