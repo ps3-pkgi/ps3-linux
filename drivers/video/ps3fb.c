@@ -809,6 +809,7 @@ static int ps3fbd(void *arg)
 {
 	struct fb_info *info = arg;
 
+	set_freezable();
 	while (!kthread_should_stop()) {
 		try_to_freeze();
 		set_current_state(TASK_INTERRUPTIBLE);
