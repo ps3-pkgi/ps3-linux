@@ -427,7 +427,6 @@ struct gelic_net_card {
 	/* gurad dmac descriptor chain*/
 	spinlock_t chain_lock;
 
-	struct net_device_stats netdev_stats;
 	int rx_csum;
 	/* guard tx_dma_progress */
 	spinlock_t tx_dma_lock;
