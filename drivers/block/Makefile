@@ -28,5 +28,6 @@ obj-$(CONFIG_BLK_DEV_CRYPTOLOOP) += cryptoloop.o
 obj-$(CONFIG_VIODASD)		+= viodasd.o
 obj-$(CONFIG_BLK_DEV_SX8)	+= sx8.o
 obj-$(CONFIG_BLK_DEV_UB)	+= ub.o
-
 obj-$(CONFIG_PS3_DISK)		+= ps3disk.o
+
+obj-$(CONFIG_XEN_BLKDEV_FRONTEND)	+= xen-blkfront.o
