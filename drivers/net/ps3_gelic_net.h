@@ -31,15 +31,6 @@
 #include <linux/wireless.h>
 #include <net/ieee80211.h>
 
-#define GELIC_NET_DRV_NAME "Gelic Network Driver"
-#define GELIC_NET_DRV_VERSION "1.0"
-
-#define GELIC_NET_ETHTOOL               /* use ethtool */
-
-/* ioctl */
-#define GELIC_NET_GET_MODE              (SIOCDEVPRIVATE + 0)
-#define GELIC_NET_SET_MODE              (SIOCDEVPRIVATE + 1)
-
 /* descriptors */
 #define GELIC_NET_RX_DESCRIPTORS        128 /* num of descriptors */
 #define GELIC_NET_TX_DESCRIPTORS        128 /* num of descriptors */
