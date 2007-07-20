@@ -728,7 +728,7 @@ static int gelic_net_prepare_tx_descr_v(struct gelic_net_card *card,
 
 /**
  * gelic_net_kick_txdma - enables TX DMA processing
- * @card: card str]ucture
+ * @card: card structure
  * @descr: descriptor address to enable TX processing at
  *
  */
