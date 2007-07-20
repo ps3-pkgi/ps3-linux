@@ -42,7 +42,6 @@ struct ps3rom_private {
 	struct ps3_storage_device *dev;
 	struct scsi_cmnd *curr_cmd;
 };
-#define ps3rom_priv(dev)	((dev)->sbd.core.driver_data)
 
 
 #define LV1_STORAGE_SEND_ATAPI_COMMAND	(1)
@@ -113,8 +112,6 @@ static int fill_from_dev_buffer(struct scsi_cmnd *cmd, const void *buf)
 	for (k = 0, req_len = 0, act_len = 0; k < cmd->use_sg; ++k, ++sgpnt) {
 		if (active) {
 			kaddr = kmap_atomic(sgpnt->page, KM_IRQ0);
-			if (!kaddr)
-				return -1;
 			len = sgpnt->length;
 			if ((req_len + len) > buflen) {
 				active = 0;
@@ -151,8 +148,6 @@ static int fetch_to_dev_buffer(struct scsi_cmnd *cmd, void *buf)
 	sgpnt = cmd->request_buffer;
 	for (k = 0, req_len = 0, fin = 0; k < cmd->use_sg; ++k, ++sgpnt) {
 		kaddr = kmap_atomic(sgpnt->page, KM_IRQ0);
-		if (!kaddr)
-			return -1;
 		len = sgpnt->length;
 		if ((req_len + len) > buflen) {
 			len = buflen - req_len;
@@ -379,7 +374,7 @@ static irqreturn_t ps3rom_interrupt(int irq, void *data)
 		return IRQ_HANDLED;
 	}
 
-	host = ps3rom_priv(dev);
+	host = dev->sbd.core.driver_data;
 	priv = shost_priv(host);
 	cmd = priv->curr_cmd;
 
@@ -469,7 +464,7 @@ static int __devinit ps3rom_probe(struct ps3_system_bus_device *_dev)
 	}
 
 	priv = shost_priv(host);
-	ps3rom_priv(dev) = host;
+	dev->sbd.core.driver_data = host;
 	priv->dev = dev;
 
 	/* One device/LUN per SCSI bus */
@@ -489,7 +484,7 @@ static int __devinit ps3rom_probe(struct ps3_system_bus_device *_dev)
 
 fail_host_put:
 	scsi_host_put(host);
-	ps3rom_priv(dev) = NULL;
+	dev->sbd.core.driver_data = NULL;
 fail_teardown:
 	ps3stor_teardown(dev);
 fail_free_bounce:
@@ -500,12 +495,12 @@ fail_free_bounce:
 static int ps3rom_remove(struct ps3_system_bus_device *_dev)
 {
 	struct ps3_storage_device *dev = to_ps3_storage_device(&_dev->core);
-	struct Scsi_Host *host = ps3rom_priv(dev);
+	struct Scsi_Host *host = dev->sbd.core.driver_data;
 
 	scsi_remove_host(host);
 	ps3stor_teardown(dev);
 	scsi_host_put(host);
-	ps3rom_priv(dev) = NULL;
+	dev->sbd.core.driver_data = NULL;
 	kfree(dev->bounce_buf);
 	return 0;
 }
