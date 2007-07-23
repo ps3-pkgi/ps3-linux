@@ -2141,7 +2141,7 @@ static int aty_bl_get_level_brightness(struct atyfb_par *par, int level)
 
 static int aty_bl_update_status(struct backlight_device *bd)
 {
-	struct atyfb_par *par = class_get_devdata(&bd->class_dev);
+	struct atyfb_par *par = bl_get_data(bd);
 	unsigned int reg = aty_ld_lcd(LCD_MISC_CNTL, par);
 	int level;
 
@@ -2912,10 +2912,6 @@ static int __devinit atyfb_setup_sparc(struct pci_dev *pdev,
 	char prop[128];
 	int node, len, i, j, ret;
 	u32 mem, chip_id;
-
-	/* Do not attach when we have a serial console. */
-	if (!con_is_present())
-		return -ENXIO;
 
 	/*
 	 * Map memory-mapped registers.
