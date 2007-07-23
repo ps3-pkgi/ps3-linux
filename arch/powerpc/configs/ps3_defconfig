@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
-# Linux kernel version: 2.6.22
-# Fri Jul 20 09:58:01 2007
+# Linux kernel version: 2.6.23-rc1
+# Mon Jul 23 12:31:32 2007
 #
 CONFIG_PPC64=y
 
@@ -37,6 +37,7 @@ CONFIG_SYSVIPC_COMPAT=y
 CONFIG_SCHED_NO_NO_OMIT_FRAME_POINTER=y
 CONFIG_ARCH_MAY_HAVE_PC_FDC=y
 CONFIG_PPC_OF=y
+CONFIG_OF=y
 # CONFIG_PPC_UDBG_16550 is not set
 # CONFIG_GENERIC_TBSYNC is not set
 CONFIG_AUDIT_ARCH=y
@@ -379,6 +380,7 @@ CONFIG_PREVENT_FIRMWARE_BUILD=y
 # CONFIG_SYS_HYPERVISOR is not set
 # CONFIG_CONNECTOR is not set
 # CONFIG_MTD is not set
+CONFIG_OF_DEVICE=y
 # CONFIG_PARPORT is not set
 CONFIG_BLK_DEV=y
 # CONFIG_BLK_DEV_FD is not set
@@ -435,12 +437,7 @@ CONFIG_SCSI_WAIT_SCAN=m
 # CONFIG_SCSI_ISCSI_ATTRS is not set
 # CONFIG_SCSI_SAS_ATTRS is not set
 # CONFIG_SCSI_SAS_LIBSAS is not set
-
-#
-# SCSI low-level drivers
-#
-# CONFIG_ISCSI_TCP is not set
-# CONFIG_SCSI_DEBUG is not set
+# CONFIG_SCSI_LOWLEVEL is not set
 # CONFIG_ATA is not set
 # CONFIG_MD is not set
 # CONFIG_MACINTOSH_DRIVERS is not set
@@ -609,6 +606,7 @@ CONFIG_GEN_RTC=y
 #
 # CONFIG_DISPLAY_SUPPORT is not set
 # CONFIG_VGASTATE is not set
+CONFIG_VIDEO_OUTPUT_CONTROL=m
 CONFIG_FB=y
 # CONFIG_FIRMWARE_EDID is not set
 # CONFIG_FB_DDC is not set
@@ -707,6 +705,10 @@ CONFIG_SND_PS3_DEFAULT_START_DELAY=2000
 # System on Chip audio support
 #
 # CONFIG_SND_SOC is not set
+
+#
+# SoC Audio support for SuperH
+#
 
 #
 # Open Sound System
@@ -836,19 +838,7 @@ CONFIG_USB_MON=y
 #
 # CONFIG_USB_GADGET is not set
 # CONFIG_MMC is not set
-
-#
-# LED devices
-#
 # CONFIG_NEW_LEDS is not set
-
-#
-# LED drivers
-#
-
-#
-# LED Triggers
-#
 # CONFIG_EDAC is not set
 
 #
