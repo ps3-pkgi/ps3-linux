@@ -275,7 +275,7 @@ static int ps3_storage_wait_for_device(const struct ps3_repository_device *repo)
 {
 	int result;
 	const u64 notification_dev_id = (u64)-1LL;
-	const unsigned int timeout = HZ;
+	const unsigned int timeout = 5 * HZ;
 	u64 lpar;
 	u64 tag;
 	struct {
