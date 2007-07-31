@@ -934,7 +934,7 @@ static int gelic_net_decode_one_descr(struct gelic_net_card *card)
 		goto refill;
 	}
 	/*
-	 * descriptors any other than FRAME_END here should
+	 * descriptoers any other than FRAME_END here should
 	 * be treated as error.
 	 */
 	if (status != GELIC_NET_DESCR_FRAME_END) {
@@ -958,7 +958,7 @@ refill:
 
 	/*
 	 * this call can fail, but for now, just leave this
-	 * descriptor without skb
+	 * decriptor without skb
 	 */
 	gelic_net_prepare_rx_descr(card, descr);
 

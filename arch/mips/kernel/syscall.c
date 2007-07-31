@@ -12,6 +12,7 @@
 #include <linux/errno.h>
 #include <linux/linkage.h>
 #include <linux/mm.h>
+#include <linux/fs.h>
 #include <linux/smp.h>
 #include <linux/mman.h>
 #include <linux/ptrace.h>
@@ -167,14 +168,14 @@ sys_mmap2(unsigned long addr, unsigned long len, unsigned long prot,
 }
 
 save_static_function(sys_fork);
-__attribute_used__ noinline static int
+static int __used noinline
 _sys_fork(nabi_no_regargs struct pt_regs regs)
 {
 	return do_fork(SIGCHLD, regs.regs[29], &regs, 0, NULL, NULL);
 }
 
 save_static_function(sys_clone);
-__attribute_used__ noinline static int
+static int __used noinline
 _sys_clone(nabi_no_regargs struct pt_regs regs)
 {
 	unsigned long clone_flags;
