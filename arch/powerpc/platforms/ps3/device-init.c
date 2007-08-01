@@ -275,7 +275,7 @@ static int ps3_storage_wait_for_device(const struct ps3_repository_device *repo)
 {
 	int result;
 	const u64 notification_dev_id = (u64)-1LL;
-	const unsigned int timeout = 5 * HZ;
+	const unsigned int timeout = HZ;
 	u64 lpar;
 	u64 tag;
 	struct {
@@ -414,6 +414,9 @@ static int ps3_setup_storage_dev(const struct ps3_repository_device *repo,
 	pr_debug("%s:%u: index %u:%u: port %lu blk_size %lu num_blocks %lu "
 		 "num_regions %u\n", __func__, __LINE__, repo->bus_index,
 		 repo->dev_index, port, blk_size, num_blocks, num_regions);
+
+	if(!num_regions)
+		return -EAGAIN;
 
 	p = kzalloc(sizeof(struct ps3_storage_device) +
 		    num_regions * sizeof(struct ps3_storage_region),
@@ -616,21 +619,25 @@ static int ps3_register_repository_device(
 	case PS3_DEV_TYPE_STOR_DISK:
 		result = ps3_setup_storage_dev(repo, PS3_MATCH_ID_STOR_DISK);
 
-		/* Some devices are not accessable from the Other OS lpar. */
 		if (result == -ENODEV) {
+			/* Some are not accessable from the Other OS lpar. */
 			result = 0;
 			pr_debug("%s:%u: not accessable\n", __func__,
 				 __LINE__);
-		}
-
-		if (result)
+		} else  if (result == -EAGAIN) {
+			pr_debug("%s:%u: device not ready\n", __func__,
+				 __LINE__);
+		} else if (result)
 			pr_debug("%s:%u ps3_setup_storage_dev failed\n",
 				 __func__, __LINE__);
 		break;
 
 	case PS3_DEV_TYPE_STOR_ROM:
 		result = ps3_setup_storage_dev(repo, PS3_MATCH_ID_STOR_ROM);
-		if (result)
+		if (result == -EAGAIN) {
+			pr_debug("%s:%u: device not ready\n", __func__,
+				 __LINE__);
+		} else if (result)
 			pr_debug("%s:%u ps3_setup_storage_dev failed\n",
 				 __func__, __LINE__);
 		break;
@@ -682,9 +689,15 @@ static int ps3_probe_thread(void *data)
 			else {
 				pr_debug("%s:%u: found device\n", __func__,
 					__LINE__);
-				ps3_register_repository_device(repo);
-				ps3_repository_bump_device(repo);
-				ms = 250;
+				result = ps3_register_repository_device(repo);
+
+				if (result == -EAGAIN) {
+					ms = 250;
+					break;
+				} else {
+					ps3_repository_bump_device(repo);
+					ms = 250;
+				}
 			}
 		} while (!result);
 
