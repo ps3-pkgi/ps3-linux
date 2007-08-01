@@ -685,6 +685,8 @@ static int __init init_spu_base(void)
 	mutex_unlock(&spu_full_list_mutex);
 	spu_add_sysdev_attr(&attr_stat);
 
+	spu_init_affinity();
+
 	return 0;
 
  out_unregister_sysdev_class:
