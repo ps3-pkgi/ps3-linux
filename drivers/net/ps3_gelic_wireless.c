@@ -1319,11 +1319,6 @@ static int gelicw_get_mode(struct net_device *netdev,
 	return 0;
 }
 
-static inline int gelicw_qual2level(int qual)
-{
-	return (qual * 4 - 820)/10; /* FIXME: dummy */
-}
-
 static int gelicw_get_range(struct net_device *netdev,
 			   struct iw_request_info *info,
 			   union iwreq_data *wrqu, char *extra)
@@ -1350,8 +1345,8 @@ static int gelicw_get_range(struct net_device *netdev,
 		range->bitrate[i] = bitrate_list[i];
 
 	range->max_qual.qual = 100; /* relative value */
-	range->max_qual.level = 0;
-	range->avg_qual.qual = 50;
+	range->max_qual.level = 100;
+	range->avg_qual.qual = 0;
 	range->avg_qual.level = 0;
 	range->sensitivity = 0;
 
@@ -1517,10 +1512,11 @@ static char *gelicw_translate_scan(struct net_device *netdev,
 
 	/* QUAL */
 	iwe.cmd = IWEVQUAL;
-	iwe.u.qual.updated  = IW_QUAL_QUAL_UPDATED |
-			IW_QUAL_LEVEL_UPDATED | IW_QUAL_NOISE_INVALID;
-	iwe.u.qual.qual = list->rssi;
-	iwe.u.qual.level = gelicw_qual2level(list->rssi);
+	iwe.u.qual.updated  = IW_QUAL_ALL_UPDATED |
+			IW_QUAL_QUAL_INVALID | IW_QUAL_NOISE_INVALID;
+	iwe.u.qual.level = list->rssi;
+	iwe.u.qual.qual = 0;
+	iwe.u.qual.noise = 0;
 	start = iwe_stream_add_event(start, stop, &iwe, IW_EV_QUAL_LEN);
 
 	/* RATE */
@@ -1974,20 +1970,22 @@ static struct iw_statistics *gelicw_get_wireless_stats(struct net_device *netdev
 
 	dev_dbg(ntodev(netdev), "wx:wireless_stats\n");
 	if (w->state < GELICW_STATE_ASSOCIATED) {
-		wstats.qual.updated  = IW_QUAL_QUAL_UPDATED |
-				IW_QUAL_LEVEL_UPDATED | IW_QUAL_NOISE_INVALID;
+		wstats.qual.updated  = IW_QUAL_ALL_UPDATED |
+				IW_QUAL_QUAL_INVALID | IW_QUAL_NOISE_INVALID;
 		wstats.qual.qual = 0;
 		wstats.qual.level = 0;
+		wstats.qual.noise = 0;
 		return &wstats;
 	}
 	init_completion(&w->rssi_done);
 	schedule_delayed_work(&w->work_rssi, 0);
 
 	wait_for_completion_interruptible(&w->rssi_done);
-	wstats.qual.updated  = IW_QUAL_QUAL_UPDATED |
-			IW_QUAL_LEVEL_UPDATED | IW_QUAL_NOISE_INVALID;
-	wstats.qual.qual = w->rssi;
-	wstats.qual.level = gelicw_qual2level(w->rssi);
+	wstats.qual.updated  = IW_QUAL_ALL_UPDATED |
+			IW_QUAL_QUAL_INVALID | IW_QUAL_NOISE_INVALID;
+	wstats.qual.level = w->rssi;
+	wstats.qual.qual = 0;
+	wstats.qual.noise = 0;
 
 	return &wstats;
 }
