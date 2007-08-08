@@ -281,12 +281,13 @@ static int ps3_storage_wait_for_device(const struct ps3_repository_device *repo)
 	u64 tag;
 	void *buf;
 	enum ps3_notify_type {
-		notify_device_ready = 1,
+		notify_device_ready = 0,
+		notify_region_probe = 1,
 		notify_region_update = 2,
 	};
 	struct {
 		u64 operation_code;	/* must be zero */
-		u64 event_mask;		/* OR of ps3_notify_type */
+		u64 event_mask;		/* OR of 1UL << enum ps3_notify_type */
 	} *notify_cmd;
 	struct {
 		u64 event_type;		/* enum ps3_notify_type */
@@ -297,7 +298,7 @@ static int ps3_storage_wait_for_device(const struct ps3_repository_device *repo)
 	} *notify_event;
 
 	pr_debug(" -> %s:%u: (%u:%u:%u)\n", __func__, __LINE__, repo->bus_id,
-		repo->dev_id, repo->dev_type);
+		 repo->dev_id, repo->dev_type);
 
 	buf = kzalloc(512, GFP_KERNEL);
 	if (!buf)
@@ -317,7 +318,7 @@ static int ps3_storage_wait_for_device(const struct ps3_repository_device *repo)
 	/* Setup and write the request for device notification. */
 
 	notify_cmd->operation_code = 0; /* must be zero */
-	notify_cmd->event_mask = notify_region_update;
+	notify_cmd->event_mask = 1UL << notify_region_probe;
 
 	result = lv1_storage_write(notification_dev_id, 0, 0, 1, 0, lpar,
 				   &tag);
@@ -359,11 +360,11 @@ static int ps3_storage_wait_for_device(const struct ps3_repository_device *repo)
 		}
 
 		pr_debug("%s:%d: notify event (%u:%u:%u): event_type 0x%lx, "
-			"port %lu\n", __func__, __LINE__, repo->bus_index,
-			repo->dev_index, repo->dev_type,
-			notify_event->event_type, notify_event->dev_port);
+			 "port %lu\n", __func__, __LINE__, repo->bus_index,
+			 repo->dev_index, repo->dev_type,
+			 notify_event->event_type, notify_event->dev_port);
 
-		if (notify_event->event_type != notify_device_ready ||
+		if (notify_event->event_type != notify_region_probe ||
 		    notify_event->bus_id != repo->bus_id) {
 			pr_debug("%s:%u: bad notify_event: event %lu, "
 				 "dev_id %lu, dev_type %lu\n",
@@ -376,7 +377,7 @@ static int ps3_storage_wait_for_device(const struct ps3_repository_device *repo)
 		    notify_event->dev_type == repo->dev_type) {
 			pr_debug("%s:%u: device ready (%u:%u:%u)\n", __func__,
 				 __LINE__, repo->bus_index, repo->dev_index,
-				repo->dev_type);
+				 repo->dev_type);
 			error = 0;
 			break;
 		}
@@ -419,8 +420,8 @@ static int ps3_setup_storage_dev(const struct ps3_repository_device *repo,
 
 	pr_debug("%s:%u: (%u:%u:%u): port %lu blk_size %lu num_blocks %lu "
 		 "num_regions %u\n", __func__, __LINE__, repo->bus_index,
-		repo->dev_index, repo->dev_type, port, blk_size, num_blocks,
-		num_regions);
+		 repo->dev_index, repo->dev_type, port, blk_size, num_blocks,
+		 num_regions);
 
 	if (!num_regions)
 		return -EAGAIN;
@@ -694,17 +695,15 @@ static int ps3_probe_thread(void *data)
 					__func__, __LINE__);
 			else {
 				pr_debug("%s:%u: found device (%u:%u:%u)\n",
-					__func__, __LINE__, repo->bus_index,
-					repo->dev_index, repo->dev_type);
+					 __func__, __LINE__, repo->bus_index,
+					 repo->dev_index, repo->dev_type);
 				result = ps3_register_repository_device(repo);
 
-				if (result == -EAGAIN) {
-					ms = 250;
+				ms = 250;
+				if (result == -EAGAIN)
 					break;
-				} else {
-					ps3_repository_bump_device(repo);
-					ms = 250;
-				}
+
+				ps3_repository_bump_device(repo);
 			}
 		} while (!result);
 

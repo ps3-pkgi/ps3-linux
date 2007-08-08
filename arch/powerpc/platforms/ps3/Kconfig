@@ -13,7 +13,7 @@ config PPC_PS3
 	  and other platforms using the PS3 hypervisor.  Enabling this
 	  option will allow building otheros.bld, a kernel image suitable
 	  for programming into flash memory, and vmlinux, a kernel image
-	  suitable loading via kexec.
+	  suitable for loading via kexec.
 
 menu "PS3 Platform Options"
 	depends on PPC_PS3
