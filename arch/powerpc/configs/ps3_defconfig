@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.23-rc3
-# Wed Aug 15 20:33:12 2007
+# Thu Aug 16 10:42:39 2007
 #
 CONFIG_PPC64=y
 
@@ -444,7 +444,8 @@ CONFIG_NETDEVICES=y
 # CONFIG_MACVLAN is not set
 # CONFIG_EQUALIZER is not set
 # CONFIG_TUN is not set
-# CONFIG_NET_ETHERNET is not set
+# CONFIG_PHYLIB is not set
+CONFIG_NET_ETHERNET=y
 CONFIG_MII=m
 CONFIG_NETDEV_1000=y
 CONFIG_GELIC_NET=y
@@ -466,6 +467,7 @@ CONFIG_USB_PEGASUS=m
 # CONFIG_USB_RTL8150 is not set
 CONFIG_USB_USBNET_MII=m
 CONFIG_USB_USBNET=m
+CONFIG_USB_NET_AX8817X=m
 # CONFIG_USB_NET_CDCETHER is not set
 # CONFIG_USB_NET_DM9601 is not set
 # CONFIG_USB_NET_GL620A is not set
