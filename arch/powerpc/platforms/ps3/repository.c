@@ -349,6 +349,17 @@ int ps3_repository_find_device(struct ps3_repository_device *repo)
 		return result;
 	}
 
+	/*
+	 * A storage device may show up as PS3_DEV_TYPE_STOR_DUMMY before the
+	 * hypervisor has identified its real type
+	 */
+	if (tmp.bus_type == PS3_BUS_TYPE_STORAGE &&
+	    tmp.dev_type == PS3_DEV_TYPE_STOR_DUMMY) {
+		pr_debug("%s:%u storage device not ready\n", __func__,
+			 __LINE__);
+		return -ENODEV;
+	}
+
 	result = ps3_repository_read_dev_id(tmp.bus_index, tmp.dev_index,
 		&tmp.dev_id);
 
