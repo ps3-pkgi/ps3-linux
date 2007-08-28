@@ -553,7 +553,6 @@ static int gelic_net_stop(struct net_device *netdev)
 #ifdef CONFIG_GELIC_WIRELESS
 	gelicw_down(netdev);
 #endif
-	netif_poll_disable(netdev);
 	netif_stop_queue(netdev);
 
 	/* turn off DMA, force end */
@@ -681,7 +680,8 @@ static int gelic_net_prepare_tx_descr_v(struct gelic_net_card *card,
 
 	if (card->vlan_index != -1) {
 		struct sk_buff *skb_tmp;
-		skb_tmp = gelic_put_vlan_tag(skb, card->vlan_id[card->vlan_index]);
+		skb_tmp = gelic_put_vlan_tag(skb,
+					     card->vlan_id[card->vlan_index]);
 		if (!skb_tmp)
 			return -ENOMEM;
 		skb = skb_tmp;
@@ -724,7 +724,7 @@ static int gelic_net_kick_txdma(struct gelic_net_card *card,
 
 	if (gelic_net_get_descr_status(descr) == GELIC_NET_DESCR_CARDOWNED) {
 		card->tx_dma_progress = 1;
-		status = lv1_net_start_tx_dma(bus_id(card),dev_id(card),
+		status = lv1_net_start_tx_dma(bus_id(card), dev_id(card),
 					      descr->bus_addr, 0);
 		if (status)
 			dev_info(ctodev(card), "lv1_net_start_txdma failed," \
