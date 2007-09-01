@@ -9,7 +9,7 @@ NA=no support planned
 CONFIG_USB_EHCI_HCD		o	o	o	o	o
 CONFIG_USB_OHCI_HCD		o	o	o	o	o
 CONFIG_GELIC_NET		o	o	o	o	o
-CONFIG_FB_PS3			o	o(2)	o	o	x(3)
+CONFIG_FB_PS3			o	o	o	o	x
 CONFIG_SND_PS3			o	o	o	o	o
 CONFIG_PS3_PS3AV		o	o	o	o	o
 CONFIG_PS3_SYS_MANAGER		o	o	o	o	NA(1)
@@ -23,7 +23,7 @@ CONFIG_SPU_FS			o	o	o	o	o
 -- commands --
 
 64 bit kexec	o
-32 bit kexec	x(4)
+32 bit kexec	x(2)
 reboot:  	o
 halt		o
 shutdown	o
@@ -33,9 +33,7 @@ power button	o
 -- notes --
 
 (1) loaded as 'permanent'.
-(2) fbcon trouble, temp fix: ps3-hack-fbcon-shutdown.diff
-(3) need to fix fbcon to support remove
-(4) not working, WIP
+(2) not working, WIP
 
 --------------------------------------------------------------------------------
 * Bus layout
