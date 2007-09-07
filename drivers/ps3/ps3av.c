@@ -541,7 +541,7 @@ static void ps3av_set_videomode_packet(u32 id)
 
 static void ps3av_set_videomode_cont(u32 id, u32 old_id)
 {
-	static int vesa = 0;
+	static int vesa;
 	int res;
 
 	/* video signal off */
