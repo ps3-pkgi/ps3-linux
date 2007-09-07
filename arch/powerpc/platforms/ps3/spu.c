@@ -420,6 +420,19 @@ static int ps3_init_affinity(void)
 	return 0;
 }
 
+/**
+ * ps3_enable_spu - Type of spe to create.
+ *
+ * An outstanding enhancement for the PS3 would be to add a guard to check
+ * for incorrect access to the spu problem state when the spu context is
+ * disabled.  This check could be implemented with a flag added to the spu
+ * context that would inhibit mapping problem state pages, and a routine
+ * to unmap spu problem state pages.  When the spu is enabled with
+ * ps3_enable_spu() the flag would be set allowing pages to be mapped,
+ * and when the spu is disabled with ps3_disable_spu() the flag would be
+ * cleared and the mapped problem state pages would be unmapped.
+ */
+
 static int ps3_enable_spu(struct spu_context *ctx)
 {
 	return -ENOSYS;
