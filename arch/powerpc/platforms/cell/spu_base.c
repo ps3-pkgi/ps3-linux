@@ -274,7 +274,6 @@ spu_irq_class_0_bottom(struct spu *spu)
 	if (stat & 4) /* error on SPU */
 		__spu_trap_error(spu);
 
-	spu_int_stat_clear(spu, 0, stat);
 	spin_unlock_irqrestore(&spu->register_lock, flags);
 
 	return (stat & 0x7) ? -EIO : 0;
