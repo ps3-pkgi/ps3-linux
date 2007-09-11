@@ -421,7 +421,7 @@ static int ps3_init_affinity(void)
 }
 
 /**
- * ps3_enable_spu - Type of spe to create.
+ * ps3_enable_spu - Enable SPU run control.
  *
  * An outstanding enhancement for the PS3 would be to add a guard to check
  * for incorrect access to the spu problem state when the spu context is
@@ -531,8 +531,6 @@ static void mfc_sr1_set(struct spu *spu, u64 sr1)
 
 	static const u64 allowed = ~(MFC_STATE1_LOCAL_STORAGE_DECODE_MASK
 		| MFC_STATE1_PROBLEM_STATE_MASK);
-
-	sr1 |= MFC_STATE1_MASTER_RUN_CONTROL_MASK;
 
 	BUG_ON((sr1 & allowed) != (spu_pdata(spu)->cache.sr1 & allowed));
 
