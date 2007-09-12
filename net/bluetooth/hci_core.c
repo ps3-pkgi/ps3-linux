@@ -186,6 +186,7 @@ static void hci_init_req(struct hci_dev *hdev, unsigned long opt)
 {
 	struct sk_buff *skb;
 	__le16 param;
+	__u8 flt_type;
 
 	BT_DBG("%s %ld", hdev->name, opt);
 
@@ -236,11 +237,8 @@ static void hci_init_req(struct hci_dev *hdev, unsigned long opt)
 	/* Optional initialization */
 
 	/* Clear Event Filters */
-	{
-		struct hci_cp_set_event_flt cp;
-		cp.flt_type  = HCI_FLT_CLEAR_ALL;
-		hci_send_cmd(hdev, OGF_HOST_CTL, OCF_SET_EVENT_FLT, sizeof(cp), &cp);
-	}
+	flt_type = HCI_FLT_CLEAR_ALL;
+	hci_send_cmd(hdev, OGF_HOST_CTL, OCF_SET_EVENT_FLT, 1, &flt_type);
 
 #if defined(CONFIG_PPC_PS3)
 	/*
