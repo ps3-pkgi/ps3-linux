@@ -433,15 +433,13 @@ static int ps3_init_affinity(void)
  * cleared and the mapped problem state pages would be unmapped.
  */
 
-static int ps3_enable_spu(struct spu_context *ctx)
+static void ps3_enable_spu(struct spu_context *ctx)
 {
-	return -ENOSYS;
 }
 
-static int ps3_disable_spu(struct spu_context *ctx)
+static void ps3_disable_spu(struct spu_context *ctx)
 {
 	ctx->ops->runcntl_stop(ctx);
-	return -ENOSYS;
 }
 
 const struct spu_management_ops spu_management_ps3_ops = {

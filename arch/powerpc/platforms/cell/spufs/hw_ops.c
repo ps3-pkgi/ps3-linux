@@ -224,7 +224,7 @@ static void spu_hw_runcntl_stop(struct spu_context *ctx)
 {
 	spin_lock_irq(&ctx->spu->register_lock);
 	out_be32(&ctx->spu->problem->spu_runcntl_RW, SPU_RUNCNTL_STOP);
-	while(in_be32(&ctx->spu->problem->spu_status_R) & SPU_STATUS_RUNNING)
+	while (in_be32(&ctx->spu->problem->spu_status_R) & SPU_STATUS_RUNNING)
 		cpu_relax();
 	spin_unlock_irq(&ctx->spu->register_lock);
 }

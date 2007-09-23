@@ -370,16 +370,14 @@ static int of_destroy_spu(struct spu *spu)
 	return 0;
 }
 
-static int enable_spu_by_master_run(struct spu_context *ctx)
+static void enable_spu_by_master_run(struct spu_context *ctx)
 {
 	ctx->ops->master_start(ctx);
-	return 0;
 }
 
-static int disable_spu_by_master_run(struct spu_context *ctx)
+static void disable_spu_by_master_run(struct spu_context *ctx)
 {
 	ctx->ops->master_stop(ctx);
-	return 0;
 }
 
 /* Hardcoded affinity idxs for qs20 */

@@ -179,8 +179,8 @@ struct spu_management_ops {
 	int (*enumerate_spus)(int (*fn)(void *data));
 	int (*create_spu)(struct spu *spu, void *data);
 	int (*destroy_spu)(struct spu *spu);
-	int (*enable_spu)(struct spu_context *ctx);
-	int (*disable_spu)(struct spu_context *ctx);
+	void (*enable_spu)(struct spu_context *ctx);
+	void (*disable_spu)(struct spu_context *ctx);
 	int (*init_affinity)(void);
 };
 
@@ -210,16 +210,16 @@ spu_init_affinity (void)
 	return spu_management_ops->init_affinity();
 }
 
-static inline int
+static inline void
 spu_enable_spu (struct spu_context *ctx)
 {
-	return spu_management_ops->enable_spu(ctx);
+	spu_management_ops->enable_spu(ctx);
 }
 
-static inline int
+static inline void
 spu_disable_spu (struct spu_context *ctx)
 {
-	return spu_management_ops->disable_spu(ctx);
+	spu_management_ops->disable_spu(ctx);
 }
 
 /*
