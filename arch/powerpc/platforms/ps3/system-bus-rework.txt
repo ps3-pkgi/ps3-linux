@@ -15,7 +15,7 @@ CONFIG_PS3_PS3AV		o	o	o	o	o
 CONFIG_PS3_SYS_MANAGER		o	o	o	o	NA(1)
 CONFIG_PS3_VUART		o	o	o	o	o
 CONFIG_PS3_FLASH		o	o	o	o	o
-CONFIG_PS3_DISK			o	o	o	o
+CONFIG_PS3_DISK			o	o	o	o	o
 CONFIG_PS3_ROM			o	o	o	o	o
 CONFIG_PS3_STORAGE		o	o	o	o	o
 CONFIG_SPU_FS			o	o	o	o	o
