@@ -56,6 +56,7 @@
 #define GPU_CMD_BUF_SIZE			(64 * 1024)
 #define GPU_IOIF				(0x0d000000UL)
 #define GPU_ALIGN_UP(x)				_ALIGN_UP((x), 64)
+#define GPU_MAX_LINE_LENGTH			(65536 - 64)
 
 #define PS3FB_FULL_MODE_BIT			0x80
 
@@ -363,10 +364,12 @@ found:
 	/* Cropped broadcast modes use the full line length */
 	*ddr_line_length = ps3fb_modedb[i < 10 ? i + 13 : i].xres * BPP;
 
-	if (ps3_compare_firmware_version(1, 9, 0) >= 0)
+	if (ps3_compare_firmware_version(1, 9, 0) >= 0) {
 		*xdr_line_length = GPU_ALIGN_UP(max(var->xres,
 						    var->xres_virtual) * BPP);
-	else
+		if (*xdr_line_length > GPU_MAX_LINE_LENGTH)
+			*xdr_line_length = GPU_MAX_LINE_LENGTH;
+	} else
 		*xdr_line_length = *ddr_line_length;
 
 	/* Full broadcast modes have the full mode bit set */
@@ -395,9 +398,10 @@ static const struct fb_videomode *ps3fb_default_mode(int id)
 	return &ps3fb_modedb[mode - 1];
 }
 
-void ps3fb_sync_image(struct device *dev, u64 frame_offset, u64 dst_offset,
-		      u64 src_offset, u32 width, u32 height,
-		      u32 dst_line_length, u32 src_line_length)
+static void ps3fb_sync_image(struct device *dev, u64 frame_offset,
+			     u64 dst_offset, u64 src_offset, u32 width,
+			     u32 height, u32 dst_line_length,
+			     u32 src_line_length)
 {
 	int status;
 	u64 line_length;
