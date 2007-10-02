@@ -111,7 +111,7 @@ struct os_area_params {
 /**
  * struct saved_params - Static working copies of data from the PS3 'os area'.
  *
- * For the convinience of the guest, the HV makes a copy of the os area in
+ * For the convenience of the guest, the HV makes a copy of the os area in
  * flash to a high address in the boot memory region and then puts that RAM
  * address and the byte count into the repository for retreval by the guest.
  * We copy the data we want into a static variable and allow the memory setup
