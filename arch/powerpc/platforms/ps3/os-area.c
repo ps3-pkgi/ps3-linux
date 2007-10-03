@@ -38,7 +38,7 @@ enum {
  * struct os_area_header - os area header segment.
  * @magic_num: Always 'cell_ext_os_area'.
  * @hdr_version: Header format version number.
- * @other_os_data_offset: Starting segment number of other os data area.
+ * @os_area_offset: Starting segment number of os image area.
  * @ldr_area_offset: Starting segment number of bootloader image area.
  * @ldr_format: HEADER_LDR_FORMAT flag.
  * @ldr_size: Size of bootloader image in bytes.
@@ -52,7 +52,7 @@ enum {
 struct os_area_header {
 	s8 magic_num[16];
 	u32 hdr_version;
-	u32 other_os_data_offset;
+	u32 os_area_offset;
 	u32 ldr_area_offset;
 	u32 _reserved_1;
 	u32 ldr_format;
@@ -110,43 +110,42 @@ struct os_area_params {
 
 /**
  * struct saved_params - Static working copies of data from the PS3 'os area'.
- *
- * For the convenience of the guest, the HV makes a copy of the os area in
- * flash to a high address in the boot memory region and then puts that RAM
- * address and the byte count into the repository for retreval by the guest.
- * We copy the data we want into a static variable and allow the memory setup
- * by the HV to be claimed by the lmb manager.
  */
 
 struct saved_params {
-	/* param 0 */
+	unsigned int valid;
 	s64 rtc_diff;
 	unsigned int av_multi_out;
-	unsigned int ctrl_button;
-	/* param 1 */
-	u8 static_ip_addr[4];
-	u8 network_mask[4];
-	u8 default_gateway[4];
-	/* param 2 */
-	u8 dns_primary[4];
-	u8 dns_secondary[4];
-} static saved_params;
+};
+
+/**
+ * saved_params - The global struct saved_params instance.
+ *
+ * The ps3 rtc maintains a value that approximates seconds since
+ * 2000-01-01 00:00:00 UTC.  Returns the exact number of seconds from
+ * 1970 to 2000 when saved_params.rtc_diff has not been properlyset up.
+ */
+
+static struct saved_params saved_params = {
+	.rtc_diff = 946684800UL,
+	.av_multi_out = 0,
+};
 
 #define dump_header(_a) _dump_header(_a, __func__, __LINE__)
 static void _dump_header(const struct os_area_header *h, const char *func,
 	int line)
 {
-	pr_debug("%s:%d: h.magic_num:      '%s'\n", func, line,
+	pr_debug("%s:%d: h.magic_num:         '%s'\n", func, line,
 		h->magic_num);
-	pr_debug("%s:%d: h.hdr_version:     %u\n", func, line,
+	pr_debug("%s:%d: h.hdr_version:       %u\n", func, line,
 		h->hdr_version);
-	pr_debug("%s:%d: h.other_os_data_offset:  %u\n", func, line,
-		h->other_os_data_offset);
+	pr_debug("%s:%d: h.os_area_offset:   %u\n", func, line,
+		h->os_area_offset);
 	pr_debug("%s:%d: h.ldr_area_offset: %u\n", func, line,
 		h->ldr_area_offset);
-	pr_debug("%s:%d: h.ldr_format:      %u\n", func, line,
+	pr_debug("%s:%d: h.ldr_format:        %u\n", func, line,
 		h->ldr_format);
-	pr_debug("%s:%d: h.ldr_size:        %xh\n", func, line,
+	pr_debug("%s:%d: h.ldr_size:          %xh\n", func, line,
 		h->ldr_size);
 }
 
@@ -188,7 +187,7 @@ static int __init verify_header(const struct os_area_header *header)
 		return -1;
 	}
 
-	if (header->other_os_data_offset > header->ldr_area_offset) {
+	if (header->os_area_offset > header->ldr_area_offset) {
 		pr_debug("%s:%d offsets failed\n", __func__, __LINE__);
 		return -1;
 	}
@@ -196,59 +195,74 @@ static int __init verify_header(const struct os_area_header *header)
 	return 0;
 }
 
-int __init ps3_os_area_init(void)
+/**
+ * ps3_os_area_save_params - Copy data from os area mirror to @saved_params.
+ *
+ * For the convenience of the guest, the HV makes a copy of the os area in
+ * flash to a high address in the boot memory region and then puts that RAM
+ * address and the byte count into the repository for retreval by the guest.
+ * We copy the data we want into a static variable and allow the memory setup
+ * by the HV to be claimed by the lmb manager.
+ */
+
+void __init ps3_os_area_save_params(void)
 {
 	int result;
 	u64 lpar_addr;
 	unsigned int size;
-	const struct os_area_header *header;
-	const struct os_area_params *params;
+	struct os_area_header *header;
+	struct os_area_params *params;
+
+	pr_debug(" -> %s:%d\n", __func__, __LINE__);
 
 	result = ps3_repository_read_boot_dat_info(&lpar_addr, &size);
 
 	if (result) {
 		pr_debug("%s:%d ps3_repository_read_boot_dat_info failed\n",
 			__func__, __LINE__);
-		return result;
+		return;
 	}
 
-	header = (const struct os_area_header *)__va(lpar_addr);
-	params = (const struct os_area_params *)__va(lpar_addr
-		+ OS_AREA_SEGMENT_SIZE);
+	header = (struct os_area_header *)__va(lpar_addr);
+	params = (struct os_area_params *)__va(lpar_addr + OS_AREA_SEGMENT_SIZE);
 
 	result = verify_header(header);
 
 	if (result) {
 		pr_debug("%s:%d verify_header failed\n", __func__, __LINE__);
 		dump_header(header);
-		return -EIO;
+		return;
 	}
 
 	dump_header(header);
 	dump_params(params);
 
-	saved_params.rtc_diff = params->rtc_diff;
+	if(params->rtc_diff)
+		saved_params.rtc_diff = params->rtc_diff;
 	saved_params.av_multi_out = params->av_multi_out;
-	saved_params.ctrl_button = params->ctrl_button;
-	memcpy(saved_params.static_ip_addr, params->static_ip_addr, 4);
-	memcpy(saved_params.network_mask, params->network_mask, 4);
-	memcpy(saved_params.default_gateway, params->default_gateway, 4);
-	memcpy(saved_params.dns_secondary, params->dns_secondary, 4);
+	saved_params.valid = 1;
 
-	return result;
+	memset(header, 0, sizeof(*header));
+
+	pr_debug(" <- %s:%d\n", __func__, __LINE__);
 }
 
 /**
- * ps3_os_area_rtc_diff - Returns the ps3 rtc diff value.
- *
- * The ps3 rtc maintains a value that approximates seconds since
- * 2000-01-01 00:00:00 UTC.  Returns the exact number of seconds from 1970 to
- * 2000 when saved_params.rtc_diff has not been properly set up.
+ * ps3_os_area_get_rtc_diff - Returns the rtc diff value.
  */
 
-u64 ps3_os_area_rtc_diff(void)
+u64 ps3_os_area_get_rtc_diff(void)
 {
-	return saved_params.rtc_diff ? saved_params.rtc_diff : 946684800UL;
+	return saved_params.rtc_diff;
+}
+
+/**
+ * ps3_os_area_set_rtc_diff - Set the rtc diff value.
+ */
+
+void ps3_os_area_set_rtc_diff(u64 rtc_diff)
+{
+	saved_params.rtc_diff = rtc_diff;
 }
 
 /**
