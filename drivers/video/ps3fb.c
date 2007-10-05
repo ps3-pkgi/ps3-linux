@@ -138,7 +138,6 @@ struct ps3fb_par {
 	int mode_id, new_mode_id;
 	int res_index;
 	unsigned int num_frames;	/* num of frame buffers */
-
 	unsigned int width;
 	unsigned int height;
 	unsigned long full_offset;	/* start of fullscreen DDR fb */
@@ -465,7 +464,7 @@ static int ps3fb_sync(struct fb_info *info, u32 frame)
 
 out:
 	release_console_sem();
-	return 0;
+	return error;
 }
 
 static int ps3fb_open(struct fb_info *info, int user)

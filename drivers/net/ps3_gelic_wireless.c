@@ -176,8 +176,12 @@ static int gelicw_cmd_get_ch_info(struct net_device *netdev)
 			GELICW_GET_INFO, 0, 0 , 0,
 			&ch_info, &val);
 	if (status) {
-		dev_dbg(ntodev(netdev), "GELICW_GET_INFO failed:%d\n", status);
-		w->ch_info = CH_INFO_FAIL;
+		if (status == LV1_NO_ENTRY)
+			w->ch_info = 0x07ff; /* 11ch */
+		else {
+			dev_dbg(ntodev(netdev), "GELICW_GET_INFO failed:%d\n", status);
+			w->ch_info = CH_INFO_FAIL;
+		}
 	} else {
 		dev_dbg(ntodev(netdev), "ch_info:%lx val:%lx\n", ch_info, val);
 		w->ch_info = ch_info >> 48; /* MSB 16bit shows supported channnels */
@@ -1367,8 +1371,8 @@ static int gelicw_get_range(struct net_device *netdev,
 	for (i = 0; i < ARRAY_SIZE(freq_list); i++)
 		if (w->ch_info & (1 << i)) {
 			range->freq[num_ch].i = i + 1;
-			range->freq[num_ch].m = freq_list[i] * 100000;
-			range->freq[num_ch].e = 1;
+			range->freq[num_ch].m = freq_list[i];
+			range->freq[num_ch].e = 6;
 			if (++num_ch == IW_MAX_FREQUENCIES)
 				break;
 		}
@@ -1496,8 +1500,8 @@ static char *gelicw_translate_scan(struct net_device *netdev,
 
 	/* FREQ */
 	iwe.cmd = SIOCGIWFREQ;
-	iwe.u.freq.m = list->channel;
-	iwe.u.freq.e = 0;
+	iwe.u.freq.m = freq_list[list->channel - 1];
+	iwe.u.freq.e = 6;
 	iwe.u.freq.i = 0;
 	start = iwe_stream_add_event(start, stop, &iwe, IW_EV_FREQ_LEN);
 
@@ -1515,7 +1519,7 @@ static char *gelicw_translate_scan(struct net_device *netdev,
 	iwe.u.qual.updated  = IW_QUAL_ALL_UPDATED |
 			IW_QUAL_QUAL_INVALID | IW_QUAL_NOISE_INVALID;
 	iwe.u.qual.level = list->rssi;
-	iwe.u.qual.qual = 0;
+	iwe.u.qual.qual = list->rssi;
 	iwe.u.qual.noise = 0;
 	start = iwe_stream_add_event(start, stop, &iwe, IW_EV_QUAL_LEN);
 
