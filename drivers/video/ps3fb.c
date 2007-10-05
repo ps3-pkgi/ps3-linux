@@ -30,7 +30,6 @@
 #include <linux/fb.h>
 #include <linux/init.h>
 #include <linux/uaccess.h>
-#include <linux/mutex.h>
 
 #include <asm/abs_addr.h>
 #include <asm/lv1call.h>
@@ -140,7 +139,6 @@ struct ps3fb_par {
 	int res_index;
 	unsigned int num_frames;	/* num of frame buffers */
 
-	struct mutex mutex;		/* ps3fb_set_par / ps3fb_sync mutex */
 	unsigned int width;
 	unsigned int height;
 	unsigned long full_offset;	/* start of fullscreen DDR fb */
@@ -441,17 +439,18 @@ static void ps3fb_sync_image(struct device *dev, u64 frame_offset,
 static int ps3fb_sync(struct fb_info *info, u32 frame)
 {
 	struct ps3fb_par *par = info->par;
-	int i;
+	int i, error = 0;
 	u32 ddr_line_length, xdr_line_length;
 	u64 ddr_base, xdr_base;
+
+	acquire_console_sem();
 
 	if (frame > par->num_frames - 1) {
 		dev_dbg(info->device, "%s: invalid frame number (%u)\n",
 			__func__, frame);
-		return -EINVAL;
+		error = -EINVAL;
+		goto out;
 	}
-
-	mutex_lock(&par->mutex);
 
 	i = par->res_index;
 	xdr_line_length = info->fix.line_length;
@@ -464,7 +463,8 @@ static int ps3fb_sync(struct fb_info *info, u32 frame)
 			 par->width, par->height, ddr_line_length,
 			 xdr_line_length);
 
-	mutex_unlock(&par->mutex);
+out:
+	release_console_sem();
 	return 0;
 }
 
@@ -590,8 +590,6 @@ static int ps3fb_set_par(struct fb_info *info)
 	if (!mode)
 		return -EINVAL;
 
-	mutex_lock(&par->mutex);
-
 	i = ps3fb_get_res_table(info->var.xres, info->var.yres, mode);
 	par->res_index = i;
 
@@ -621,7 +619,6 @@ static int ps3fb_set_par(struct fb_info *info)
 	if (par->new_mode_id != par->mode_id) {
 		if (ps3av_set_video_mode(par->new_mode_id)) {
 			par->new_mode_id = par->mode_id;
-			mutex_unlock(&par->mutex);
 			return -EINVAL;
 		}
 		par->mode_id = par->new_mode_id;
@@ -642,7 +639,6 @@ static int ps3fb_set_par(struct fb_info *info)
 		lines -= l;
 	}
 
-	mutex_unlock(&par->mutex);
 	return 0;
 }
 
@@ -674,11 +670,8 @@ static int ps3fb_pan_display(struct fb_var_screeninfo *var,
 {
 	struct ps3fb_par *par = info->par;
 
-	mutex_lock(&par->mutex);
 	par->pan_offset = var->yoffset * info->fix.line_length +
 			  var->xoffset * BPP;
-	mutex_unlock(&par->mutex);
-
 	return 0;
 }
 
@@ -1144,7 +1137,6 @@ static int __devinit ps3fb_probe(struct ps3_system_bus_device *dev)
 		goto err_free_irq;
 
 	par = info->par;
-	mutex_init(&par->mutex);
 	par->mode_id = ~ps3fb_mode;	/* != ps3fb_mode, to trigger change */
 	par->new_mode_id = ps3fb_mode;
 	par->res_index = res_index;
@@ -1157,7 +1149,8 @@ static int __devinit ps3fb_probe(struct ps3_system_bus_device *dev)
 	info->fix.smem_start = virt_to_abs(ps3fb.xdr_ea);
 	info->fix.smem_len = ps3fb.xdr_size;
 	info->pseudo_palette = par->pseudo_palette;
-	info->flags = FBINFO_DEFAULT | FBINFO_READS_FAST;
+	info->flags = FBINFO_DEFAULT | FBINFO_READS_FAST |
+		      FBINFO_HWACCEL_XPAN | FBINFO_HWACCEL_YPAN;
 
 	retval = fb_alloc_cmap(&info->cmap, 256, 0);
 	if (retval < 0)
