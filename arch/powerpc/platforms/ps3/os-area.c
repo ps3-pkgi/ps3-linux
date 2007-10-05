@@ -206,7 +206,6 @@ struct saved_params {
 	unsigned int valid;
 	s64 rtc_diff;
 	unsigned int av_multi_out;
-	struct os_area_db db;
 } static saved_params;
 
 static struct property property_rtc_diff = {
@@ -431,7 +430,6 @@ next:
 
 static int db_delete_64(struct os_area_db *db, const struct os_area_db_id *id)
 {
-	//pr_debug("%s:%d: (%d:%d)\n", __func__, __LINE__, id->owner, id->key);
 	struct db_iterator i;
 
 	for (i.db = NULL; db_for_each_64(db, id, &i); ) {
@@ -535,20 +533,21 @@ void _dump_db(const struct os_area_db *db, const char *func,
 }
 
 /**
- * write_db_to_flash - Helper for os_area_queue_work_handler.
+ * update_flash_db - Helper for os_area_queue_work_handler.
  *
  */
 
-static void write_db_to_flash(void)
+static void update_flash_db(void)
 {
 	int result;
 	int file;
 	off_t offset;
 	ssize_t count;
 	static const unsigned int buf_len = 8 * OS_AREA_SEGMENT_SIZE;
-	void* buf;
 	const struct os_area_header *header;
-	struct os_area_db* flash_db;
+	struct os_area_db* db;
+
+	/* Read in header and db from flash. */
 
 	file = sys_open("/dev/ps3flash", O_RDWR, 0);
 
@@ -557,10 +556,9 @@ static void write_db_to_flash(void)
 		goto fail_open;
 	}
 
-	buf = kmalloc(buf_len, GFP_KERNEL);
-	header = buf;
+	header = kmalloc(buf_len, GFP_KERNEL);
 
-	if (!buf) {
+	if (!header) {
 		pr_debug("%s:%d kmalloc failed\n", __func__, __LINE__);
 		goto fail_malloc;
 	}
@@ -572,7 +570,7 @@ static void write_db_to_flash(void)
 		goto fail_header_seek;
 	}
 
-	count = sys_read(file, buf, buf_len);
+	count = sys_read(file, (char __user *)header, buf_len);
 
 	result = count < OS_AREA_SEGMENT_SIZE || verify_header(header)
 		|| count < header->db_area_offset * OS_AREA_SEGMENT_SIZE;
@@ -583,33 +581,22 @@ static void write_db_to_flash(void)
 		goto fail_header;
 	}
 
-	/* Now got good flash_db offset and flash_db data. */
+	/* Now got a good db offset and some maybe good db data. */
 
-	result = db_verify(&saved_params.db);
+	db = (void*)header + header->db_area_offset * OS_AREA_SEGMENT_SIZE;
+
+	result = db_verify(db);
 
 	if (result) {
-		pr_debug("%s:%d db_verify mirror failed, reading flash\n",
-			__func__, __LINE__);
-
-		flash_db = (struct os_area_db *)(buf
-			+ header->db_area_offset * OS_AREA_SEGMENT_SIZE);
-
-		result = db_verify(flash_db);
-
-		if (result) {
-			pr_debug("%s:%d: db_verify flash failed, formatting\n",
-				__func__, __LINE__);
-			dump_db(flash_db);
-			os_area_db_init(&saved_params.db);
-		} else
-			memcpy(&saved_params.db, flash_db,
-				sizeof(struct os_area_db));
+		printk(KERN_NOTICE "%s:%d: Verify of flash database failed, "
+			"formatting.\n", __func__, __LINE__);
+		dump_db(db);
+		os_area_db_init(db);
 	}
 
-	/* Now got good saved_params.db. */
+	/* Now got good db data. */
 
-	db_set_64(&saved_params.db, &os_area_db_id_rtc_diff,
-		saved_params.rtc_diff);
+	db_set_64(db, &os_area_db_id_rtc_diff, saved_params.rtc_diff);
 
 	offset = sys_lseek(file, header->db_area_offset * OS_AREA_SEGMENT_SIZE,
 		SEEK_SET);
@@ -619,7 +606,7 @@ static void write_db_to_flash(void)
 		goto fail_db_seek;
 	}
 
-	count = sys_write(file, (const char __user *)&saved_params.db,
+	count = sys_write(file, (const char __user *)db,
 		sizeof(struct os_area_db));
 
 	if (count < sizeof(struct os_area_db)) {
@@ -629,7 +616,7 @@ static void write_db_to_flash(void)
 fail_db_seek:
 fail_header:
 fail_header_seek:
-	kfree(buf);
+	kfree(header);
 fail_malloc:
 	sys_close(file);
 fail_open:
@@ -658,7 +645,7 @@ static void os_area_queue_work_handler(struct work_struct *work)
 		pr_debug("%s:%d of_find_node_by_path failed\n",
 			__func__, __LINE__);
 
-	write_db_to_flash();
+	update_flash_db();
 
 	pr_debug(" <- %s:%d\n", __func__, __LINE__);
 }
@@ -724,9 +711,11 @@ void __init ps3_os_area_save_params(void)
 	dump_params(params);
 	dump_db(db);
 
-	saved_params.rtc_diff = params->rtc_diff;
+	result = db_verify(db) || db_get_rtc_diff(db, &saved_params.rtc_diff);
+	if (result)
+		saved_params.rtc_diff = params->rtc_diff ? params->rtc_diff
+			: SECONDS_FROM_1970_TO_2000;
 	saved_params.av_multi_out = params->av_multi_out;
-	memcpy(&saved_params.db, db, sizeof(saved_params.db));
 	saved_params.valid = 1;
 
 	memset(header, 0, sizeof(*header));
@@ -746,19 +735,10 @@ void __init ps3_os_area_init(void)
 
 	node = of_find_node_by_path("/");
 
-	if (saved_params.valid) {
-		int result = db_verify(&saved_params.db)
-			|| db_get_rtc_diff(&saved_params.db,
-			&saved_params.rtc_diff);
-		if (result)
-			pr_debug("%s:%d db_get_rtc_diff failed\n",
-				__func__, __LINE__);
-	} else {
+	if (!saved_params.valid && node) {
 		/* Second stage kernels should have a dt entry. */
-		if (node) {
-			os_area_get_property(node, &property_rtc_diff);
-			os_area_get_property(node, &property_av_multi_out);
-		}
+		os_area_get_property(node, &property_rtc_diff);
+		os_area_get_property(node, &property_av_multi_out);
 	}
 
 	if(!saved_params.rtc_diff)
@@ -793,8 +773,10 @@ u64 ps3_os_area_get_rtc_diff(void)
 
 void ps3_os_area_set_rtc_diff(u64 rtc_diff)
 {
-	saved_params.rtc_diff = rtc_diff;
-	os_area_queue_work();
+	if (saved_params.rtc_diff != rtc_diff) {
+		saved_params.rtc_diff = rtc_diff;
+		os_area_queue_work();
+	}
 }
 
 /**
