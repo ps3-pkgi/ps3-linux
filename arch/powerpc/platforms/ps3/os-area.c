@@ -326,33 +326,6 @@ static int verify_header(const struct os_area_header *header)
 	return 0;
 }
 
-void os_area_db_init(struct os_area_db *db)
-{
-	/*
-	 * item      | start | size
-	 * ----------+-------+-------
-	 * header    | 0     | 24
-	 * index_64  | 24    | 64
-	 * values_64 | 88    | 57*8 = 456
-	 * index_32  | 544   | 64
-	 * values_32 | 609   | 57*4 = 228
-	 * index_16  | 836   | 64
-	 * values_16 | 900   | 57*2 = 114
-	 * end       | 1014  | -
-	 */
-
-	memset(db, 0, sizeof(struct os_area_db));
-
-	db->magic_num = 0x2d64622dU;
-	db->version = 1;
-	db->index_64 = 24;
-	db->count_64 = 57;
-	db->index_32 = 544;
-	db->count_32 = 57;
-	db->index_16 = 836;
-	db->count_16 = 57;
-}
-
 static int db_verify(const struct os_area_db *db)
 {
 	if (db->magic_num != 0x2d64622dU) {
@@ -445,7 +418,7 @@ static int db_delete_64(struct os_area_db *db, const struct os_area_db_id *id)
 	return 0;
 }
 
-int db_set_64(struct os_area_db *db, const struct os_area_db_id *id,
+static int db_set_64(struct os_area_db *db, const struct os_area_db_id *id,
 	uint64_t value)
 {
 	struct db_iterator i;
@@ -499,19 +472,19 @@ static int db_get_64(const struct os_area_db *db,
 	return -1;
 }
 
-int db_get_rtc_diff(const struct os_area_db *db, int64_t *rtc_diff)
+static int db_get_rtc_diff(const struct os_area_db *db, int64_t *rtc_diff)
 {
 	return db_get_64(db, &os_area_db_id_rtc_diff, (uint64_t*)rtc_diff);
 }
 
-int db_get_video_mode(const struct os_area_db *db,
+static int db_get_video_mode(const struct os_area_db *db,
 	unsigned int *video_mode)
 {
 	return db_get_64(db, &os_area_db_id_video_mode, (uint64_t*)video_mode);
 }
 
 #define dump_db(a) _dump_db(a, __func__, __LINE__)
-void _dump_db(const struct os_area_db *db, const char *func,
+static void _dump_db(const struct os_area_db *db, const char *func,
 	int line)
 {
 	pr_debug("%s:%d: db.magic_num:      '%s'\n", func, line,
@@ -530,6 +503,33 @@ void _dump_db(const struct os_area_db *db, const char *func,
 		db->index_16);
 	pr_debug("%s:%d: db.count_16:        %u\n", func, line,
 		db->count_16);
+}
+
+static void os_area_db_init(struct os_area_db *db)
+{
+	/*
+	 * item      | start | size
+	 * ----------+-------+-------
+	 * header    | 0     | 24
+	 * index_64  | 24    | 64
+	 * values_64 | 88    | 57*8 = 456
+	 * index_32  | 544   | 64
+	 * values_32 | 609   | 57*4 = 228
+	 * index_16  | 836   | 64
+	 * values_16 | 900   | 57*2 = 114
+	 * end       | 1014  | -
+	 */
+
+	memset(db, 0, sizeof(struct os_area_db));
+
+	db->magic_num = 0x2d64622dU;
+	db->version = 1;
+	db->index_64 = 24;
+	db->count_64 = 57;
+	db->index_32 = 544;
+	db->count_32 = 57;
+	db->index_16 = 836;
+	db->count_16 = 57;
 }
 
 /**
@@ -645,8 +645,9 @@ static void os_area_queue_work_handler(struct work_struct *work)
 		pr_debug("%s:%d of_find_node_by_path failed\n",
 			__func__, __LINE__);
 
+#if defined(CONFIG_PS3_FLASH) || defined(CONFIG_PS3_FLASH_MODULE)
 	update_flash_db();
-
+#endif
 	pr_debug(" <- %s:%d\n", __func__, __LINE__);
 }
 
