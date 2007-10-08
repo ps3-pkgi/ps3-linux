@@ -837,10 +837,10 @@ static int ps3fb_ioctl(struct fb_info *info, unsigned int cmd,
 			struct ps3fb_par *par = info->par;
 			struct ps3fb_ioctl_res res;
 			dev_dbg(info->device, "PS3FB_IOCTL_SCREENINFO:\n");
-			res.xres = info->fix.line_length/BPP;
+			res.xres = info->fix.line_length / BPP;
 			res.yres = info->var.yres_virtual;
-			res.xoff = (res.xres - info->var.xres)/2;
-			res.yoff = (res.yres - info->var.yres)/2;
+			res.xoff = (res.xres - info->var.xres) / 2;
+			res.yoff = (res.yres - info->var.yres) / 2;
 			res.num_frames = par->num_frames;
 			if (!copy_to_user(argp, &res, sizeof(res)))
 				retval = 0;
