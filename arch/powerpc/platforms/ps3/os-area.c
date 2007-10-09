@@ -115,6 +115,10 @@ struct os_area_params {
 	u8 _reserved_5[8];
 };
 
+enum {
+	OS_AREA_DB_MAGIC_NUM = 0x2d64622dU,
+};
+
 /**
  * struct os_area_db - Shared flash memory database.
  * @magic_num: Always '-db-' = 0x2d64622d.
@@ -142,7 +146,7 @@ struct os_area_db {
 	u16 index_16;
 	u16 count_16;
 	u32 _reserved_2;
-	u8 _reserved_3[1000];
+	u8 _db_data[1000];
 };
 
 /**
@@ -328,7 +332,7 @@ static int verify_header(const struct os_area_header *header)
 
 static int db_verify(const struct os_area_db *db)
 {
-	if (db->magic_num != 0x2d64622dU) {
+	if (db->magic_num != OS_AREA_DB_MAGIC_NUM) {
 		pr_debug("%s:%d magic_num failed\n", __func__, __LINE__);
 		return -1;
 	}
@@ -477,12 +481,6 @@ static int db_get_rtc_diff(const struct os_area_db *db, int64_t *rtc_diff)
 	return db_get_64(db, &os_area_db_id_rtc_diff, (uint64_t*)rtc_diff);
 }
 
-static int db_get_video_mode(const struct os_area_db *db,
-	unsigned int *video_mode)
-{
-	return db_get_64(db, &os_area_db_id_video_mode, (uint64_t*)video_mode);
-}
-
 #define dump_db(a) _dump_db(a, __func__, __LINE__)
 static void _dump_db(const struct os_area_db *db, const char *func,
 	int line)
@@ -507,29 +505,51 @@ static void _dump_db(const struct os_area_db *db, const char *func,
 
 static void os_area_db_init(struct os_area_db *db)
 {
-	/*
-	 * item      | start | size
-	 * ----------+-------+-------
-	 * header    | 0     | 24
-	 * index_64  | 24    | 64
-	 * values_64 | 88    | 57*8 = 456
-	 * index_32  | 544   | 64
-	 * values_32 | 609   | 57*4 = 228
-	 * index_16  | 836   | 64
-	 * values_16 | 900   | 57*2 = 114
-	 * end       | 1014  | -
-	 */
+	enum {
+		HEADER_SIZE = offsetof(struct os_area_db, _db_data),
+		INDEX_64_COUNT = 64,
+		VALUES_64_COUNT = 57,
+		INDEX_32_COUNT = 64,
+		VALUES_32_COUNT = 57,
+		INDEX_16_COUNT = 64,
+		VALUES_16_COUNT = 57,
+	};
 
 	memset(db, 0, sizeof(struct os_area_db));
 
-	db->magic_num = 0x2d64622dU;
+	db->magic_num = OS_AREA_DB_MAGIC_NUM;
 	db->version = 1;
-	db->index_64 = 24;
-	db->count_64 = 57;
-	db->index_32 = 544;
-	db->count_32 = 57;
-	db->index_16 = 836;
-	db->count_16 = 57;
+	db->index_64 = HEADER_SIZE;
+	db->count_64 = VALUES_64_COUNT;
+	db->index_32 = HEADER_SIZE
+			+ INDEX_64_COUNT * sizeof(struct db_index)
+			+ VALUES_64_COUNT * sizeof(u64);
+	db->count_32 = VALUES_32_COUNT;
+	db->index_16 = HEADER_SIZE
+			+ INDEX_64_COUNT * sizeof(struct db_index)
+			+ VALUES_64_COUNT * sizeof(u64)
+			+ INDEX_32_COUNT * sizeof(struct db_index)
+			+ VALUES_32_COUNT * sizeof(u32);
+	db->count_16 = VALUES_16_COUNT;
+
+	/* Rules to check db layout. */
+
+	BUILD_BUG_ON(sizeof(struct db_index) != 1);
+	BUILD_BUG_ON(sizeof(struct os_area_db) != 2 * OS_AREA_SEGMENT_SIZE);
+	BUILD_BUG_ON(INDEX_64_COUNT & 0x7);
+	BUILD_BUG_ON(VALUES_64_COUNT > INDEX_64_COUNT);
+	BUILD_BUG_ON(INDEX_32_COUNT & 0x7);
+	BUILD_BUG_ON(VALUES_32_COUNT > INDEX_32_COUNT);
+	BUILD_BUG_ON(INDEX_16_COUNT & 0x7);
+	BUILD_BUG_ON(VALUES_16_COUNT > INDEX_16_COUNT);
+	BUILD_BUG_ON(HEADER_SIZE
+			+ INDEX_64_COUNT * sizeof(struct db_index)
+			+ VALUES_64_COUNT * sizeof(u64)
+			+ INDEX_32_COUNT * sizeof(struct db_index)
+			+ VALUES_32_COUNT * sizeof(u32)
+			+ INDEX_16_COUNT * sizeof(struct db_index)
+			+ VALUES_16_COUNT * sizeof(u16)
+			> sizeof(struct os_area_db));
 }
 
 /**
@@ -647,6 +667,9 @@ static void os_area_queue_work_handler(struct work_struct *work)
 
 #if defined(CONFIG_PS3_FLASH) || defined(CONFIG_PS3_FLASH_MODULE)
 	update_flash_db();
+#else
+	printk(KERN_WARNING "%s:%d: No flash rom driver configured.\n",
+		__func__, __LINE__);
 #endif
 	pr_debug(" <- %s:%d\n", __func__, __LINE__);
 }
