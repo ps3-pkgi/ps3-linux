@@ -27,9 +27,9 @@
 #include <linux/ioctl.h>
 #include <linux/kthread.h>
 #include <linux/freezer.h>
+#include <linux/uaccess.h>
 #include <linux/fb.h>
 #include <linux/init.h>
-#include <linux/uaccess.h>
 
 #include <asm/abs_addr.h>
 #include <asm/lv1call.h>
