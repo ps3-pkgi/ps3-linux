@@ -365,7 +365,7 @@ static unsigned int ps3fb_find_mode(struct fb_var_screeninfo *var,
 	unsigned int id;
 
 	ps3av_modes = &ps3fb_modedb[FIRST_FULLSCREEN_MODE - 1];
-	for (id = PS3AV_MODE_480P; id <= PS3AV_MODE_WUXGA; id++) {
+	for (id = PS3AV_MODE_480I; id <= PS3AV_MODE_WUXGA; id++) {
 		if (!ps3fb_cmp_mode(&ps3av_modes[id], var))
 			goto found;
 	}
