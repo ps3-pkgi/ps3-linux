@@ -488,7 +488,7 @@ static int ps3_sys_manager_handle_cmd(struct ps3_system_bus_device *dev)
 	result = ps3_vuart_read(dev, &cmd, sizeof(cmd));
 	BUG_ON(result && "need to retry here");
 
-	if(result)
+	if (result)
 		return result;
 
 	if (cmd.version != 1) {
@@ -521,7 +521,7 @@ static int ps3_sys_manager_handle_msg(struct ps3_system_bus_device *dev)
 	result = ps3_vuart_read(dev, &header,
 		sizeof(struct ps3_sys_manager_header));
 
-	if(result)
+	if (result)
 		return result;
 
 	if (header.version != 1) {
@@ -591,7 +591,7 @@ static void ps3_sys_manager_final_power_off(struct ps3_system_bus_device *dev)
 
 	printk(KERN_EMERG "System Halted, OK to turn off power\n");
 
-	while(1)
+	while (1)
 		ps3_sys_manager_handle_msg(dev);
 }
 
@@ -628,7 +628,7 @@ static void ps3_sys_manager_final_restart(struct ps3_system_bus_device *dev)
 
 	printk(KERN_EMERG "System Halted, OK to turn off power\n");
 
-	while(1)
+	while (1)
 		ps3_sys_manager_handle_msg(dev);
 }
 
