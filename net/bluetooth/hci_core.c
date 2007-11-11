@@ -257,8 +257,7 @@ static void hci_init_req(struct hci_dev *hdev, unsigned long opt)
 		cp.flt_type = HCI_FLT_CONN_SETUP;
 		cp.cond_type = 0; /* all devices */
 		cp.condition = 1; /* auto accept is off */
-		hci_send_cmd(hdev, OGF_HOST_CTL, OCF_SET_EVENT_FLT, sizeof(cp),
-			&cp);
+		hci_send_cmd(hdev, HCI_OP_CREATE_CONN, sizeof(cp), &cp);
 	}
 #endif
 
