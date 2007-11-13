@@ -436,10 +436,20 @@ static int gelicw_cmd_encode(struct net_device *netdev)
 		case IW_ENCODE_ALG_TKIP:
 			wpa_config->sec = GELICW_WPA_SEC_TKIP;
 			break;
-		default:
 		case IW_ENCODE_ALG_CCMP:
 			wpa_config->sec = GELICW_WPA_SEC_AES;
 			break;
+		case GELICW_ENCODE_WPA2_TKIP:
+			wpa_config->sec = GELICW_WPA2_SEC_TKIP;
+			break;
+		case GELICW_ENCODE_WPA2_CCMP:
+			wpa_config->sec = GELICW_WPA2_SEC_AES;
+			break;
+		default:
+			if (ps3_compare_firmware_version(2, 0, 0) < 0)
+				wpa_config->sec = GELICW_WPA_SEC_AES;
+			else
+				wpa_config->sec = GELICW_WPA2_SEC_AES;
 		}
 		/* check key len */
 		key = w->key[w->key_index];
@@ -2011,6 +2021,11 @@ static int gelicw_priv_set_alg_mode(struct net_device *netdev,
 	case IW_ENCODE_ALG_TKIP:
 	case IW_ENCODE_ALG_CCMP:
 		break;
+	case GELICW_ENCODE_WPA2_TKIP:
+	case GELICW_ENCODE_WPA2_CCMP:
+		if (ps3_compare_firmware_version(2, 0, 0) < 0)
+			return -EINVAL;
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -2026,6 +2041,7 @@ static int gelicw_priv_get_alg_mode(struct net_device *netdev,
 {
 	struct gelic_wireless *w = gelicw_priv(netdev);
 	char *p;
+	int return_key = 0;
 
 	dev_dbg(ntodev(netdev), "wx:priv_get_alg\n");
 	switch (w->key_alg) {
@@ -2037,17 +2053,26 @@ static int gelicw_priv_get_alg_mode(struct net_device *netdev,
 		break;
 	case IW_ENCODE_ALG_TKIP:
 		strncpy(extra, "TKIP", MAX_IW_PRIV_SIZE);
+		return_key = 1;
 		break;
 	case IW_ENCODE_ALG_CCMP:
 		strncpy(extra, "AES-CCMP", MAX_IW_PRIV_SIZE);
+		return_key = 1;
+		break;
+	case GELICW_ENCODE_WPA2_TKIP:
+		strncpy(extra, "TKIP WPA2", MAX_IW_PRIV_SIZE);
+		return_key = 1;
+		break;
+	case GELICW_ENCODE_WPA2_CCMP:
+		strncpy(extra, "AES-CCMP WPA2", MAX_IW_PRIV_SIZE);
+		return_key = 1;
 		break;
 	default:
 		break;
 	}
 	p = extra + strlen(extra);
 
-	if (w->key_alg == IW_ENCODE_ALG_TKIP ||
-	    w->key_alg == IW_ENCODE_ALG_CCMP) {
+	if (return_key) {
 		if (w->key_len[w->key_index] == 64) /* current key index */
 			strncpy(p, " hex", MAX_IW_PRIV_SIZE);
 		else

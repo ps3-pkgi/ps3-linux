@@ -110,6 +110,11 @@ struct wep_config {
 #define GELICW_WPA_SEC_NONE		0
 #define GELICW_WPA_SEC_TKIP		1
 #define GELICW_WPA_SEC_AES		2
+#define GELICW_WPA2_SEC_TKIP		4
+#define GELICW_WPA2_SEC_AES		8
+
+#define GELICW_ENCODE_WPA2_TKIP         (IW_ENCODE_ALG_CCMP + 1)
+#define GELICW_ENCODE_WPA2_CCMP         (IW_ENCODE_ALG_CCMP + 2)
 /* wpa_config: psk_type */
 #define GELICW_PSK_PASSPHRASE		0
 #define GELICW_PSK_64HEX		1
