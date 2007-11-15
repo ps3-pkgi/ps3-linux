@@ -42,8 +42,8 @@ struct {
 	int gpu;
 } static usage_hack;
 
-static int ps3_is_device(struct ps3_system_bus_device *dev,
-			 unsigned int bus_id, unsigned int dev_id)
+static int ps3_is_device(struct ps3_system_bus_device *dev, u64 bus_id,
+			 u64 dev_id)
 {
 	return dev->bus_id == bus_id && dev->dev_id == dev_id;
 }
@@ -182,8 +182,8 @@ int ps3_open_hv_device(struct ps3_system_bus_device *dev)
 	case PS3_MATCH_ID_SYSTEM_MANAGER:
 		pr_debug("%s:%d: unsupported match_id: %u\n", __func__,
 			__LINE__, dev->match_id);
-		pr_debug("%s:%d: bus_id: %u\n", __func__,
-			__LINE__, dev->bus_id);
+		pr_debug("%s:%d: bus_id: %lu\n", __func__, __LINE__,
+			dev->bus_id);
 		BUG();
 		return -EINVAL;
 
@@ -220,8 +220,8 @@ int ps3_close_hv_device(struct ps3_system_bus_device *dev)
 	case PS3_MATCH_ID_SYSTEM_MANAGER:
 		pr_debug("%s:%d: unsupported match_id: %u\n", __func__,
 			__LINE__, dev->match_id);
-		pr_debug("%s:%d: bus_id: %u\n", __func__,
-			__LINE__, dev->bus_id);
+		pr_debug("%s:%d: bus_id: %lu\n", __func__, __LINE__,
+			dev->bus_id);
 		BUG();
 		return -EINVAL;
 
@@ -240,7 +240,7 @@ EXPORT_SYMBOL_GPL(ps3_close_hv_device);
 static void _dump_mmio_region(const struct ps3_mmio_region* r,
 	const char* func, int line)
 {
-	pr_debug("%s:%d: dev       %u:%u\n", func, line, r->dev->bus_id,
+	pr_debug("%s:%d: dev       %lu:%lu\n", func, line, r->dev->bus_id,
 		r->dev->dev_id);
 	pr_debug("%s:%d: bus_addr  %lxh\n", func, line, r->bus_addr);
 	pr_debug("%s:%d: len       %lxh\n", func, line, r->len);
@@ -349,9 +349,9 @@ static int ps3_system_bus_match(struct device *_dev,
 
 	result = dev->match_id == drv->match_id;
 
-	pr_info("%s:%d: dev=%u(%s), drv=%u(%s): %s\n", __func__, __LINE__,
-		dev->match_id, dev->core.bus_id, drv->match_id, drv->core.name,
-		(result ? "match" : "miss"));
+	pr_debug("%s:%d: dev=%u(%s), drv=%u(%s): %s\n", __func__, __LINE__,
+		 dev->match_id, dev->core.bus_id, drv->match_id, drv->core.name,
+		 (result ? "match" : "miss"));
 	return result;
 }
 
@@ -362,7 +362,7 @@ static int ps3_system_bus_probe(struct device *_dev)
 	struct ps3_system_bus_driver *drv;
 
 	BUG_ON(!dev);
-	pr_info(" -> %s:%d: %s\n", __func__, __LINE__, _dev->bus_id);
+	pr_debug(" -> %s:%d: %s\n", __func__, __LINE__, _dev->bus_id);
 
 	drv = ps3_system_bus_dev_to_system_bus_drv(dev);
 	BUG_ON(!drv);
@@ -373,7 +373,7 @@ static int ps3_system_bus_probe(struct device *_dev)
 		pr_info("%s:%d: %s no probe method\n", __func__, __LINE__,
 			dev->core.bus_id);
 
-	pr_info(" <- %s:%d: %s\n", __func__, __LINE__, dev->core.bus_id);
+	pr_debug(" <- %s:%d: %s\n", __func__, __LINE__, dev->core.bus_id);
 	return result;
 }
 
@@ -384,7 +384,7 @@ static int ps3_system_bus_remove(struct device *_dev)
 	struct ps3_system_bus_driver *drv;
 
 	BUG_ON(!dev);
-	pr_info(" -> %s:%d: %s\n", __func__, __LINE__, _dev->bus_id);
+	pr_debug(" -> %s:%d: %s\n", __func__, __LINE__, _dev->bus_id);
 
 	drv = ps3_system_bus_dev_to_system_bus_drv(dev);
 	BUG_ON(!drv);
@@ -395,7 +395,7 @@ static int ps3_system_bus_remove(struct device *_dev)
 		dev_dbg(&dev->core, "%s:%d %s: no remove method\n",
 			__func__, __LINE__, drv->core.name);
 
-	pr_info(" <- %s:%d: %s\n", __func__, __LINE__, dev->core.bus_id);
+	pr_debug(" <- %s:%d: %s\n", __func__, __LINE__, dev->core.bus_id);
 	return result;
 }
 

@@ -168,18 +168,15 @@ int ps3_repository_read_bus_str(unsigned int bus_index, const char *bus_str,
 		value, 0);
 }
 
-int ps3_repository_read_bus_id(unsigned int bus_index, unsigned int *bus_id)
+int ps3_repository_read_bus_id(unsigned int bus_index, u64 *bus_id)
 {
 	int result;
-	u64 v1;
-	u64 v2; /* unused */
 
 	result = read_node(PS3_LPAR_ID_PME,
 		make_first_field("bus", bus_index),
 		make_field("id", 0),
 		0, 0,
-		&v1, &v2);
-	*bus_id = v1;
+		bus_id, NULL);
 	return result;
 }
 
@@ -225,18 +222,16 @@ int ps3_repository_read_dev_str(unsigned int bus_index,
 }
 
 int ps3_repository_read_dev_id(unsigned int bus_index, unsigned int dev_index,
-	unsigned int *dev_id)
+	u64 *dev_id)
 {
 	int result;
-	u64 v1;
 
 	result = read_node(PS3_LPAR_ID_PME,
 		make_first_field("bus", bus_index),
 		make_field("dev", dev_index),
 		make_field("id", 0),
 		0,
-		&v1, 0);
-	*dev_id = v1;
+		dev_id, 0);
 	return result;
 }
 
@@ -332,7 +327,7 @@ int ps3_repository_find_device(struct ps3_repository_device *repo)
 		return result;
 	}
 
-	pr_debug("%s:%d: bus_type %u, bus_index %u, bus_id %u, num_dev %u\n",
+	pr_debug("%s:%d: bus_type %u, bus_index %u, bus_id %lu, num_dev %u\n",
 		__func__, __LINE__, tmp.bus_type, tmp.bus_index, tmp.bus_id,
 		num_dev);
 
@@ -349,35 +344,6 @@ int ps3_repository_find_device(struct ps3_repository_device *repo)
 		return result;
 	}
 
-	if (tmp.bus_type == PS3_BUS_TYPE_STORAGE) {
-		/*
-		 * A storage device may show up in the repository before the
-		 * hypervisor has finished probing its type and regions
-		 */
-		unsigned int num_regions;
-
-		if (tmp.dev_type == PS3_DEV_TYPE_STOR_DUMMY) {
-			pr_debug("%s:%u storage device not ready\n", __func__,
-				 __LINE__);
-			return -ENODEV;
-		}
-
-		result = ps3_repository_read_stor_dev_num_regions(tmp.bus_index,
-								  tmp.dev_index,
-								  &num_regions);
-		if (result) {
-			pr_debug("%s:%d read_stor_dev_num_regions failed\n",
-				 __func__, __LINE__);
-			return result;
-		}
-
-		if (!num_regions) {
-			pr_debug("%s:%u storage device has no regions yet\n",
-				 __func__, __LINE__);
-			return -ENODEV;
-		}
-	}
-
 	result = ps3_repository_read_dev_id(tmp.bus_index, tmp.dev_index,
 		&tmp.dev_id);
 
@@ -387,11 +353,93 @@ int ps3_repository_find_device(struct ps3_repository_device *repo)
 		return result;
 	}
 
-	pr_debug("%s:%d: found: dev_type %u, dev_index %u, dev_id %u\n",
+	pr_debug("%s:%d: found: dev_type %u, dev_index %u, dev_id %lu\n",
 		__func__, __LINE__, tmp.dev_type, tmp.dev_index, tmp.dev_id);
 
 	*repo = tmp;
 	return 0;
+}
+
+int ps3_repository_find_device_by_id(struct ps3_repository_device *repo,
+				     u64 bus_id, u64 dev_id)
+{
+	int result = -ENODEV;
+	struct ps3_repository_device tmp;
+	unsigned int num_dev;
+
+	pr_debug(" -> %s:%u: find device by id %lu:%lu\n", __func__, __LINE__,
+		 bus_id, dev_id);
+
+	for (tmp.bus_index = 0; tmp.bus_index < 10; tmp.bus_index++) {
+		result = ps3_repository_read_bus_id(tmp.bus_index,
+						    &tmp.bus_id);
+		if (result) {
+			pr_debug("%s:%u read_bus_id(%u) failed\n", __func__,
+				 __LINE__, tmp.bus_index);
+			return result;
+		}
+
+		if (tmp.bus_id != bus_id) {
+			pr_debug("%s:%u: skip, bus_id %lu\n", __func__,
+				 __LINE__, tmp.bus_id);
+			continue;
+		}
+
+		result = ps3_repository_read_bus_type(tmp.bus_index,
+						      &tmp.bus_type);
+		if (result) {
+			pr_debug("%s:%u read_bus_type(%u) failed\n", __func__,
+				 __LINE__, tmp.bus_index);
+			return result;
+		}
+
+		result = ps3_repository_read_bus_num_dev(tmp.bus_index,
+							 &num_dev);
+		if (result) {
+			pr_debug("%s:%u read_bus_num_dev failed\n", __func__,
+				 __LINE__);
+			return result;
+		}
+pr_debug("num_dev = %u\n", num_dev);
+		for (tmp.dev_index = 0; tmp.dev_index < num_dev;
+		     tmp.dev_index++) {
+			result = ps3_repository_read_dev_id(tmp.bus_index,
+							    tmp.dev_index,
+							    &tmp.dev_id);
+			if (result) {
+				pr_debug("%s:%u read_dev_id(%u:%u) failed\n",
+					 __func__, __LINE__, tmp.bus_index,
+					 tmp.dev_index);
+				return result;
+			}
+
+			if (tmp.dev_id != dev_id) {
+				pr_debug("%s:%u: skip, dev_id %lu\n", __func__,
+					 __LINE__, tmp.dev_id);
+				continue;
+			}
+
+			result = ps3_repository_read_dev_type(tmp.bus_index,
+							      tmp.dev_index,
+							      &tmp.dev_type);
+			if (result) {
+				pr_debug("%s:%u read_dev_type failed\n",
+					 __func__, __LINE__);
+				return result;
+			}
+
+			pr_debug(" <- %s:%u: found: type (%u:%u) index (%u:%u)"
+				 " id (%lu:%lu)\n", __func__, __LINE__,
+				 tmp.bus_type, tmp.dev_type, tmp.bus_index,
+				 tmp.dev_index, tmp.bus_id, tmp.dev_id);
+			*repo = tmp;
+			return 0;
+		}
+		break;
+	}
+
+	pr_debug(" <- %s:%u\n", __func__, __LINE__);
+	return -ENODEV;
 }
 
 int __devinit ps3_repository_find_devices(enum ps3_bus_type bus_type,
@@ -1034,7 +1082,7 @@ static int dump_device_info(struct ps3_repository_device *repo,
 			continue;
 		}
 
-		pr_debug("%s:%d  (%u:%u): dev_type %u, dev_id %u\n", __func__,
+		pr_debug("%s:%d  (%u:%u): dev_type %u, dev_id %lu\n", __func__,
 			__LINE__, repo->bus_index, repo->dev_index,
 			repo->dev_type, repo->dev_id);
 
@@ -1091,7 +1139,7 @@ int ps3_repository_dump_bus_info(void)
 			continue;
 		}
 
-		pr_debug("%s:%d bus_%u: bus_type %u, bus_id %u, num_dev %u\n",
+		pr_debug("%s:%d bus_%u: bus_type %u, bus_id %lu, num_dev %u\n",
 			__func__, __LINE__, repo.bus_index, repo.bus_type,
 			repo.bus_id, num_dev);
 

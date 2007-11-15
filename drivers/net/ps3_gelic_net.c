@@ -58,11 +58,11 @@ static inline struct device *ctodev(struct gelic_net_card *card)
 {
 	return &card->dev->core;
 }
-static inline unsigned int bus_id(struct gelic_net_card *card)
+static inline u64 bus_id(struct gelic_net_card *card)
 {
 	return card->dev->bus_id;
 }
-static inline unsigned int dev_id(struct gelic_net_card *card)
+static inline u64 dev_id(struct gelic_net_card *card)
 {
 	return card->dev->dev_id;
 }
@@ -1535,7 +1535,7 @@ static int ps3_gelic_driver_probe (struct ps3_system_bus_device *dev)
 
 fail_setup_netdev:
 	lv1_net_set_interrupt_status_indicator(bus_id(card),
-					       bus_id(card),
+					       dev_id(card),
 					       0 , 0);
 fail_status_indicator:
 	ps3_dma_region_free(dev->d_region);
