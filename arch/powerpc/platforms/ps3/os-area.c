@@ -270,8 +270,13 @@ static void __init os_area_get_property(struct device_node *node,
 static void _dump_header(const struct os_area_header *h, const char *func,
 	int line)
 {
+	u8 str[sizeof(h->magic_num) + 1];
+
+	memcpy(str, h->magic_num, sizeof(h->magic_num));
+	str[sizeof(h->magic_num)] = 0;
+
 	pr_debug("%s:%d: h.magic_num:       '%s'\n", func, line,
-		h->magic_num);
+		str);
 	pr_debug("%s:%d: h.hdr_version:     %u\n", func, line,
 		h->hdr_version);
 	pr_debug("%s:%d: h.db_area_offset:  %u\n", func, line,
@@ -485,8 +490,13 @@ static int db_get_rtc_diff(const struct os_area_db *db, int64_t *rtc_diff)
 static void _dump_db(const struct os_area_db *db, const char *func,
 	int line)
 {
+	u8 str[sizeof(db->magic_num) + 1];
+
+	memcpy(str, &db->magic_num, sizeof(db->magic_num));
+	str[sizeof(db->magic_num)] = 0;
+
 	pr_debug("%s:%d: db.magic_num:      '%s'\n", func, line,
-		(const char*)&db->magic_num);
+		str);
 	pr_debug("%s:%d: db.version:         %u\n", func, line,
 		db->version);
 	pr_debug("%s:%d: db.index_64:        %u\n", func, line,
