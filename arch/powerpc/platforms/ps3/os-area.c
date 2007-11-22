@@ -24,6 +24,7 @@
 #include <linux/workqueue.h>
 #include <linux/fs.h>
 #include <linux/syscalls.h>
+#include <linux/ctype.h>
 
 #include <asm/lmb.h>
 
@@ -271,9 +272,13 @@ static void _dump_header(const struct os_area_header *h, const char *func,
 	int line)
 {
 	u8 str[sizeof(h->magic_num) + 1];
+	u8 *s, *d;
 
-	memcpy(str, h->magic_num, sizeof(h->magic_num));
-	str[sizeof(h->magic_num)] = 0;
+	for(s = h->magic_num, d = str; s < h->magic_num + sizeof(h->magic_num);
+		s++, d++) {
+		*d = isprint(*s) ? *s : '.';
+	}
+	d[sizeof(h->magic_num)] = 0;
 
 	pr_debug("%s:%d: h.magic_num:       '%s'\n", func, line,
 		str);
@@ -491,9 +496,13 @@ static void _dump_db(const struct os_area_db *db, const char *func,
 	int line)
 {
 	u8 str[sizeof(db->magic_num) + 1];
+	u8 *s, *d;
 
-	memcpy(str, &db->magic_num, sizeof(db->magic_num));
-	str[sizeof(db->magic_num)] = 0;
+	for(s = (u8*)&db->magic_num, d = str;
+		s < (u8*)&db->magic_num + sizeof(db->magic_num); s++, d++) {
+		*d = isprint(*s) ? *s : '.';
+	}
+	d[sizeof(db->magic_num)] = 0;
 
 	pr_debug("%s:%d: db.magic_num:      '%s'\n", func, line,
 		str);
