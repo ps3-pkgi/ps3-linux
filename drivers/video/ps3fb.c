@@ -144,35 +144,8 @@ struct ps3fb_par {
 	unsigned int pan_offset;
 };
 
-struct ps3fb_res_table {
-	u32 xres;
-	u32 yres;
-	u32 xoff;
-	u32 yoff;
-	u32 type;
-};
-#define PS3FB_RES_FULL 1
-static const struct ps3fb_res_table ps3fb_res[] = {
-	/* res_x,y   margin_x,y  full */
-	{  720,  480,  72,  48 , 0},
-	{  720,  576,  72,  58 , 0},
-	{ 1280,  720,  78,  38 , 0},
-	{ 1920, 1080, 116,  58 , 0},
-	/* full mode */
-	{  720,  480,   0,   0 , PS3FB_RES_FULL},
-	{  720,  576,   0,   0 , PS3FB_RES_FULL},
-	{ 1280,  720,   0,   0 , PS3FB_RES_FULL},
-	{ 1920, 1080,   0,   0 , PS3FB_RES_FULL},
-	/* vesa: normally full mode */
-	{ 1280,  768,   0,   0 , 0},
-	{ 1280, 1024,   0,   0 , 0},
-	{ 1920, 1200,   0,   0 , 0},
-	{    0,    0,   0,   0 , 0} };
 
-/* default resolution */
-#define GPU_RES_INDEX		0		/* 720 x 480 */
-
-#define FIRST_FULLSCREEN_MODE	10
+#define FIRST_NATIVE_MODE_INDEX	10
 
 static const struct fb_videomode ps3fb_modedb[] = {
     /* 60 Hz broadcast modes (modes "1" to "5") */
@@ -221,7 +194,7 @@ static const struct fb_videomode ps3fb_modedb[] = {
         FB_SYNC_BROADCAST, FB_VMODE_NONINTERLACED
     },
 
-    [FIRST_FULLSCREEN_MODE] =
+    [FIRST_NATIVE_MODE_INDEX] =
     /* 60 Hz broadcast modes (full resolution versions of modes "1" to "5") */
     {
 	/* 480if */
@@ -299,37 +272,6 @@ module_param(ps3fb_mode, int, 0);
 
 static char *mode_option __devinitdata;
 
-static int ps3fb_get_res_table(u32 xres, u32 yres, int mode)
-{
-	int full_mode;
-	unsigned int i;
-	u32 x, y, f;
-
-	full_mode = (mode & PS3AV_MODE_FULL) ? PS3FB_RES_FULL : 0;
-	for (i = 0;; i++) {
-		x = ps3fb_res[i].xres;
-		y = ps3fb_res[i].yres;
-		f = ps3fb_res[i].type;
-
-		if (!x) {
-			pr_debug("ERROR: ps3fb_get_res_table()\n");
-			return -1;
-		}
-
-		if (full_mode == PS3FB_RES_FULL && f != PS3FB_RES_FULL)
-			continue;
-
-		if (x == xres && (yres == 0 || y == yres))
-			break;
-
-		x = x - 2 * ps3fb_res[i].xoff;
-		y = y - 2 * ps3fb_res[i].yoff;
-		if (x == xres && (yres == 0 || y == yres))
-			break;
-	}
-	return i;
-}
-
 static int ps3fb_cmp_mode(const struct fb_videomode *vmode,
 			  const struct fb_var_screeninfo *var)
 {
@@ -380,7 +322,7 @@ static int ps3fb_cmp_mode(const struct fb_videomode *vmode,
 
 static const struct fb_videomode *ps3fb_native_vmode(enum ps3av_mode_num id)
 {
-	return &ps3fb_modedb[FIRST_FULLSCREEN_MODE + id - 1];
+	return &ps3fb_modedb[FIRST_NATIVE_MODE_INDEX + id - 1];
 }
 
 static const struct fb_videomode *ps3fb_vmode(int id)
@@ -704,7 +646,7 @@ static int ps3fb_set_par(struct fb_info *info)
 	par->width = info->var.xres;
 	par->height = info->var.yres;
 
-	/* Start of the virtual frame buffer (relative to fullscreen ) */
+	/* Start of the virtual frame buffer (relative to fullscreen) */
 	ddr_xoff = info->var.left_margin - vmode->left_margin;
 	ddr_yoff = info->var.upper_margin - vmode->upper_margin;
 	offset = ddr_yoff * ddr_line_length + ddr_xoff * BPP;
@@ -1150,14 +1092,13 @@ static int __devinit ps3fb_probe(struct ps3_system_bus_device *dev)
 	struct fb_info *info;
 	struct ps3fb_par *par;
 	int retval = -ENOMEM;
-	u32 xres, yres;
 	u64 ddr_lpar = 0;
 	u64 lpar_dma_control = 0;
 	u64 lpar_driver_info = 0;
 	u64 lpar_reports = 0;
 	u64 lpar_reports_size = 0;
 	u64 xdr_lpar;
-	int status, res_index;
+	int status;
 	struct task_struct *task;
 	unsigned long max_ps3fb_size;
 
@@ -1171,13 +1112,6 @@ static int __devinit ps3fb_probe(struct ps3_system_bus_device *dev)
 	if (!ps3fb_mode)
 		ps3fb_mode = ps3av_get_mode();
 	dev_dbg(&dev->core, "ps3fb_mode: %d\n", ps3fb_mode);
-
-	if (ps3fb_mode > 0 &&
-	    !ps3av_video_mode2res(ps3fb_mode, &xres, &yres)) {
-		res_index = ps3fb_get_res_table(xres, yres, ps3fb_mode);
-		dev_dbg(&dev->core, "res_index:%d\n", res_index);
-	} else
-		res_index = GPU_RES_INDEX;
 
 	atomic_set(&ps3fb.f_count, -1);	/* fbcon opens ps3fb */
 	atomic_set(&ps3fb.ext_flip, 0);	/* for flip with vsync */

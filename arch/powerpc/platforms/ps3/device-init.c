@@ -500,6 +500,25 @@ struct ps3_notification_device {
 	struct completion done;
 };
 
+enum ps3_notify_type {
+	notify_device_ready = 0,
+	notify_region_probe = 1,
+	notify_region_update = 2,
+};
+
+struct ps3_notify_cmd {
+	u64 operation_code;		/* must be zero */
+	u64 event_mask;			/* OR of 1UL << enum ps3_notify_type */
+};
+
+struct ps3_notify_event {
+	u64 event_type;			/* enum ps3_notify_type */
+	u64 bus_id;
+	u64 dev_id;
+	u64 dev_type;
+	u64 dev_port;
+};
+
 static irqreturn_t ps3_notification_interrupt(int irq, void *data)
 {
 	struct ps3_notification_device *dev = data;
@@ -600,6 +619,10 @@ found:
  * ps3_probe_thread - Background repository probing at system startup.
  *
  * This implementation only supports background probing on a single bus.
+ * It uses the hypervisor's storage device notification mechanism to wait until
+ * a storage device is ready.  The device notification mechanism uses a
+ * pseudo device to asynchronously notify the guest when storage devices become
+ * ready.  The notification device has a block size of 512 bytes.
  */
 
 static int ps3_probe_thread(void *data)
@@ -609,22 +632,8 @@ static int ps3_probe_thread(void *data)
 	unsigned int irq;
 	u64 lpar;
 	void *buf;
-	enum ps3_notify_type {
-		notify_device_ready = 0,
-		notify_region_probe = 1,
-		notify_region_update = 2,
-	};
-	struct {
-		u64 operation_code;	/* must be zero */
-		u64 event_mask;		/* OR of 1UL << enum ps3_notify_type */
-	} *notify_cmd;
-	struct {
-		u64 event_type;		/* enum ps3_notify_type */
-		u64 bus_id;
-		u64 dev_id;
-		u64 dev_type;
-		u64 dev_port;
-	} *notify_event;
+	struct ps3_notify_cmd *notify_cmd;
+	struct ps3_notify_event *notify_event;
 
 	pr_debug(" -> %s:%u: kthread started\n", __func__, __LINE__);
 
@@ -703,7 +712,6 @@ static int ps3_probe_thread(void *data)
 		ps3_find_and_add_device(dev.sbd.bus_id, notify_event->dev_id);
 
 	} while (!kthread_should_stop());
-pr_debug("no more notifications\n");
 
 fail_free_irq:
 	free_irq(irq, &dev);
