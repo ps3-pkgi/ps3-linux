@@ -489,7 +489,7 @@ static int ps3_register_repository_device(
 }
 
 
-#define PS3_NOTIFICATION_DEV_ID		ULLONG_MAX
+#define PS3_NOTIFICATION_DEV_ID		ULONG_MAX
 #define PS3_NOTIFICATION_INTERRUPT_ID	0
 
 struct ps3_notification_device {

@@ -8,6 +8,7 @@
 #include <linux/nodemask.h>
 #include <linux/cpumask.h>
 #include <linux/notifier.h>
+#include <linux/sysctl.h>
 
 #include <asm/current.h>
 #include <asm/processor.h>
@@ -19,6 +20,7 @@
 #include <asm/lppaca.h>
 #include <asm/machdep.h>
 #include <asm/smp.h>
+#include <asm/emulated_ops.h>
 
 static DEFINE_PER_CPU(struct cpu, cpu_devices);
 
@@ -291,12 +293,101 @@ static struct sysdev_attribute pa6t_attrs[] = {
 };
 
 
+#define SYSFS_EMULATED_SETUP(type)					\
+DEFINE_PER_CPU(atomic_long_t, emulated_ ## type);			\
+static ssize_t show_emulated_ ## type (struct sys_device *dev,		\
+				       char *buf)			\
+{									\
+	struct cpu *cpu = container_of(dev, struct cpu, sysdev);	\
+									\
+	return sprintf(buf, "%lu\n",					\
+		       atomic_long_read(&per_cpu(emulated_ ## type,	\
+					cpu->sysdev.id)));		\
+}									\
+									\
+static struct sysdev_attribute emulated_ ## type ## _attr = {		\
+	.attr = { .name = #type, .mode = 0400 },			\
+	.show = show_emulated_ ## type,					\
+};
+
+SYSFS_EMULATED_SETUP(dcba);
+SYSFS_EMULATED_SETUP(dcbz);
+SYSFS_EMULATED_SETUP(fp_pair);
+SYSFS_EMULATED_SETUP(mcrxr);
+SYSFS_EMULATED_SETUP(mfpvr);
+SYSFS_EMULATED_SETUP(multiple);
+SYSFS_EMULATED_SETUP(popcntb);
+SYSFS_EMULATED_SETUP(spe);
+SYSFS_EMULATED_SETUP(string);
+#ifdef CONFIG_MATH_EMULATION
+SYSFS_EMULATED_SETUP(math);
+#elif defined(CONFIG_8XX_MINIMAL_FPEMU)
+SYSFS_EMULATED_SETUP(8xx);
+#endif
+
+static struct attribute *emulated_attrs[] = {
+	&emulated_dcba_attr.attr,
+	&emulated_dcbz_attr.attr,
+	&emulated_fp_pair_attr.attr,
+	&emulated_mcrxr_attr.attr,
+	&emulated_mfpvr_attr.attr,
+	&emulated_multiple_attr.attr,
+	&emulated_popcntb_attr.attr,
+	&emulated_spe_attr.attr,
+	&emulated_string_attr.attr,
+#ifdef CONFIG_MATH_EMULATION
+	&emulated_math_attr.attr,
+#elif defined(CONFIG_8XX_MINIMAL_FPEMU)
+	&emulated_8xx_attr.attr,
+#endif
+	NULL
+};
+
+static struct attribute_group emulated_attr_group = {
+	.attrs = emulated_attrs,
+	.name = "emulated"
+};
+
+int sysctl_warn_emulated;
+
+#ifdef CONFIG_SYSCTL
+static ctl_table warn_emulated_ctl_table[]={
+	{
+		.procname	= "cpu_emulation_warnings",
+		.data		= &sysctl_warn_emulated,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= &proc_dointvec,
+	},
+	{}
+};
+
+static ctl_table warn_emulated_sysctl_root[] = {
+	{
+		.ctl_name	= CTL_KERN,
+		.procname	= "kernel",
+		.mode		= 0555,
+		.child		= warn_emulated_ctl_table,
+	},
+	{}
+};
+
+static inline void warn_emulated_sysctl_register(void)
+{
+	int res = register_sysctl_table(warn_emulated_sysctl_root);
+	printk("@@@ register_sysctl_table() returned %d\n", res);
+}
+#else /* !CONFIG_SYSCTL */
+static inline void warn_emulated_sysctl_register(void) {}
+#endif /* !CONFIG_SYSCTL */
+
+
 static void register_cpu_online(unsigned int cpu)
 {
 	struct cpu *c = &per_cpu(cpu_devices, cpu);
 	struct sys_device *s = &c->sysdev;
 	struct sysdev_attribute *attrs, *pmc_attrs;
-	int i, nattrs;
+	int i, nattrs, res;
 
 	if (!firmware_has_feature(FW_FEATURE_ISERIES) &&
 			cpu_has_feature(CPU_FTR_SMT))
@@ -339,6 +430,11 @@ static void register_cpu_online(unsigned int cpu)
 
 	if (cpu_has_feature(CPU_FTR_DSCR))
 		sysdev_create_file(s, &attr_dscr);
+
+	res = sysfs_create_group(&s->kobj, &emulated_attr_group);
+	if (res)
+		pr_warning("Cannot create emulated sysfs group for cpu %u\n",
+			   cpu);
 }
 
 #ifdef CONFIG_HOTPLUG_CPU
@@ -559,6 +655,8 @@ static int __init topology_init(void)
 		if (cpu_online(cpu))
 			register_cpu_online(cpu);
 	}
+
+	warn_emulated_sysctl_register();
 
 	return 0;
 }
