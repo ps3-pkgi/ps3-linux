@@ -374,8 +374,7 @@ static ctl_table warn_emulated_sysctl_root[] = {
 
 static inline void warn_emulated_sysctl_register(void)
 {
-	int res = register_sysctl_table(warn_emulated_sysctl_root);
-	printk("@@@ register_sysctl_table() returned %d\n", res);
+	register_sysctl_table(warn_emulated_sysctl_root);
 }
 #else /* !CONFIG_SYSCTL */
 static inline void warn_emulated_sysctl_register(void) {}
