@@ -30,7 +30,7 @@
 #ifdef DEBUG
 #define DBG(fmt...) udbg_printf(fmt)
 #else
-#define DBG(fmt...)
+#define DBG(fmt...) pr_debug(fmt)
 #endif
 
 extern void slb_allocate_realmode(unsigned long ea);
@@ -270,8 +270,8 @@ void slb_initialize(void)
 		patch_slb_encoding(slb_miss_kernel_load_io,
 				   SLB_VSID_KERNEL | io_llp);
 
-		DBG("SLB: linear  LLP = %04x\n", linear_llp);
-		DBG("SLB: io      LLP = %04x\n", io_llp);
+		DBG("SLB: linear  LLP = %04lx\n", linear_llp);
+		DBG("SLB: io      LLP = %04lx\n", io_llp);
 	}
 
 	get_paca()->stab_rr = SLB_NUM_BOLTED;
