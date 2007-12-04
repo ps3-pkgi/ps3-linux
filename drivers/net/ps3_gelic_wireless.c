@@ -549,38 +549,37 @@ static int gelicw_cmd_get_scan(struct gelic_wireless *w)
 		return -EFAULT;
 	}
 
-	desc = w->data_buf;
-	for (i = 0;
-	     i < val / sizeof(struct scan_desc) && i < MAX_SCAN_BSS;
-	     i++) {
+	for (i = 0, desc = w->data_buf;
+	     ((void *)desc < (w->data_buf + val)) && i < MAX_SCAN_BSS;
+	     i++, desc = ((void *)desc + desc->size)) {
 		struct gelicw_bss *bss = &w->bss_list[i];
 
 		bss->rates_len = 0;
 		for (j = 0; j < MAX_RATES_LENGTH; j++)
-			if (desc[i].rate[j])
-				bss->rates[bss->rates_len++] = desc[i].rate[j];
+			if (desc->rate[j])
+				bss->rates[bss->rates_len++] = desc->rate[j];
 		bss->rates_ex_len = 0;
 		for (j = 0; j < MAX_RATES_EX_LENGTH; j++)
-			if (desc[i].ext_rate[j])
+			if (desc->ext_rate[j])
 				bss->rates_ex[bss->rates_ex_len++]
-						= desc[i].ext_rate[j];
+						= desc->ext_rate[j];
 
-		if (desc[i].capability & 0x3) {
-			if (desc[i].capability & 0x1)
+		if (desc->capability & 0x3) {
+			if (desc->capability & 0x1)
 				bss->mode = IW_MODE_INFRA;
 			else
 				bss->mode = IW_MODE_ADHOC;
 		}
-		bss->channel = desc[i].channel;
-		bss->essid_len = strnlen(desc[i].essid, IW_ESSID_MAX_SIZE);
-		bss->rssi = (u8)desc[i].rssi;
-		bss->capability = desc[i].capability;
-		bss->beacon_interval = desc[i].beacon_period;
+		bss->channel = desc->channel;
+		bss->essid_len = strnlen(desc->essid, IW_ESSID_MAX_SIZE);
+		bss->rssi = (u8)desc->rssi;
+		bss->capability = desc->capability;
+		bss->beacon_interval = desc->beacon_period;
 		memset(bss->essid, 0, sizeof(bss->essid));
-		memcpy(bss->essid, desc[i].essid, bss->essid_len);
-		p = (u8 *)&desc[i].bssid;
+		memcpy(bss->essid, desc->essid, bss->essid_len);
+		p = (u8 *)&desc->bssid;
 		memcpy(bss->bssid, &p[2], ETH_ALEN);/* bssid:64bit in desc */
-		bss->sec_info = desc[i].security;
+		bss->sec_info = desc->security;
 	}
 	w->num_bss_list = i;
 
