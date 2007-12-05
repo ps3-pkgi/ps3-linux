@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
-# Linux kernel version: 2.6.24-rc1
-# Sat Nov  3 17:43:46 2007
+# Linux kernel version: 2.6.24-rc4
+# Tue Dec  4 22:49:57 2007
 #
 CONFIG_PPC64=y
 
@@ -69,6 +69,7 @@ CONFIG_POSIX_MQUEUE=y
 # CONFIG_BSD_PROCESS_ACCT is not set
 # CONFIG_TASKSTATS is not set
 # CONFIG_USER_NS is not set
+# CONFIG_PID_NS is not set
 # CONFIG_AUDIT is not set
 # CONFIG_IKCONFIG is not set
 CONFIG_LOG_BUF_SHIFT=17
@@ -473,7 +474,6 @@ CONFIG_ZD1211RW=m
 # CONFIG_USB_KAWETH is not set
 CONFIG_USB_PEGASUS=m
 # CONFIG_USB_RTL8150 is not set
-CONFIG_USB_USBNET_MII=m
 CONFIG_USB_USBNET=m
 CONFIG_USB_NET_AX8817X=m
 # CONFIG_USB_NET_CDCETHER is not set
@@ -638,7 +638,7 @@ CONFIG_FB_DEFERRED_IO=y
 # CONFIG_FB_S1D13XXX is not set
 # CONFIG_FB_IBM_GXT4500 is not set
 CONFIG_FB_PS3=y
-CONFIG_FB_PS3_DEFAULT_SIZE_M=18
+CONFIG_FB_PS3_DEFAULT_SIZE_M=9
 # CONFIG_FB_VIRTUAL is not set
 # CONFIG_BACKLIGHT_LCD_SUPPORT is not set
 
