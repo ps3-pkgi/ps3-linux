@@ -650,6 +650,8 @@ static int ps3_probe_thread(void *data)
 	dev.sbd.dev_id = PS3_NOTIFICATION_DEV_ID;
 	dev.sbd.interrupt_id = PS3_NOTIFICATION_INTERRUPT_ID;
 
+	lv1_close_device(dev.sbd.bus_id, dev.sbd.dev_id);
+
 	res = lv1_open_device(dev.sbd.bus_id, dev.sbd.dev_id, 0);
 	if (res) {
 		pr_err("%s:%u: lv1_open_device %s\n", __func__, __LINE__,
