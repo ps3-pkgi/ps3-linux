@@ -436,8 +436,13 @@ void free_irq(unsigned int irq, void *dev_id)
 			struct irqaction **pp = p;
 
 			p = &action->next;
-			if (action->dev_id != dev_id)
+			if (action->dev_id != dev_id) {
+				pr_debug("%s:%d: irq %u bad dev_id: request_irq(%p) != "
+					"free_irq(%p)\n" , __func__, __LINE__, irq, action->dev_id,
+					 dev_id);
+				BUG();
 				continue;
+			}
 
 			/* Found it - now remove it from the list of entries */
 			*pp = action->next;
