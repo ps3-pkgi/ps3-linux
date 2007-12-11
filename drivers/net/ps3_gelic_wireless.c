@@ -1677,7 +1677,8 @@ static void gelic_wl_scan_complete_event(struct gelic_wl_info *wl)
 			pr_info("%s: kzalloc failed\n", __func__);
 			i++;
 			scan_info_size += be16_to_cpu(scan_info->size);
-			scan_info = (void *)scan_info + be16_to_cpu(scan_info->size);
+			scan_info = (void *)scan_info +
+				be16_to_cpu(scan_info->size);
 			continue;
 		}
 		/* copy hw scan info */
