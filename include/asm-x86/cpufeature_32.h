@@ -165,6 +165,7 @@
 #define cpu_has_pebs 		boot_cpu_has(X86_FEATURE_PEBS)
 #define cpu_has_clflush		boot_cpu_has(X86_FEATURE_CLFLSH)
 #define cpu_has_bts 		boot_cpu_has(X86_FEATURE_BTS)
+#define cpu_has_arch_perfmon 	boot_cpu_has(X86_FEATURE_ARCH_PERFMON)
 
 #endif /* __ASM_I386_CPUFEATURE_H */
 

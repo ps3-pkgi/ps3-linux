@@ -197,11 +197,20 @@ int ps3_repository_read_be_node_id(unsigned int be_index, u64 *node_id);
 int ps3_repository_read_tb_freq(u64 node_id, u64 *tb_freq);
 int ps3_repository_read_be_tb_freq(unsigned int be_index, u64 *tb_freq);
 
+/* repository performance monitor info */
+
+int ps3_repository_read_lpm_priv(unsigned int be_index, u64 *lpar, u64 *priv);
+
 /* repository 'Other OS' area */
 
 int ps3_repository_read_boot_dat_addr(u64 *lpar_addr);
 int ps3_repository_read_boot_dat_size(unsigned int *size);
 int ps3_repository_read_boot_dat_info(u64 *lpar_addr, unsigned int *size);
+
+/* repository pu info */
+
+int ps3_repository_read_num_pu(unsigned int *num_pu);
+int ps3_repository_read_pu_id(unsigned int pu_index, u64 *pu_id);
 
 /* repository spu info */
 

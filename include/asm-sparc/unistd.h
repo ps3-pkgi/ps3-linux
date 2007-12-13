@@ -330,8 +330,20 @@
 #define __NR_timerfd		312
 #define __NR_eventfd		313
 #define __NR_fallocate		314
+#define __NR_pfm_create_context 315
+#define __NR_pfm_write_pmcs	316
+#define __NR_pfm_write_pmds	317
+#define __NR_pfm_read_pmds	318
+#define __NR_pfm_load_context	319
+#define __NR_pfm_start		320
+#define __NR_pfm_stop		321
+#define __NR_pfm_restart	322
+#define __NR_pfm_create_evtsets	323
+#define __NR_pfm_getinfo_evtsets 324
+#define __NR_pfm_delete_evtsets	325
+#define __NR_pfm_unload_context	326
 
-#define NR_SYSCALLS		315
+#define NR_SYSCALLS		327
 
 #ifdef __KERNEL__
 #define __ARCH_WANT_IPC_PARSE_VERSION

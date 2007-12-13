@@ -15,6 +15,7 @@
 #include <linux/slab.h>
 #include <linux/moduleparam.h>
 #include <linux/kdebug.h>
+#include <linux/perfmon.h>
 #include <asm/nmi.h>
 #include <asm/msr.h>
 #include <asm/apic.h>
@@ -199,8 +200,12 @@ static int nmi_setup(void)
 	if (!allocate_msrs())
 		return -ENOMEM;
 
+	if (pfm_reserve_allcpus())
+		return -EBUSY;
+
 	if ((err = register_die_notifier(&profile_exceptions_nb))){
 		free_msrs();
+		pfm_release_allcpus();
 		return err;
 	}
 
@@ -279,6 +284,7 @@ static void nmi_shutdown(void)
 	unregister_die_notifier(&profile_exceptions_nb);
 	model->shutdown(cpu_msrs);
 	free_msrs();
+	pfm_release_allcpus();
 }
 
  

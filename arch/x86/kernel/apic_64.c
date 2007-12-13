@@ -160,7 +160,7 @@ void enable_NMI_through_LVT0 (void * dummy)
 	apic_write(APIC_LVT0, v);
 }
 
-int get_maxlvt(void)
+int lapic_get_maxlvt(void)
 {
 	unsigned int v, maxlvt;
 
@@ -194,7 +194,7 @@ void clear_local_APIC(void)
 	int maxlvt;
 	unsigned int v;
 
-	maxlvt = get_maxlvt();
+	maxlvt = lapic_get_maxlvt();
 
 	/*
 	 * Masking an LVT entry can trigger a local APIC error
@@ -333,7 +333,7 @@ int __init verify_local_APIC(void)
 	reg1 = GET_APIC_VERSION(reg0);
 	if (reg1 == 0x00 || reg1 == 0xff)
 		return 0;
-	reg1 = get_maxlvt();
+	reg1 = lapic_get_maxlvt();
 	if (reg1 < 0x02 || reg1 == 0xff)
 		return 0;
 
@@ -519,7 +519,7 @@ void __cpuinit setup_local_APIC (void)
 
 	{
 		unsigned oldvalue;
-		maxlvt = get_maxlvt();
+		maxlvt = lapic_get_maxlvt();
 		oldvalue = apic_read(APIC_ESR);
 		value = ERROR_APIC_VECTOR;      // enables sending errors
 		apic_write(APIC_LVTERR, value);
@@ -571,7 +571,7 @@ static int lapic_suspend(struct sys_device *dev, pm_message_t state)
 	if (!apic_pm_state.active)
 		return 0;
 
-	maxlvt = get_maxlvt();
+	maxlvt = lapic_get_maxlvt();
 
 	apic_pm_state.apic_id = apic_read(APIC_ID);
 	apic_pm_state.apic_taskpri = apic_read(APIC_TASKPRI);
@@ -605,7 +605,7 @@ static int lapic_resume(struct sys_device *dev)
 	if (!apic_pm_state.active)
 		return 0;
 
-	maxlvt = get_maxlvt();
+	maxlvt = lapic_get_maxlvt();
 
 	local_irq_save(flags);
 	rdmsr(MSR_IA32_APICBASE, l, h);
@@ -1011,13 +1011,35 @@ int setup_profiling_timer(unsigned int multiplier)
 	return -EINVAL;
 }
 
-void setup_APIC_extended_lvt(unsigned char lvt_off, unsigned char vector,
-			     unsigned char msg_type, unsigned char mask)
+/*
+ * Setup extended LVT, AMD specific (K8, family 10h)
+ *
+ * Vector mappings are hard coded. On K8 only offset 0 (APIC500) and
+ * MCE interrupts are supported. Thus MCE offset must be set to 0.
+ */
+
+#define APIC_EILVT_LVTOFF_MCE 0
+#define APIC_EILVT_LVTOFF_IBS 1
+
+static void setup_APIC_eilvt(u8 lvt_off, u8 vector, u8 msg_type, u8 mask)
 {
-	unsigned long reg = (lvt_off << 4) + K8_APIC_EXT_LVT_BASE;
+	unsigned long reg = (lvt_off << 4) + APIC_EILVT0;
 	unsigned int  v   = (mask << 16) | (msg_type << 8) | vector;
 	apic_write(reg, v);
 }
+
+u8 setup_APIC_eilvt_mce(u8 vector, u8 msg_type, u8 mask)
+{
+	setup_APIC_eilvt(APIC_EILVT_LVTOFF_MCE, vector, msg_type, mask);
+	return APIC_EILVT_LVTOFF_MCE;
+}
+
+u8 setup_APIC_eilvt_ibs(u8 vector, u8 msg_type, u8 mask)
+{
+	setup_APIC_eilvt(APIC_EILVT_LVTOFF_IBS, vector, msg_type, mask);
+	return APIC_EILVT_LVTOFF_IBS;
+}
+EXPORT_SYMBOL(setup_APIC_eilvt_ibs);
 
 /*
  * Local timer interrupt handler. It does both profiling and
@@ -1029,7 +1051,7 @@ void setup_APIC_extended_lvt(unsigned char lvt_off, unsigned char vector,
  * value into /proc/profile.
  */
 
-void smp_local_timer_interrupt(void)
+static void smp_local_timer_interrupt(void)
 {
 	int cpu = smp_processor_id();
 	struct clock_event_device *evt = &per_cpu(lapic_events, cpu);

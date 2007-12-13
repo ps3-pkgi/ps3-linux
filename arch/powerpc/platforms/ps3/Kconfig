@@ -138,4 +138,16 @@ config PS3_FLASH
 	  be disabled on the kernel command line using "ps3flash=off", to
 	  not allocate this fixed buffer.
 
+config PS3_PMU
+	bool "PS3 Performance Monitor Unit"
+	depends on PPC_PS3 && (PERFMON_CELL || OPROFILE_CELL)
+	default y
+	help
+	  This support is required to access the Cell hardware performance
+          monitor on PS3.
+
+          To control the Cell hardware performance monitor,
+          It uses the performance monitor hypervisor calls instead of
+          the performane monitor register access.
+
 endmenu

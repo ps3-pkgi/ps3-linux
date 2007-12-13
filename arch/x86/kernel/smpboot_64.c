@@ -49,6 +49,7 @@
 #include <linux/mc146818rtc.h>
 #include <linux/smp.h>
 #include <linux/kdebug.h>
+#include <linux/perfmon.h>
 
 #include <asm/mtrr.h>
 #include <asm/pgalloc.h>
@@ -388,7 +389,7 @@ static void inquire_remote_apic(int apicid)
 
 	printk(KERN_INFO "Inquiring remote APIC #%d...\n", apicid);
 
-	for (i = 0; i < ARRAY_SIZE(regs); i++) {
+	for (i = 0; i < sizeof(regs) / sizeof(*regs); i++) {
 		printk("... APIC #%d %s: ", apicid, names[i]);
 
 		/*
@@ -466,7 +467,7 @@ static int __cpuinit wakeup_secondary_via_INIT(int phys_apicid, unsigned int sta
 	 */
 	Dprintk("#startup loops: %d.\n", num_starts);
 
-	maxlvt = get_maxlvt();
+	maxlvt = lapic_get_maxlvt();
 
 	for (j = 1; j <= num_starts; j++) {
 		Dprintk("Sending STARTUP #%d.\n",j);
@@ -1057,6 +1058,7 @@ int __cpu_disable(void)
 	spin_unlock(&vector_lock);
 	remove_cpu_from_maps();
 	fixup_irqs(cpu_online_map);
+	pfm_cpu_disable();
 	return 0;
 }
 

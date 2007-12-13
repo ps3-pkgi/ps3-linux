@@ -929,6 +929,53 @@ int ps3_repository_read_be_tb_freq(unsigned int be_index, u64 *tb_freq)
 		: ps3_repository_read_tb_freq(node_id, tb_freq);
 }
 
+int ps3_repository_read_lpm_priv(unsigned int be_index, u64 *lpar, u64 *priv)
+{
+	int result;
+	u64 node_id;
+
+	*lpar = 0;
+	*priv = 0;
+	result = ps3_repository_read_be_node_id(be_index, &node_id);
+	return result ? result
+		: read_node(PS3_LPAR_ID_PME,
+			    make_first_field("be", 0),
+			    node_id,
+			    make_field("lpm", 0),
+			    make_field("priv", 0),
+			    lpar, priv);
+}
+
+int ps3_repository_read_num_pu(unsigned int *num_pu)
+{
+	int result;
+	u64 v1;
+
+	v1 = 0;
+	result = read_node(PS3_LPAR_ID_CURRENT,
+			   make_first_field("bi", 0),
+			   make_field("pun", 0),
+			   0, 0,
+			   &v1, NULL);
+	*num_pu = v1;
+	return result;
+}
+
+int ps3_repository_read_pu_id(unsigned int pu_index, u64 *pu_id)
+{
+	int result;
+	u64 v1;
+
+	v1 = 0;
+	result = read_node(PS3_LPAR_ID_CURRENT,
+		make_first_field("bi", 0),
+		make_field("pu", pu_index),
+		0, 0,
+		&v1, NULL);
+	*pu_id = v1;
+	return result;
+}
+
 #if defined(DEBUG)
 
 int ps3_repository_dump_resource_info(const struct ps3_repository_device *repo)

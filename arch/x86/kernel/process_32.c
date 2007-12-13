@@ -37,6 +37,7 @@
 #include <linux/personality.h>
 #include <linux/tick.h>
 #include <linux/percpu.h>
+#include <linux/perfmon.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -418,6 +419,7 @@ void exit_thread(void)
 		tss->x86_tss.io_bitmap_base = INVALID_IO_BITMAP_OFFSET;
 		put_cpu();
 	}
+	pfm_exit_thread(current);
 }
 
 void flush_thread(void)
@@ -468,6 +470,8 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 	p->thread.eip = (unsigned long) ret_from_fork;
 
 	savesegment(gs,p->thread.gs);
+
+	pfm_copy_thread(p);
 
 	tsk = current;
 	if (unlikely(test_tsk_thread_flag(tsk, TIF_IO_BITMAP))) {
@@ -622,6 +626,10 @@ __switch_to_xtra(struct task_struct *prev_p, struct task_struct *next_p,
 			hard_enable_TSC();
 	}
 #endif
+
+	if (test_tsk_thread_flag(next_p, TIF_PERFMON_CTXSW)
+	    || test_tsk_thread_flag(prev_p, TIF_PERFMON_CTXSW))
+		pfm_ctxsw(prev_p, next_p);
 
 	if (!test_tsk_thread_flag(next_p, TIF_IO_BITMAP)) {
 		/*

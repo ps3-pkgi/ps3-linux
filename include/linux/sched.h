@@ -94,6 +94,7 @@ struct sched_param {
 struct exec_domain;
 struct futex_pi_state;
 struct bio;
+struct pfm_context;
 
 /*
  * List of flags we want to share for kernel threads,
@@ -1178,6 +1179,9 @@ struct task_struct {
 	int make_it_fail;
 #endif
 	struct prop_local_single dirties;
+#ifdef CONFIG_PERFMON
+	struct pfm_context *pfm_context;
+#endif
 };
 
 /*
