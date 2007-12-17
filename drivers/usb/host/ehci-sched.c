@@ -21,10 +21,6 @@
 
 /*-------------------------------------------------------------------------*/
 
-#ifdef CONFIG_PPC_PS3
-#include <asm/firmware.h>
-#endif
-
 /*
  * EHCI scheduled transaction support:  interrupt, iso, split iso
  * These are called "periodic" transactions in the EHCI spec.
@@ -1073,6 +1069,32 @@ iso_stream_find (struct ehci_hcd *ehci, struct urb *urb)
 	return stream;
 }
 
+/**
+ * itd_in_use -  Fix for Cell Super Companion Chip ISO transfers
+ *
+ * The EHCI host controller in the Cell Processor's Super Companion
+ * Chip has a hardware errata in its handling of ISO TDs.  The
+ * controller will continue to access the iTD after the transaction
+ * active bit has been cleared.  The condition can be avoided by
+ * delaying the reuse of the iTD until the frame number changes.
+ */
+
+#if defined(CONFIG_PPC_PS3)
+#include <asm/firmware.h>
+
+static int itd_in_use(struct ehci_hcd *ehci, unsigned int itd_frame)
+{
+	return (firmware_has_feature(FW_FEATURE_PS3_LV1)
+		&& (itd_frame == (ehci_readl(ehci,
+		&ehci->regs->frame_index) >> 3) % ehci->periodic_size));
+}
+#else
+static int itd_in_use(struct ehci_hcd *ehci, unsigned int itd_frame)
+{
+	return 0;
+}
+#endif /* defined(CONFIG_PPC_PS3) */
+
 /*-------------------------------------------------------------------------*/
 
 /* ehci_iso_sched ops can be ITD-only or SITD-only */
@@ -1184,21 +1206,12 @@ itd_urb_transaction (
 		if (likely (!list_empty(&stream->free_list))) {
 			itd = list_entry (stream->free_list.prev,
 					struct ehci_itd, itd_list);
-#ifdef CONFIG_PPC_PS3
-			/* Fix for Cell SCC ISO transfer (PS3 Bluetooth). */
-			if (firmware_has_feature(FW_FEATURE_PS3_LV1)
-				&& itd->frame == ((ehci_readl(ehci,
-				&ehci->regs->frame_index) >> 3)
-				% ehci->periodic_size))
+			if (itd_in_use(ehci, itd->frame))
 				itd = NULL;
 			else {
 				list_del (&itd->itd_list);
 				itd_dma = itd->itd_dma;
 			}
-#else
-			list_del (&itd->itd_list);
-			itd_dma = itd->itd_dma;
-#endif
 		} else
 			itd = NULL;
 
@@ -1824,21 +1837,12 @@ sitd_urb_transaction (
 		if (!list_empty(&stream->free_list)) {
 			sitd = list_entry (stream->free_list.prev,
 					 struct ehci_sitd, sitd_list);
-#ifdef CONFIG_PPC_PS3
-			/* Fix for Cell SCC ISO transfer (PS3 Bluetooth). */
-			if (firmware_has_feature(FW_FEATURE_PS3_LV1)
-				&& sitd->frame == ((ehci_readl(ehci,
-				&ehci->regs->frame_index) >> 3)
-				% ehci->periodic_size))
+			if (itd_in_use(ehci, sitd->frame))
 				sitd = NULL;
 			else {
 				list_del (&sitd->sitd_list);
 				sitd_dma = sitd->sitd_dma;
 			}
-#else
-			list_del (&sitd->sitd_list);
-			sitd_dma = sitd->sitd_dma;
-#endif
 		} else
 			sitd = NULL;
 
