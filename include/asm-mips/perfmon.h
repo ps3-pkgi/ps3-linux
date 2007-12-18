@@ -378,7 +378,7 @@ static inline void pfm_cacheflush(void *addr, unsigned int len)
 	start = (unsigned long)addr & PAGE_MASK;
 	end = ((unsigned long)addr + len + PAGE_SIZE - 1) & PAGE_MASK;
 
-	while(start <= end) {
+	while(start < end) {
 		flush_data_cache_page(start);
 		start += PAGE_SIZE;
 	}

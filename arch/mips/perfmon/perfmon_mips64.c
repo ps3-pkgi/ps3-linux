@@ -34,7 +34,7 @@ MODULE_LICENSE("GPL");
  * 	- bit 63-9
  * RSVD: reserved bits must be 1
  */
-#define PFM_MIPS64_PMC_RSVD 0xfffffffffffffe10ULL
+#define PFM_MIPS64_PMC_RSVD 0xfffffffffffff810ULL
 #define PFM_MIPS64_PMC_VAL  (1ULL<<4)
 
 extern int null_perf_irq(struct pt_regs *regs);
@@ -118,6 +118,7 @@ static int __init pfm_mips64_pmu_init_module(void)
 {
 	struct cpuinfo_mips *c = &current_cpu_data;
 	int i, ret, num;
+        u64 temp_mask;
 
 	switch (c->cputype) {
 	case CPU_5KC:
@@ -156,7 +157,9 @@ static int __init pfm_mips64_pmu_init_module(void)
 		return -1;
 	}
 
-        if (c->cputype==CPU_R12000) {
+           /* The R14k and older performance counters have to          */
+	   /* be hard-coded, as there is no support for auto-detection */
+	if ((c->cputype==CPU_R12000) || (c->cputype==CPU_R14000)) {
 	   num=4;
 	}
         else if (c->cputype==CPU_R10000) {
@@ -177,6 +180,27 @@ static int __init pfm_mips64_pmu_init_module(void)
 
 	for(i=num; i < PFM_MIPS64_NUM_PMDS; i++) {
 		pfm_mips64_pmd_desc[i].type = PFM_REG_NA;
+	}
+
+	/* set the PMC_RSVD mask */
+	switch (c->cputype) {
+	case CPU_5KC:
+	case CPU_R10000:
+	case CPU_20KC:
+	   /* 4-bits for event */
+	   temp_mask=0xfffffffffffffe10ULL;
+	   break;
+	case CPU_R12000:
+	case CPU_R14000:
+	   /* 5-bits for event */
+	   temp_mask=0xfffffffffffffc10ULL;
+	   break;
+	default:
+	   /* 6-bits for event */
+	   temp_mask=0xfffffffffffff810ULL;
+	}
+        for(i=0; i< PFM_MIPS64_NUM_PMCS;i++) {
+           pfm_mips64_pmc_desc[i].rsvd_msk=temp_mask;
 	}
 
 	pfm_mips64_pmu_conf.num_pmc_entries = num;

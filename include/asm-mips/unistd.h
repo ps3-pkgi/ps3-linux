@@ -671,7 +671,7 @@
 #endif /* _MIPS_SIM == _MIPS_SIM_ABI64 */
 
 #define __NR_64_Linux			5000
-#define __NR_64_Linux_syscalls		279
+#define __NR_64_Linux_syscalls		291
 
 #if _MIPS_SIM == _MIPS_SIM_NABI32
 

@@ -1538,8 +1538,23 @@ ret_from_syscall:
 		ldx		[%g6 + TI_FLAGS], %l0
 		call		schedule_tail
 		 mov		%g7, %o0
+		andcc		%l0, _TIF_PERFCTR, %g0
+		be,pt		%icc, 1f
+		 nop
+		ldx		[%g6 + TI_PCR], %o7
+		wr		%g0, %o7, %pcr
 
-		ba,pt		%xcc, ret_sys_call
+		/* Blackbird errata workaround.  See commentary in
+		 * smp.c:smp_percpu_timer_interrupt() for more
+		 * information.
+		 */
+		ba,pt		%xcc, 99f
+		 nop
+		.align		64
+99:		wr		%g0, %g0, %pic
+		rd		%pic, %g0
+
+1:		b,pt		%xcc, ret_sys_call
 		 ldx		[%sp + PTREGS_OFF + PT_V9_I0], %o0
 sparc_exit:	rdpr		%pstate, %g2
 		wrpr		%g2, PSTATE_IE, %pstate
@@ -2578,6 +2593,18 @@ sun4v_mmustat_info:
 	retl
 	 nop
 	.size	sun4v_mmustat_info, .-sun4v_mmustat_info
+
+	.globl	sun4v_mmu_demap_all
+	.type	sun4v_mmu_demap_all,#function
+sun4v_mmu_demap_all:
+	clr	%o0
+	clr	%o1
+	mov	HV_MMU_ALL, %o2
+	mov	HV_FAST_MMU_DEMAP_ALL, %o5
+	ta	HV_FAST_TRAP
+	retl
+	 nop
+	.size	sun4v_mmu_demap_all, .-sun4v_mmu_demap_all
 
 	.globl	sun4v_niagara_getperf
 	.type	sun4v_niagara_getperf,#function
