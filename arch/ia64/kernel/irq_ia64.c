@@ -196,7 +196,7 @@ assign_irq_vector (int irq)
 {
 	unsigned long flags;
 	int vector, cpu;
-	cpumask_t domain;
+	cpumask_t domain = CPU_MASK_NONE;
 
 	vector = -ENOSPC;
 
@@ -336,7 +336,7 @@ int create_irq(void)
 {
 	unsigned long flags;
 	int irq, vector, cpu;
-	cpumask_t domain;
+	cpumask_t domain = CPU_MASK_NONE;
 
 	irq = vector = -ENOSPC;
 	spin_lock_irqsave(&vector_lock, flags);
