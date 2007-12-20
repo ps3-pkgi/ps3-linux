@@ -23,6 +23,7 @@
 #include <linux/kernel.h>
 #include <linux/kthread.h>
 #include <linux/init.h>
+#include <linux/reboot.h>
 
 #include <asm/firmware.h>
 #include <asm/lv1call.h>
@@ -565,8 +566,9 @@ static int ps3_notification_read_write(struct ps3_notification_device *dev,
 	}
 	pr_debug("%s:%u: notification %s issued\n", __func__, __LINE__, op);
 
-	res = wait_for_completion_interruptible(&dev->done);
-	if (res) {
+	res = wait_event_interruptible(dev->done.wait,
+				       dev->done.done || kthread_should_stop());
+	if (res || kthread_should_stop()) {
 		pr_debug("%s:%u: interrupted %s\n", __func__, __LINE__, op);
 		return res;
 	}
@@ -650,12 +652,10 @@ static int ps3_probe_thread(void *data)
 	dev.sbd.dev_id = PS3_NOTIFICATION_DEV_ID;
 	dev.sbd.interrupt_id = PS3_NOTIFICATION_INTERRUPT_ID;
 
-	lv1_close_device(dev.sbd.bus_id, dev.sbd.dev_id);
-
 	res = lv1_open_device(dev.sbd.bus_id, dev.sbd.dev_id, 0);
 	if (res) {
-		pr_err("%s:%u: lv1_open_device %s\n", __func__, __LINE__,
-		       ps3_result(res));
+		pr_err("%s:%u: lv1_open_device failed %s\n", __func__,
+		       __LINE__, ps3_result(res));
 		goto fail_free;
 	}
 
@@ -730,6 +730,26 @@ fail_free:
 }
 
 /**
+ * ps3_stop_probe_thread - Stops the background probe thread.
+ *
+ */
+
+static struct task_struct *probe_task;
+
+static int ps3_stop_probe_thread(struct notifier_block *nb, unsigned long code,
+				 void *data)
+{
+	if (probe_task)
+		kthread_stop(probe_task);
+	return 0;
+}
+
+static struct notifier_block nb = {
+	.notifier_call = ps3_stop_probe_thread
+};
+
+
+/**
  * ps3_start_probe_thread - Starts the background probe thread.
  *
  */
@@ -770,6 +790,9 @@ static int __init ps3_start_probe_thread(enum ps3_bus_type bus_type)
 		       result);
 		return result;
 	}
+
+	probe_task = task;
+	register_reboot_notifier(&nb);
 
 	pr_debug(" <- %s:%d\n", __func__, __LINE__);
 	return 0;
