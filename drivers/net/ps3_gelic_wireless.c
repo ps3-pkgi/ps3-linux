@@ -46,7 +46,7 @@
 
 
 static int gelic_wl_start_scan(struct gelic_wl_info *wl, int always_scan);
-static int  gelic_wl_try_associate(struct net_device *netdev);
+static int gelic_wl_try_associate(struct net_device *netdev);
 
 /*
  * tables
@@ -248,6 +248,18 @@ static u32 gelic_wl_get_link(struct net_device *netdev)
 	up(&wl->assoc_stat_lock);
 	pr_debug("%s: ->\n", __func__);
 	return ret;
+}
+
+void gelic_wl_send_iwap_event(struct gelic_wl_info *wl, u8 *bssid)
+{
+	union iwreq_data data;
+
+	memset(&data, 0, sizeof(data));
+	if (bssid)
+		memcpy(data.ap_addr.sa_data, bssid, ETH_ALEN);
+	data.ap_addr.sa_family = ARPHRD_ETHER;
+	wireless_send_event(port_to_netdev(wl_port(wl)), SIOCGIWAP,
+			    &data, NULL);
 }
 
 /*
@@ -2057,6 +2069,7 @@ static int gelic_wl_associate_bss(struct gelic_wl_info *wl,
 		wl->assoc_stat = GELIC_WL_ASSOC_STAT_DISCONN;
 		kfree(cmd);
 		ret = -ENOMEM;
+		gelic_wl_send_iwap_event(wl, NULL);
 		goto out;
 	}
 	kfree(cmd);
@@ -2071,20 +2084,15 @@ static int gelic_wl_associate_bss(struct gelic_wl_info *wl,
 					   NULL, 0);
 		kfree(cmd);
 		wl->assoc_stat = GELIC_WL_ASSOC_STAT_DISCONN;
+		gelic_wl_send_iwap_event(wl, NULL);
 		ret = -ENXIO;
 	} else {
-		union iwreq_data data;
-
 		wl->assoc_stat = GELIC_WL_ASSOC_STAT_ASSOCIATED;
 		/* copy bssid */
 		memcpy(wl->active_bssid, &bss->hwinfo->bssid[2], ETH_ALEN);
 
-		/* send event */
-		memset(&data, 0, sizeof(data));
-		memcpy(data.ap_addr.sa_data, wl->active_bssid, ETH_ALEN);
-		data.ap_addr.sa_family = ARPHRD_ETHER;
-		wireless_send_event(port_to_netdev(wl_port(wl)), SIOCGIWAP,
-				    &data, NULL);
+		/* send connect event */
+		gelic_wl_send_iwap_event(wl, wl->active_bssid);
 		pr_info("%s: connected\n", __func__);
 	}
 out:
@@ -2148,12 +2156,9 @@ static void gelic_wl_disconnect_event(struct gelic_wl_info *wl,
 	kfree(cmd);
 
 	/* send disconnected event to the supplicant */
-	if (wl->assoc_stat == GELIC_WL_ASSOC_STAT_ASSOCIATED) {
-		memset(&data, 0, sizeof(data));
-		data.ap_addr.sa_family = ARPHRD_ETHER;
-		wireless_send_event(port_to_netdev(wl_port(wl)), SIOCGIWAP,
-				    &data, NULL);
-	}
+	if (wl->assoc_stat == GELIC_WL_ASSOC_STAT_ASSOCIATED)
+		gelic_wl_send_iwap_event(wl, NULL);
+
 	wl->assoc_stat = GELIC_WL_ASSOC_STAT_DISCONN;
 	netif_carrier_off(port_to_netdev(wl_port(wl)));
 
@@ -2272,6 +2277,7 @@ static void gelic_wl_assoc_worker(struct work_struct *work)
 	pr_debug("%s: scan done\n", __func__);
 	down(&wl->scan_lock);
 	if (wl->scan_stat != GELIC_WL_SCAN_STAT_GOT_LIST) {
+		gelic_wl_send_iwap_event(wl, NULL);
 		pr_info("%s: no scan list. association failed\n", __func__);
 		goto scan_lock_out;
 	}
@@ -2279,6 +2285,7 @@ static void gelic_wl_assoc_worker(struct work_struct *work)
 	/* find best matching bss */
 	best_bss = gelic_wl_find_best_bss(wl);
 	if (!best_bss) {
+		gelic_wl_send_iwap_event(wl, NULL);
 		pr_info("%s: no bss matched. association failed\n", __func__);
 		goto scan_lock_out;
 	}
@@ -2311,6 +2318,7 @@ void gelic_wl_interrupt(struct net_device *netdev, u64 status)
 		queue_delayed_work(wl->event_queue, &wl->event_work, 0);
 	}
 }
+
 /*
  * driver helpers
  */
@@ -2588,7 +2596,6 @@ static void gelic_wl_disconnect(struct net_device *netdev)
 	struct gelic_port *port = netdev_priv(netdev);
 	struct gelic_wl_info *wl = port_wl(port);
 	struct gelic_eurus_cmd *cmd;
-	union iwreq_data data;
 
 	/*
 	 * If scann process is running on chip,
@@ -2599,10 +2606,7 @@ static void gelic_wl_disconnect(struct net_device *netdev)
 
 	cmd = gelic_eurus_sync_cmd(wl, GELIC_EURUS_CMD_DISASSOC, NULL, 0);
 	kfree(cmd);
-	memset(&data, 0, sizeof(data));
-	data.ap_addr.sa_family = ARPHRD_ETHER;
-	wireless_send_event(port_to_netdev(wl_port(wl)), SIOCGIWAP,
-			    &data, NULL);
+	gelic_wl_send_iwap_event(wl, NULL);
 };
 
 static int gelic_wl_stop(struct net_device *netdev)

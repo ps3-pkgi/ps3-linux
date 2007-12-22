@@ -352,5 +352,5 @@ extern void gelic_net_get_drvinfo(struct net_device *netdev,
 				  struct ethtool_drvinfo *info);
 extern u32 gelic_net_get_rx_csum(struct net_device *netdev);
 extern int gelic_net_set_rx_csum(struct net_device *netdev, u32 data);
-
+extern void gelic_net_poll_controller(struct net_device *netdev);
 #endif /* _GELIC_NET_H */

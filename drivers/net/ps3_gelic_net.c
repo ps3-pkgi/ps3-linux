@@ -59,6 +59,9 @@ MODULE_LICENSE("GPL");
 static inline void gelic_card_enable_rxdmac(struct gelic_card *card);
 static inline void gelic_card_disable_rxdmac(struct gelic_card *card);
 static inline void gelic_card_disable_txdmac(struct gelic_card *card);
+static inline void gelic_card_reset_chain(struct gelic_card *card,
+					  struct gelic_descr_chain *chain,
+					  struct gelic_descr *start_descr);
 
 /* set irq_mask */
 int gelic_card_set_irq_mask(struct gelic_card *card, u64 mask)
@@ -138,6 +141,8 @@ void gelic_card_down(struct gelic_card *card)
 		gelic_card_set_irq_mask(card, mask);
 		/* stop rx */
 		gelic_card_disable_rxdmac(card);
+		gelic_card_reset_chain(card, &card->rx_chain,
+				       card->descr + GELIC_NET_TX_DESCRIPTORS);
 		/* stop tx */
 		gelic_card_disable_txdmac(card);
 	}
@@ -260,6 +265,31 @@ iommu_error:
 	return -ENOMEM;
 }
 
+/**
+ * gelic_card_reset_chain - reset status of a descriptor chain
+ * @card: card structure
+ * @chain: address of chain
+ * @start_descr: address of descriptor array
+ *
+ * Reset the status of dma descriptors to ready state
+ * and re-initialize the hardware chain for later use
+ */
+static void gelic_card_reset_chain(struct gelic_card *card,
+				   struct gelic_descr_chain *chain,
+				   struct gelic_descr *start_descr)
+{
+	struct gelic_descr *descr;
+
+	for (descr = start_descr; start_descr != descr->next; descr++) {
+		gelic_descr_set_status(descr, GELIC_DESCR_DMA_CARDOWNED);
+		descr->next_descr_addr = cpu_to_be32(descr->next->bus_addr);
+	}
+
+	chain->tail = start_descr;
+	chain->head = (descr - 1);
+
+	(descr - 1)->next_descr_addr = 0;
+}
 /**
  * gelic_descr_prepare_rx - reinitializes a rx descriptor
  * @card: card structure
@@ -559,7 +589,7 @@ static inline void gelic_card_enable_rxdmac(struct gelic_card *card)
 {
 	int status;
 
-	if (gelic_descr_get_status(card->rx_chain.head) !=
+	if (gelic_descr_get_status(card->rx_chain.tail) !=
 	    GELIC_DESCR_DMA_CARDOWNED) {
 		printk(KERN_ERR "%s: status=%x\n", __func__,
 		       be32_to_cpu(card->rx_chain.tail->dmac_cmd_status));
@@ -1139,7 +1169,7 @@ static irqreturn_t gelic_card_interrupt(int irq, void *ptr)
  *
  * see Documentation/networking/netconsole.txt
  */
-static void gelic_net_poll_controller(struct net_device *netdev)
+void gelic_net_poll_controller(struct net_device *netdev)
 {
 	struct gelic_card *card = netdev_card(netdev);
 
