@@ -282,7 +282,7 @@ static void dump_field(char *s, const u8 *f, unsigned int size)
 static void _dump_header(const struct os_area_header *h, const char *func,
 	int line)
 {
-	char str[64];
+	char str[sizeof(h->magic_num) + 1];
 
 	dump_field(str, h->magic_num, sizeof(h->magic_num));
 	pr_debug("%s:%d: h.magic_num:       '%s'\n", func, line,
@@ -502,7 +502,7 @@ static int db_get_rtc_diff(const struct os_area_db *db, int64_t *rtc_diff)
 static void _dump_db(const struct os_area_db *db, const char *func,
 	int line)
 {
-	char str[64];
+	char str[sizeof(db->magic_num) + 1];
 
 	dump_field(str, db->magic_num, sizeof(db->magic_num));
 	pr_debug("%s:%d: db.magic_num:      '%s'\n", func, line,
