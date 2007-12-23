@@ -267,13 +267,13 @@ static void __init os_area_get_property(struct device_node *node,
 			prop->name);
 }
 
-static void dump_field(char *s, const u8 *f, unsigned int size)
+static void dump_field(char *s, const u8 *field, int size_of_field)
 {
 #if defined(DEBUG)
-	unsigned int i;
+	int i;
 
-	for (i = 0; i < size; i++)
-		s[i] = isprint(f[i]) ? f[i] : '.';
+	for (i = 0; i < size_of_field; i++)
+		s[i] = isprint(field[i]) ? field[i] : '.';
 	s[i] = 0;
 #endif
 }
