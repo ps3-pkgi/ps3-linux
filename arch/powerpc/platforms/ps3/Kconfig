@@ -129,14 +129,16 @@ config PS3_FLASH
 
 config PS3_PMU
 	bool "PS3 Performance Monitor Unit"
-	depends on PPC_PS3 && (PERFMON_CELL || OPROFILE_CELL)
-	default y
+	depends on PPC_PS3
+	default n
 	help
-	  This support is required to access the Cell hardware performance
-          monitor on PS3.
+	  Include support for the PS3 Performance Monitor Unit.
 
-          To control the Cell hardware performance monitor,
-          It uses the performance monitor hypervisor calls instead of
-          the performane monitor register access.
+	  This support is required to access the logical performance monitor
+	  of the PS3's LV1 hypervisor.
+
+	  If you intend to use the advanced performance monitoring and
+	  profiling support of the Cell processor with programs like
+	  oprofile and perfmon, then say Y or M, otherwise say N.
 
 endmenu

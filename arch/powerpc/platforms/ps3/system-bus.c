@@ -715,6 +715,7 @@ int ps3_system_bus_device_register(struct ps3_system_bus_device *dev)
 	static unsigned int dev_ioc0_count;
 	static unsigned int dev_sb_count;
 	static unsigned int dev_vuart_count;
+	static unsigned int dev_pmu_count;
 
 	if (!dev->core.parent)
 		dev->core.parent = &ps3_system_bus;
@@ -736,6 +737,10 @@ int ps3_system_bus_device_register(struct ps3_system_bus_device *dev)
 	case PS3_DEVICE_TYPE_VUART:
 		snprintf(dev->core.bus_id, sizeof(dev->core.bus_id),
 			"vuart_%02x", ++dev_vuart_count);
+		break;
+	case PS3_DEVICE_TYPE_PMU:
+		snprintf(dev->core.bus_id, sizeof(dev->core.bus_id),
+			"pmu_%02x", ++dev_pmu_count);
 		break;
 	default:
 		BUG();

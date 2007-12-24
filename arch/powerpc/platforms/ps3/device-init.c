@@ -17,7 +17,7 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
-
+#define DEBUG
 #include <linux/delay.h>
 #include <linux/freezer.h>
 #include <linux/kernel.h>
@@ -30,6 +30,71 @@
 #include <asm/ps3stor.h>
 
 #include "platform.h"
+
+static int __init ps3_register_pmu_devices(void)
+{
+	int result;
+	unsigned int pu_count;
+	struct layout {
+		struct ps3_system_bus_device dev;
+	} *p;
+
+	pr_debug(" -> %s:%d\n", __func__, __LINE__);
+
+	p = kzalloc(sizeof(*p), GFP_KERNEL);
+	if (!p)
+		return -ENOMEM;
+
+	p->dev.match_id = PS3_MATCH_ID_PMU;
+	p->dev.dev_type = PS3_DEVICE_TYPE_PMU;
+
+	result = ps3_repository_read_num_pu(&pu_count);
+
+	if (result) {
+		pr_debug("%s:%d: ps3_repository_read_num_pu failed \n",
+			__func__, __LINE__);
+		return result;
+	}
+
+	pr_debug("%s:%d: pu_count %u\n", __func__, __LINE__, pu_count);
+
+	/* The current pmu driver only supports a single BE processor. */
+
+	if (pu_count > 1) {
+		pr_info("%s:%d: found %u BE processors, only one supported\n",
+			__func__, __LINE__, pu_count);
+	}
+
+	result = ps3_repository_read_pu_id(0, &p->dev.lpm.pu_id);
+
+	if (result) {
+		pr_debug("%s:%d: ps3_repository_read_pu_id failed \n",
+			__func__, __LINE__);
+		return result;
+	}
+
+	result = ps3_repository_read_lpm_priv(0, &p->dev.lpm.lpar_id,
+		&p->dev.lpm.priv);
+
+	if (result) {
+		pr_debug("%s:%d: ps3_repository_read_lpm_priv failed \n",
+			__func__, __LINE__);
+		return result;
+	}
+
+	pr_debug("%s:%d: pu_id %lu, lpm_lpar_id %lu, lpm_priv %lu (%lxh)\n",
+		__func__, __LINE__, p->dev.lpm.pu_id, p->dev.lpm.lpar_id,
+		p->dev.lpm.priv, p->dev.lpm.priv);
+
+	result = ps3_system_bus_device_register(&p->dev);
+
+	if (result)
+		pr_debug("%s:%d ps3_system_bus_device_register failed\n",
+			__func__, __LINE__);
+
+	pr_debug(" <- %s:%d\n", __func__, __LINE__);
+	return result;
+}
 
 /**
  * ps3_setup_gelic_device - Setup and register a gelic device instance.
@@ -825,6 +890,8 @@ static int __init ps3_register_devices(void)
 		ps3_register_repository_device);
 
 	ps3_register_sound_devices();
+
+	ps3_register_pmu_devices();
 
 	pr_debug(" <- %s:%d\n", __func__, __LINE__);
 	return 0;

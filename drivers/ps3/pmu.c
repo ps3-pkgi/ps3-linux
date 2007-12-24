@@ -1,40 +1,61 @@
 /*
  * PS3 Logical Performance Monitor Unit.
  *
- * Copyright (C) 2007 Sony Computer Entertainment Inc.
- * Copyright 2007 Sony Corporation.
+ *  Copyright (C) 2007 Sony Computer Entertainment Inc.
+ *  Copyright 2007 Sony Corp.
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; version 2 of the License.
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; version 2 of the License.
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
- * 02111-1307 USA
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program; if not, write to the Free Software
+ *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
+#include <linux/kernel.h>
+#include <linux/module.h>
 #include <linux/interrupt.h>
-#include <linux/types.h>
-#include <linux/io.h>
-#include <asm/irq_regs.h>
-#include <asm/machdep.h>
-#include <asm/pmc.h>
-#include <asm/reg.h>
-#include <asm/spu.h>
-#include <asm/lv1call.h>
+#include <linux/uaccess.h>
 #include <asm/ps3.h>
+#include <asm/lv1call.h>
 #include <asm/cell-pmu.h>
-#include "platform.h"
 
 #define PMU_ERR(f, x...)  pr_info("pmu: " f "\n", ## x)
 #define PMU_INFO(f, x...) pr_info("pmu: " f "\n", ## x)
 #define PMU_DBG(f, x...)  pr_debug("pmu: " f "\n", ## x)
+
+#define PS3_SIZE_OF_PM_INTERNAL_TRACE_BUFFER        0x4000
+#define PS3_SIZE_OF_PM_DEFAULT_TRACE_BUFFER_CACHE   0x4000
+
+/*
+ * ps3_lpm_context : encapsulates all the state of the PS3 logical
+ *                   performance monitor.
+ */
+struct ps3_lpm_context {
+	int constructed;
+	u64 id;		/* lv1 lpm id */
+	u64 irq_outlet_id;	/* lv1 irq outlet id */
+	void *default_tb_cache;
+	u64 sizeof_tb;	/* lv1's trace buffer size */
+	void *tb_cache;	/* trace buffer cache */
+	u64 sizeof_tb_cache;
+	u64 sizeof_traced_data;	/* traced data size */
+	u64 sizeof_total_copied_data;
+	u64 pu_id;
+	u64 shadow_pm_control;
+	u64 shadow_pm_start_stop;
+	u64 shadow_pm_interval;
+	u64 shadow_group_control;
+	u64 shadow_debug_bus_control;
+	u64 lpar_id;
+	u64 priv;
+};
 
 /*
  * USE_START_STOP_BOOKMARK enables the PPU bookmark trace.
@@ -101,12 +122,6 @@ static struct ps3_lpm_context ps3_lpm;
 
 /* lock for ps3_lpm context */
 static __cacheline_aligned_in_smp DEFINE_SPINLOCK(ps3_lpm_lock);
-
-inline struct ps3_lpm_context *ps3_get_lpm_context(void)
-{
-	return &ps3_lpm;
-}
-EXPORT_SYMBOL_GPL(ps3_get_lpm_context);
 
 inline void ps3_set_bookmark(u64 bookmark)
 {
@@ -1004,47 +1019,89 @@ unlock:
 }
 EXPORT_SYMBOL_GPL(ps3_delete_lpm);
 
-static int __init ps3_init(void)
+static int __devinit ps3_pmu_probe(struct ps3_system_bus_device *dev)
 {
-	int ret;
-	unsigned int pun;
-	unsigned int i;
+#if 0
+struct ps3_lpm_context {
+	int constructed;
+	u64 id;		/* lv1 lpm id */
+	u64 irq_outlet_id;	/* lv1 irq outlet id */
+	void *default_tb_cache;
+	u64 sizeof_tb;	/* lv1's trace buffer size */
+	void *tb_cache;	/* trace buffer cache */
+	u64 sizeof_tb_cache;
+	u64 sizeof_traced_data;	/* traced data size */
+	u64 sizeof_total_copied_data;
 	u64 pu_id;
+	u64 shadow_pm_control;
+	u64 shadow_pm_start_stop;
+	u64 shadow_pm_interval;
+	u64 shadow_group_control;
+	u64 shadow_debug_bus_control;
+	u64 lpar_id;
+	u64 priv;
+};
+#endif
+	int result;
+	struct ps3_lpm_context *ctx;
 
-	ps3_lpm.constructed = 0;
-	ps3_lpm.default_tb_cache = NULL;
+	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 
-	ret = ps3_repository_read_num_pu(&pun);
-	if (ret) {
-		PMU_ERR("Can't read bi.pun node");
-		return ret;
-	} else {
-		PMU_INFO("bi.pun : 0x%x", pun);
-		for (i = 0; i < pun; i++) {
-			ret = ps3_repository_read_pu_id(i, &pu_id);
-			if (ret) {
-				PMU_ERR("Can't read bi.pu%d node", i);
-				return -1;
-			}
-			PMU_INFO("ppe id : 0x%lx", pu_id);
-			ps3_lpm.pu_id = pu_id;
-		}
+	if (!ctx) {
+		result = -ENOMEM;
+		goto fail_malloc;
 	}
 
-	ret = ps3_repository_read_lpm_priv(0, &ps3_lpm.lpar_id, &ps3_lpm.priv);
-	if (ret) {
-		PMU_ERR("Can't read be.0.lpm.priv node");
-		return -1;
-	} else {
-		PMU_INFO("be.0.lpm.priv : 0x%lx 0x%lx", ps3_lpm.lpar_id,
-			 ps3_lpm.priv);
-	}
+	ctx->pu_id = dev->lpm.pu_id;
+	ctx->lpar_id = dev->lpm.lpar_id;
+	ctx->priv = dev->lpm.priv;
 
-	ps3_lpm.default_tb_cache =
-		kzalloc(PS3_SIZE_OF_PM_DEFAULT_TRACE_BUFFER_CACHE, GFP_KERNEL);
-	if (!ps3_lpm.default_tb_cache)
-		PMU_ERR("Can't allocate default TB cache");
+	ctx->default_tb_cache = kzalloc(
+		PS3_SIZE_OF_PM_DEFAULT_TRACE_BUFFER_CACHE, GFP_KERNEL);
 
+        if (!ctx->default_tb_cache)
+		dev_err(&dev->core, "%s:%u: alloc default_tb_cache failed\n",
+			__func__, __LINE__);
+
+	ps3_system_bus_set_driver_data(dev, ctx);
+
+	dev_info(&dev->core, "%s:%u:\n", __func__, __LINE__);
+	return 0;
+
+fail_malloc:
+	return result;
+}
+
+static int ps3_pmu_remove(struct ps3_system_bus_device *dev)
+{
+	kfree(ps3_system_bus_get_driver_data(dev));
+	ps3_system_bus_set_driver_data(dev, NULL);
 	return 0;
 }
-arch_initcall(ps3_init);
+
+static struct ps3_system_bus_driver ps3_pmu_driver = {
+	.match_id = PS3_MATCH_ID_PMU,
+	.core.name	= "ps3-pmu",
+	.core.owner	= THIS_MODULE,
+	.probe		= ps3_pmu_probe,
+	.remove		= ps3_pmu_remove,
+	.shutdown	= ps3_pmu_remove,
+};
+
+static int __init ps3_pmu_init(void)
+{
+	return ps3_system_bus_driver_register(&ps3_pmu_driver);
+}
+
+static void __exit ps3_pmu_exit(void)
+{
+	ps3_system_bus_driver_unregister(&ps3_pmu_driver);
+}
+
+module_init(ps3_pmu_init);
+module_exit(ps3_pmu_exit);
+
+MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("PS3 Logical Performance Monitor Driver");
+MODULE_AUTHOR("Sony Corporation");
+MODULE_ALIAS(PS3_MODULE_ALIAS_PMU);

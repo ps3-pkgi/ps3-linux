@@ -5,4 +5,3 @@ obj-y += system-bus.o
 obj-$(CONFIG_SMP) += smp.o
 obj-$(CONFIG_SPU_BASE) += spu.o
 obj-y += device-init.o
-obj-$(CONFIG_PS3_PMU) += pmu.o

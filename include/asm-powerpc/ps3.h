@@ -318,6 +318,7 @@ enum ps3_match_id {
 	PS3_MATCH_ID_STOR_FLASH     = 8,
 	PS3_MATCH_ID_SOUND          = 9,
 	PS3_MATCH_ID_GRAPHICS       = 10,
+	PS3_MATCH_ID_PMU            = 11,
 };
 
 #define PS3_MODULE_ALIAS_EHCI           "ps3:1"
@@ -330,11 +331,13 @@ enum ps3_match_id {
 #define PS3_MODULE_ALIAS_STOR_FLASH     "ps3:8"
 #define PS3_MODULE_ALIAS_SOUND          "ps3:9"
 #define PS3_MODULE_ALIAS_GRAPHICS       "ps3:10"
+#define PS3_MODULE_ALIAS_PMU            "ps3:11"
 
 enum ps3_system_bus_device_type {
 	PS3_DEVICE_TYPE_IOC0 = 1,
 	PS3_DEVICE_TYPE_SB,
 	PS3_DEVICE_TYPE_VUART,
+	PS3_DEVICE_TYPE_PMU,
 };
 
 /**
@@ -351,6 +354,11 @@ struct ps3_system_bus_device {
 	struct ps3_dma_region *d_region;  /* SB, IOC0 */
 	struct ps3_mmio_region *m_region; /* SB, IOC0*/
 	unsigned int port_number;         /* VUART */
+	struct {                          /* PMU */
+		u64 pu_id;
+		u64 lpar_id;
+		u64 priv;
+	} lpm;
 
 /*	struct iommu_table *iommu_table; -- waiting for BenH's cleanups */
 	struct device core;
@@ -440,34 +448,6 @@ struct ps3_prealloc {
 extern struct ps3_prealloc ps3fb_videomemory;
 extern struct ps3_prealloc ps3flash_bounce_buffer;
 
-#define PS3_SIZE_OF_PM_INTERNAL_TRACE_BUFFER        0x4000
-#define PS3_SIZE_OF_PM_DEFAULT_TRACE_BUFFER_CACHE   0x4000
-
-/*
- * ps3_lpm_context : encapsulates all the state of the PS3 logical
- *                   performance monitor.
- */
-struct ps3_lpm_context {
-	int constructed;
-	u64 id;		/* lv1 lpm id */
-	u64 irq_outlet_id;	/* lv1 irq outlet id */
-	void *default_tb_cache;
-	u64 sizeof_tb;	/* lv1's trace buffer size */
-	void *tb_cache;	/* trace buffer cache */
-	u64 sizeof_tb_cache;
-	u64 sizeof_traced_data;	/* traced data size */
-	u64 sizeof_total_copied_data;
-	u64 pu_id;
-	u64 shadow_pm_control;
-	u64 shadow_pm_start_stop;
-	u64 shadow_pm_interval;
-	u64 shadow_group_control;
-	u64 shadow_debug_bus_control;
-	u64 lpar_id;
-	u64 priv;
-};
-
-extern struct ps3_lpm_context *ps3_get_lpm_context(void);
 extern int ps3_create_lpm(int is_default_tb_cache,
 			  void *tb_cache, u64 tb_cache_size, u64 tb_type);
 extern int ps3_delete_lpm(void);
