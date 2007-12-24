@@ -929,13 +929,14 @@ int ps3_repository_read_be_tb_freq(unsigned int be_index, u64 *tb_freq)
 		: ps3_repository_read_tb_freq(node_id, tb_freq);
 }
 
-int ps3_repository_read_lpm_priv(unsigned int be_index, u64 *lpar, u64 *priv)
+int ps3_repository_read_lpm_privileges(unsigned int be_index, u64 *lpar,
+	u64 *rights)
 {
 	int result;
 	u64 node_id;
 
 	*lpar = 0;
-	*priv = 0;
+	*rights = 0;
 	result = ps3_repository_read_be_node_id(be_index, &node_id);
 	return result ? result
 		: read_node(PS3_LPAR_ID_PME,
@@ -943,7 +944,7 @@ int ps3_repository_read_lpm_priv(unsigned int be_index, u64 *lpar, u64 *priv)
 			    node_id,
 			    make_field("lpm", 0),
 			    make_field("priv", 0),
-			    lpar, priv);
+			    lpar, rights);
 }
 
 int ps3_repository_read_num_pu(unsigned int *num_pu)

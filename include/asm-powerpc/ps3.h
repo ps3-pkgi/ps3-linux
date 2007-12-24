@@ -318,7 +318,7 @@ enum ps3_match_id {
 	PS3_MATCH_ID_STOR_FLASH     = 8,
 	PS3_MATCH_ID_SOUND          = 9,
 	PS3_MATCH_ID_GRAPHICS       = 10,
-	PS3_MATCH_ID_PMU            = 11,
+	PS3_MATCH_ID_LPM            = 11,
 };
 
 #define PS3_MODULE_ALIAS_EHCI           "ps3:1"
@@ -331,13 +331,13 @@ enum ps3_match_id {
 #define PS3_MODULE_ALIAS_STOR_FLASH     "ps3:8"
 #define PS3_MODULE_ALIAS_SOUND          "ps3:9"
 #define PS3_MODULE_ALIAS_GRAPHICS       "ps3:10"
-#define PS3_MODULE_ALIAS_PMU            "ps3:11"
+#define PS3_MODULE_ALIAS_LPM            "ps3:11"
 
 enum ps3_system_bus_device_type {
 	PS3_DEVICE_TYPE_IOC0 = 1,
 	PS3_DEVICE_TYPE_SB,
 	PS3_DEVICE_TYPE_VUART,
-	PS3_DEVICE_TYPE_PMU,
+	PS3_DEVICE_TYPE_LPM,
 };
 
 /**
@@ -354,10 +354,10 @@ struct ps3_system_bus_device {
 	struct ps3_dma_region *d_region;  /* SB, IOC0 */
 	struct ps3_mmio_region *m_region; /* SB, IOC0*/
 	unsigned int port_number;         /* VUART */
-	struct {                          /* PMU */
+	struct {                          /* LPM */
 		u64 pu_id;
 		u64 lpar_id;
-		u64 priv;
+		u64 rights;
 	} lpm;
 
 /*	struct iommu_table *iommu_table; -- waiting for BenH's cleanups */
@@ -448,6 +448,12 @@ struct ps3_prealloc {
 extern struct ps3_prealloc ps3fb_videomemory;
 extern struct ps3_prealloc ps3flash_bounce_buffer;
 
+/* logical performance monitor */
+
+enum ps3_lpm_rights {
+	PS3_LPM_RIGHTS_USE_LPM = 1,
+};
+
 extern int ps3_create_lpm(int is_default_tb_cache,
 			  void *tb_cache, u64 tb_cache_size, u64 tb_type);
 extern int ps3_delete_lpm(void);
@@ -457,9 +463,7 @@ extern u64  ps3_copy_trace_buffer(u64 offset, u64 size, void *to, int to_user);
 extern int  ps3_set_signal(u64 rtas_signal_group, u8 signal_bit, u16 sub_unit,
 			   u8 bus_word);
 
-/*
- * The following functions are basically same as cbe functions(cell-pmu.h)
- */
+
 extern u32  ps3_read_phys_ctr(u32 cpu, u32 phys_ctr);
 extern void ps3_write_phys_ctr(u32 cpu, u32 phys_ctr, u32 val);
 extern u32  ps3_read_ctr(u32 cpu, u32 ctr);

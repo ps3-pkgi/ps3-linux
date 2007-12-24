@@ -183,7 +183,7 @@ int ps3_repository_read_stor_dev_region(unsigned int bus_index,
 /* repository pu and memory info */
 
 int ps3_repository_read_num_pu(unsigned int *num_pu);
-int ps3_repository_read_ppe_id(unsigned int *pu_index, unsigned int *ppe_id);
+int ps3_repository_read_pu_id(unsigned int pu_index, u64 *pu_id);
 int ps3_repository_read_rm_base(unsigned int ppe_id, u64 *rm_base);
 int ps3_repository_read_rm_size(unsigned int ppe_id, u64 *rm_size);
 int ps3_repository_read_region_total(u64 *region_total);
@@ -199,18 +199,14 @@ int ps3_repository_read_be_tb_freq(unsigned int be_index, u64 *tb_freq);
 
 /* repository performance monitor info */
 
-int ps3_repository_read_lpm_priv(unsigned int be_index, u64 *lpar, u64 *priv);
+int ps3_repository_read_lpm_privileges(unsigned int be_index, u64 *lpar,
+	u64 *rights);
 
 /* repository 'Other OS' area */
 
 int ps3_repository_read_boot_dat_addr(u64 *lpar_addr);
 int ps3_repository_read_boot_dat_size(unsigned int *size);
 int ps3_repository_read_boot_dat_info(u64 *lpar_addr, unsigned int *size);
-
-/* repository pu info */
-
-int ps3_repository_read_num_pu(unsigned int *num_pu);
-int ps3_repository_read_pu_id(unsigned int pu_index, u64 *pu_id);
 
 /* repository spu info */
 

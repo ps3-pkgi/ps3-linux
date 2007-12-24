@@ -1,5 +1,5 @@
 /*
- * PS3 Logical Performance Monitor Unit.
+ * PS3 Logical Performance Monitor.
  *
  *  Copyright (C) 2007 Sony Computer Entertainment Inc.
  *  Copyright 2007 Sony Corp.
@@ -17,7 +17,7 @@
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
-
+#define DEBUG
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/interrupt.h>
@@ -26,9 +26,9 @@
 #include <asm/lv1call.h>
 #include <asm/cell-pmu.h>
 
-#define PMU_ERR(f, x...)  pr_info("pmu: " f "\n", ## x)
-#define PMU_INFO(f, x...) pr_info("pmu: " f "\n", ## x)
-#define PMU_DBG(f, x...)  pr_debug("pmu: " f "\n", ## x)
+#define LPM_ERR(f, x...)  pr_info("lpm: " f "\n", ## x)
+#define LPM_INFO(f, x...) pr_info("lpm: " f "\n", ## x)
+#define LPM_DBG(f, x...)  pr_debug("lpm: " f "\n", ## x)
 
 #define PS3_SIZE_OF_PM_INTERNAL_TRACE_BUFFER        0x4000
 #define PS3_SIZE_OF_PM_DEFAULT_TRACE_BUFFER_CACHE   0x4000
@@ -54,14 +54,14 @@ struct ps3_lpm_context {
 	u64 shadow_group_control;
 	u64 shadow_debug_bus_control;
 	u64 lpar_id;
-	u64 priv;
+	u64 rights;
 };
 
 /*
  * USE_START_STOP_BOOKMARK enables the PPU bookmark trace.
  * And it enables PPU bookmark triggers ONLY if the other triggers are not set.
  * The start/stop bookmarks are inserted at ps3_enable_pm() and ps3_disable_pm()
- * to start/stop PMU.
+ * to start/stop LPM.
  *
  * This macro is used to get good quality of the performance counter.
  */
@@ -178,7 +178,7 @@ u32 ps3_read_phys_ctr(u32 cpu, u32 phys_ctr)
 			break;
 		}
 		if (ret)
-			PMU_ERR("%s cnum:%d error:%d",
+			LPM_ERR("%s cnum:%d error:%d",
 				__FUNCTION__, phys_ctr, ret);
 	}
 	return val;
@@ -235,7 +235,7 @@ void ps3_write_phys_ctr(u32 cpu, u32 phys_ctr, u32 val)
 					  counter2637, counter2637_mask,
 					  &counter0415, &counter2637);
 		if (ret)
-			PMU_ERR("%s cnum:%d value:0x%x error:%d",
+			LPM_ERR("%s cnum:%d value:0x%x error:%d",
 				__FUNCTION__, phys_ctr, val, ret);
 	}
 }
@@ -308,14 +308,14 @@ void ps3_write_pm07_control(u32 cpu, u32 ctr, u32 val)
 		ret = lv1_set_lpm_counter_control(ps3_lpm.id, ctr,
 						  val, mask, &old_value);
 		if (ret)
-			PMU_ERR("%s cnum:%d value:0x%x error:%d",
+			LPM_ERR("%s cnum:%d value:0x%x error:%d",
 				__FUNCTION__, ctr, val, ret);
 	}
 }
 EXPORT_SYMBOL_GPL(ps3_write_pm07_control);
 
 /*
- * Read Other PMU control registers.
+ * Read Other LPM control registers.
  */
 u32 ps3_read_pm(u32 cpu, enum pm_reg_name reg)
 {
@@ -340,7 +340,7 @@ u32 ps3_read_pm(u32 cpu, enum pm_reg_name reg)
 EXPORT_SYMBOL_GPL(ps3_read_pm);
 
 /*
- * Write Other PMU control registers.
+ * Write Other LPM control registers.
  */
 void ps3_write_pm(u32 cpu, enum pm_reg_name reg, u32 val)
 {
@@ -404,7 +404,7 @@ void ps3_write_pm(u32 cpu, enum pm_reg_name reg, u32 val)
 	}
 
 	if (ret)
-		PMU_ERR("%s reg:%d value:0x%x error:%d",
+		LPM_ERR("%s reg:%d value:0x%x error:%d",
 			__FUNCTION__, reg, val, ret);
 }
 EXPORT_SYMBOL_GPL(ps3_write_pm);
@@ -671,7 +671,7 @@ static int __ps3_set_signal(u64 lv1_signal_group, u64 bus_select,
 	ret = lv1_set_lpm_signal(ps3_lpm.id, lv1_signal_group, bus_select,
 				 signal_select, attr1, attr2, attr3);
 	if (ret)
-		PMU_ERR("%s error:%d 0x%lx 0x%lx 0x%lx 0x%lx 0x%lx 0x%lx",
+		LPM_ERR("%s error:%d 0x%lx 0x%lx 0x%lx 0x%lx 0x%lx 0x%lx",
 			__FUNCTION__, ret,
 			lv1_signal_group, bus_select, signal_select, attr1,
 			attr2, attr3);
@@ -739,7 +739,7 @@ int ps3_set_signal(u64 signal_group, u8 signal_bit, u16 sub_unit,
 			       attr2,
 			       attr3);
 	if (ret)
-		PMU_ERR("%s error:%d", __FUNCTION__, ret);
+		LPM_ERR("%s error:%d", __FUNCTION__, ret);
 
 	return ret;
 }
@@ -754,7 +754,7 @@ EXPORT_SYMBOL_GPL(ps3_get_hw_thread_id);
 
 /*
  * Enable the entire performance monitoring unit.
- * When we enable the PMU, all pending writes to counters get committed.
+ * When we enable the LPM, all pending writes to counters get committed.
  */
 void ps3_enable_pm(u32 cpu)
 {
@@ -779,7 +779,7 @@ void ps3_enable_pm(u32 cpu)
 #endif
 	ret = lv1_start_lpm(ps3_lpm.id);
 	if (ret)
-		PMU_ERR("Lv-1 lpm: start lpm error");
+		LPM_ERR("Lv-1 lpm: start lpm error");
 
 #ifdef USE_START_STOP_BOOKMARK
 	if (insert_bookmark) {
@@ -824,7 +824,7 @@ static u64 _ps3_copy_trace_buffer(u64 offset, u64 size, u64 *to, int to_user)
 	ret = lv1_copy_lpm_trace_buffer(ps3_lpm.id, offset, size,
 					&sizeof_copied_data);
 	if (ret) {
-		PMU_ERR("lv1_copy_lpm_trace_buffer error:%d "
+		LPM_ERR("lv1_copy_lpm_trace_buffer error:%d "
 			"offset:0x%lx size:0x%lx", ret, offset, size);
 		return 0;
 	}
@@ -832,7 +832,7 @@ static u64 _ps3_copy_trace_buffer(u64 offset, u64 size, u64 *to, int to_user)
 	if (to_user) {
 		if (copy_to_user((void __user *)to, ps3_lpm.tb_cache,
 				 sizeof_copied_data)) {
-			PMU_ERR("copy_to_user() error. "
+			LPM_ERR("copy_to_user() error. "
 				"offset:0x%lx size:0x%lx dest:0x%p src:0x%p",
 				offset, sizeof_copied_data, to,
 				ps3_lpm.tb_cache);
@@ -915,7 +915,7 @@ int ps3_create_lpm(int is_default_tb_cache,
 	spin_lock(&ps3_lpm_lock);
 
 	if (ps3_lpm.constructed) {
-		PMU_ERR("construct Lv-1 lpm error. context state error.");
+		LPM_ERR("construct Lv-1 lpm error. context state error.");
 		ret = -EBUSY;
 		goto unlock;
 	}
@@ -926,7 +926,7 @@ int ps3_create_lpm(int is_default_tb_cache,
 			goto unlock;
 		}
 
-		PMU_DBG("Use default TB cache");
+		LPM_DBG("Use default TB cache");
 		tb_cache = ps3_lpm.default_tb_cache;
 		tb_cache_size = PS3_SIZE_OF_PM_DEFAULT_TRACE_BUFFER_CACHE;
 	}
@@ -944,7 +944,7 @@ int ps3_create_lpm(int is_default_tb_cache,
 			tb_size = PS3_SIZE_OF_PM_INTERNAL_TRACE_BUFFER;
 			ctrl_opt = 0;
 		} else {
-			PMU_ERR("Unkown TB type:0x%lx", tb_type);
+			LPM_ERR("Unkown TB type:0x%lx", tb_type);
 			ret = -EINVAL;
 			goto unlock;
 		}
@@ -972,13 +972,13 @@ int ps3_create_lpm(int is_default_tb_cache,
 		ps3_lpm.shadow_pm_interval = PS3_SHADOW_REG_INIT_VALUE;
 		ps3_lpm.shadow_group_control = PS3_SHADOW_REG_INIT_VALUE;
 		ps3_lpm.shadow_debug_bus_control = PS3_SHADOW_REG_INIT_VALUE;
-		PMU_DBG("Lv-1 lpm: id:0x%lx outlet:0x%lx sizeof_tb:0x%lx",
+		LPM_DBG("Lv-1 lpm: id:0x%lx outlet:0x%lx sizeof_tb:0x%lx",
 			 ps3_lpm.id, ps3_lpm.irq_outlet_id,
 			 ps3_lpm.sizeof_tb);
 		ret = 0;
 		goto unlock;
 	} else {
-		PMU_ERR("construct Lv-1 lpm error:%d", ret);
+		LPM_ERR("construct Lv-1 lpm error:%d", ret);
 		ret = -EINVAL;
 		goto unlock;
 	}
@@ -996,7 +996,7 @@ int ps3_delete_lpm(void)
 	spin_lock(&ps3_lpm_lock);
 
 	if (!ps3_lpm.constructed) {
-		PMU_ERR("destruct Lv-1 lpm error. context state error.");
+		LPM_ERR("destruct Lv-1 lpm error. context state error.");
 		ret = -ENOENT;
 		goto unlock;
 	}
@@ -1004,11 +1004,11 @@ int ps3_delete_lpm(void)
 	ret = lv1_destruct_lpm(ps3_lpm.id);
 	if (!ret) {
 		ps3_lpm.constructed = 0;
-		PMU_DBG("destruct Lv-1 lpm. lpm_id:0x%lx", ps3_lpm.id);
+		LPM_DBG("destruct Lv-1 lpm. lpm_id:0x%lx", ps3_lpm.id);
 		ret = 0;
 		goto unlock;
 	} else {
-		PMU_ERR("destruct Lv-1 lpm. error:%d  lpm_id:0x%lx",
+		LPM_ERR("destruct Lv-1 lpm. error:%d  lpm_id:0x%lx",
 			ret, ps3_lpm.id);
 		ret = -EINVAL;
 		goto unlock;
@@ -1019,31 +1019,12 @@ unlock:
 }
 EXPORT_SYMBOL_GPL(ps3_delete_lpm);
 
-static int __devinit ps3_pmu_probe(struct ps3_system_bus_device *dev)
+static int __devinit ps3_lpm_probe(struct ps3_system_bus_device *dev)
 {
-#if 0
-struct ps3_lpm_context {
-	int constructed;
-	u64 id;		/* lv1 lpm id */
-	u64 irq_outlet_id;	/* lv1 irq outlet id */
-	void *default_tb_cache;
-	u64 sizeof_tb;	/* lv1's trace buffer size */
-	void *tb_cache;	/* trace buffer cache */
-	u64 sizeof_tb_cache;
-	u64 sizeof_traced_data;	/* traced data size */
-	u64 sizeof_total_copied_data;
-	u64 pu_id;
-	u64 shadow_pm_control;
-	u64 shadow_pm_start_stop;
-	u64 shadow_pm_interval;
-	u64 shadow_group_control;
-	u64 shadow_debug_bus_control;
-	u64 lpar_id;
-	u64 priv;
-};
-#endif
 	int result;
 	struct ps3_lpm_context *ctx;
+
+	dev_dbg(&dev->core, " -> %s:%u:\n", __func__, __LINE__);
 
 	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 
@@ -1053,9 +1034,9 @@ struct ps3_lpm_context {
 	}
 
 	ctx->pu_id = dev->lpm.pu_id;
-	ctx->lpar_id = dev->lpm.lpar_id;
-	ctx->priv = dev->lpm.priv;
+	ctx->rights = dev->lpm.rights;
 
+	// this should be in open()...
 	ctx->default_tb_cache = kzalloc(
 		PS3_SIZE_OF_PM_DEFAULT_TRACE_BUFFER_CACHE, GFP_KERNEL);
 
@@ -1065,43 +1046,47 @@ struct ps3_lpm_context {
 
 	ps3_system_bus_set_driver_data(dev, ctx);
 
-	dev_info(&dev->core, "%s:%u:\n", __func__, __LINE__);
+	dev_info(&dev->core, " <- %s:%u:\n", __func__, __LINE__);
 	return 0;
 
 fail_malloc:
 	return result;
 }
 
-static int ps3_pmu_remove(struct ps3_system_bus_device *dev)
+static int ps3_lpm_remove(struct ps3_system_bus_device *dev)
 {
+	dev_dbg(&dev->core, " -> %s:%u:\n", __func__, __LINE__);
 	kfree(ps3_system_bus_get_driver_data(dev));
 	ps3_system_bus_set_driver_data(dev, NULL);
+	dev_info(&dev->core, " <- %s:%u:\n", __func__, __LINE__);
 	return 0;
 }
 
-static struct ps3_system_bus_driver ps3_pmu_driver = {
-	.match_id = PS3_MATCH_ID_PMU,
-	.core.name	= "ps3-pmu",
+static struct ps3_system_bus_driver ps3_lpm_driver = {
+	.match_id = PS3_MATCH_ID_LPM,
+	.core.name	= "ps3-lpm",
 	.core.owner	= THIS_MODULE,
-	.probe		= ps3_pmu_probe,
-	.remove		= ps3_pmu_remove,
-	.shutdown	= ps3_pmu_remove,
+	.probe		= ps3_lpm_probe,
+	.remove		= ps3_lpm_remove,
+	.shutdown	= ps3_lpm_remove,
 };
 
-static int __init ps3_pmu_init(void)
+static int __init ps3_lpm_init(void)
 {
-	return ps3_system_bus_driver_register(&ps3_pmu_driver);
+	pr_debug("%s:%d:\n", __func__, __LINE__);
+	return ps3_system_bus_driver_register(&ps3_lpm_driver);
 }
 
-static void __exit ps3_pmu_exit(void)
+static void __exit ps3_lpm_exit(void)
 {
-	ps3_system_bus_driver_unregister(&ps3_pmu_driver);
+	pr_debug("%s:%d:\n", __func__, __LINE__);
+	ps3_system_bus_driver_unregister(&ps3_lpm_driver);
 }
 
-module_init(ps3_pmu_init);
-module_exit(ps3_pmu_exit);
+module_init(ps3_lpm_init);
+module_exit(ps3_lpm_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("PS3 Logical Performance Monitor Driver");
 MODULE_AUTHOR("Sony Corporation");
-MODULE_ALIAS(PS3_MODULE_ALIAS_PMU);
+MODULE_ALIAS(PS3_MODULE_ALIAS_LPM);
