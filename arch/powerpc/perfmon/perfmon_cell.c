@@ -96,7 +96,9 @@ static struct pfm_regmap_desc pfm_cell_pmc_desc[] = {
 };
 #define PFM_PM_NUM_PMCS	ARRAY_SIZE(pfm_cell_pmc_desc)
 
-#define CELL_PMC_PM_STATUS 20
+#define CELL_PMC_GROUP_CONTROL    16
+#define CELL_PMC_PM_STATUS        20
+
 /*
  * Mapping from Perfmon logical data counters to Cell hardware counters.
  */
@@ -111,6 +113,19 @@ static struct pfm_regmap_desc pfm_cell_pmd_desc[] = {
 	PMD_D(PFM_REG_C, "pm7", 0),
 };
 #define PFM_PM_NUM_PMDS	ARRAY_SIZE(pfm_cell_pmd_desc)
+
+#define PFM_EVENT_PMC_BUS_WORD(x)      (((x) >> 48) & 0x00ff)
+#define PFM_EVENT_PMC_FULL_SIGNAL_NUMBER(x) ((x) & 0xffffffff)
+#define PFM_EVENT_PMC_SIGNAL_GROUP(x) (((x) & 0xffffffff) / 100)
+#define PFM_PM_CTR_INPUT_MUX_BIT(pm07_control) (((pm07_control) >> 26) & 0x1f)
+#define PFM_PM_CTR_INPUT_MUX_GROUP_INDEX(pm07_control) ((pm07_control) >> 31)
+#define PFM_GROUP_CONTROL_GROUP0_WORD(grp_ctrl) ((grp_ctrl) >> 30)
+#define PFM_GROUP_CONTROL_GROUP1_WORD(grp_ctrl) (((grp_ctrl) >> 28) & 0x3)
+#define PFM_NUM_OF_GROUPS 2
+#define PFM_PPU_IU1_THREAD1_BASE_BIT 19
+#define PFM_PPU_XU_THREAD1_BASE_BIT  16
+#define PFM_COUNTER_CTRL_PMC_PPU_TH0 0x100000000ULL
+#define PFM_COUNTER_CTRL_PMC_PPU_TH1 0x200000000ULL
 
 /*
  * Debug-bus signal handling.
@@ -691,6 +706,72 @@ static void pfm_cell_disable_counters(struct pfm_context *ctx,
 		reset_signals(smp_processor_id());
 }
 
+/*
+ * Return the thread id of the specified ppu signal.
+ */
+static inline u32 get_target_ppu_thread_id(u32 group, u32 bit)
+{
+	if ((group == SIG_GROUP_PPU_IU1 &&
+	     bit < PFM_PPU_IU1_THREAD1_BASE_BIT) ||
+	    (group == SIG_GROUP_PPU_XU &&
+	     bit < PFM_PPU_XU_THREAD1_BASE_BIT))
+		return 0;
+	else
+		return 1;
+}
+
+/*
+ * Return whether the specified counter is for PPU signal group.
+ */
+static inline int is_counter_for_ppu_sig_grp(u32 counter_control, u32 sig_grp)
+{
+	if (!(counter_control & CBE_PM_CTR_INPUT_CONTROL) &&
+	    (counter_control & CBE_PM_CTR_ENABLE) &&
+	    ((sig_grp == SIG_GROUP_PPU_IU1) || (sig_grp == SIG_GROUP_PPU_XU)))
+		return 1;
+	else
+		return 0;
+}
+
+/*
+ * Search ppu signal groups.
+ */
+static int get_ppu_signal_groups(struct pfm_event_set *set,
+				 u32 *ppu_sig_grp0, u32 *ppu_sig_grp1)
+{
+	u64 pm_event, *used_pmcs = set->used_pmcs;
+	int i, j;
+	u32 grp0_wd, grp1_wd, wd, sig_grp;
+
+	*ppu_sig_grp0 = 0;
+	*ppu_sig_grp1 = 0;
+	grp0_wd = PFM_GROUP_CONTROL_GROUP0_WORD(
+		set->pmcs[CELL_PMC_GROUP_CONTROL]);
+	grp1_wd = PFM_GROUP_CONTROL_GROUP1_WORD(
+		set->pmcs[CELL_PMC_GROUP_CONTROL]);
+
+	for (i = 0, j = 0; (i < NR_CTRS) && (j < PFM_NUM_OF_GROUPS); i++) {
+		if (test_bit(i + NR_CTRS, used_pmcs)) {
+			pm_event = set->pmcs[i + NR_CTRS];
+			wd = PFM_EVENT_PMC_BUS_WORD(pm_event);
+			sig_grp = PFM_EVENT_PMC_SIGNAL_GROUP(pm_event);
+			if ((sig_grp == SIG_GROUP_PPU_IU1) ||
+			    (sig_grp == SIG_GROUP_PPU_XU)) {
+
+				if (wd == grp0_wd && *ppu_sig_grp0 == 0) {
+					*ppu_sig_grp0 = sig_grp;
+					j++;
+				} else if (wd == grp1_wd &&
+					   *ppu_sig_grp1 == 0) {
+					*ppu_sig_grp1 = sig_grp;
+					j++;
+				}
+			}
+		}
+	}
+	return j;
+}
+
 /**
  * pfm_cell_restore_pmcs
  *
@@ -699,56 +780,54 @@ static void pfm_cell_disable_counters(struct pfm_context *ctx,
  * individually (as is done in other architectures), but that results in
  * multiple RTAS calls. As an optimization, we will setup the RTAS argument
  * array so we can do all event-control registers in one RTAS call.
+ *
+ * In per-thread mode,
+ * The counter enable bit of the pmX_control PMC is enabled while the target
+ * task runs on the target HW thread.
  **/
 void pfm_cell_restore_pmcs(struct pfm_event_set *set)
 {
-	struct cell_rtas_arg signals[NR_CTRS];
-	u64 value, *used_pmcs = set->used_pmcs;
-	int i, rc, num_used = 0, cpu = smp_processor_id();
-	s32 signal_number;
+	u64 ctr_ctrl;
+	u64 *used_pmcs = set->used_pmcs;
+	int i;
+	int cpu = smp_processor_id();
+	u32 current_th_id;
 	struct pfm_cell_platform_pmu_info *info =
 		((struct pfm_arch_pmu_info *)
 		 (pfm_pmu_conf->arch_info))->platform_info;
 
-	memset(signals, 0, sizeof(signals));
-
 	for (i = 0; i < NR_CTRS; i++) {
+		ctr_ctrl = set->pmcs[i];
+
+		if (ctr_ctrl & PFM_COUNTER_CTRL_PMC_PPU_TH0) {
+			current_th_id = info->get_hw_thread_id(cpu);
+
+			/*
+			 * Set the counter enable bit down if the current
+			 * HW thread is NOT 0
+			 **/
+			if (current_th_id)
+				ctr_ctrl = ctr_ctrl & ~CBE_PM_CTR_ENABLE;
+
+		} else if (ctr_ctrl & PFM_COUNTER_CTRL_PMC_PPU_TH1) {
+			current_th_id = info->get_hw_thread_id(cpu);
+
+			/*
+			 * Set the counter enable bit down if the current
+			 * HW thread is 0
+			 **/
+			if (!current_th_id)
+				ctr_ctrl = ctr_ctrl & ~CBE_PM_CTR_ENABLE;
+		}
+
 		/* Write the per-counter control register. If the PMC is not
 		 * in use, then it will simply clear the register, which will
 		 * disable the associated counter.
 		 */
-		info->write_pm07_control(cpu, i, set->pmcs[i]);
+		info->write_pm07_control(cpu, i, ctr_ctrl);
 
-		/* Set up the next RTAS array entry for this counter. Only
-		 * include pm07_event registers that are in use by this set
-		 * so the RTAS call doesn't have to process blank array entries.
-		 */
-		if (!test_bit(i + NR_CTRS, used_pmcs)) {
-			continue;
-		}
-
-		value = set->pmcs[i + NR_CTRS];
-		signal_number = RTAS_SIGNAL_NUMBER(value);
-		if (!signal_number) {
-			/* Don't include counters that are counting cycles. */
-			continue;
-		}
-
-		signals[num_used].cpu = RTAS_CPU(cpu);
-		signals[num_used].sub_unit = RTAS_SUB_UNIT(value);
-		signals[num_used].bus_word = 1 << RTAS_BUS_WORD(value);
-		signals[num_used].signal_group = signal_number / 100;
-		signals[num_used].bit = signal_number % 100;
-		num_used++;
-	}
-
-	rc = activate_signals(signals, num_used);
-	if (rc) {
-		PFM_WARN("Error calling activate_signal(): %d\n", rc);
-		/* FIX: We will also need this routine to be able to return
-		 * an error if Stephane agrees to change pfm_arch_write_pmc
-		 * to return an error.
-		 */
+		if (test_bit(i + NR_CTRS, used_pmcs))
+			write_pm07_event(cpu, 0, set->pmcs[i + NR_CTRS]);
 	}
 
 	/* Write all the global PMCs. Need to call pfm_cell_write_pmc()
@@ -757,6 +836,57 @@ void pfm_cell_restore_pmcs(struct pfm_event_set *set)
 	 */
 	for (i *= 2; i < PFM_PM_NUM_PMCS; i++)
 		pfm_cell_write_pmc(i, set->pmcs[i]);
+}
+
+/**
+ * pfm_cell_load_context
+ *
+ * In per-thread mode,
+ *  The pmX_control PMCs which are used for PPU IU/XU event are marked with
+ *  the thread id(PFM_COUNTER_CTRL_PMC_PPU_TH0/TH1).
+ **/
+static int pfm_cell_load_context(struct pfm_context *ctx,
+				 struct pfm_event_set *set,
+				 struct task_struct *task)
+{
+	int i;
+	u32 ppu_sig_grp[PFM_NUM_OF_GROUPS] = {SIG_GROUP_NONE, SIG_GROUP_NONE};
+	u32 bit;
+	int index;
+	u32 target_th_id;
+	int ppu_sig_num = 0;
+	struct pfm_event_set *s;
+
+	if (ctx->flags.system)
+		return 0;
+
+	list_for_each_entry(s, &ctx->set_list, list) {
+		ppu_sig_num = get_ppu_signal_groups(s, &ppu_sig_grp[0],
+						    &ppu_sig_grp[1]);
+
+		for (i = 0; i < NR_CTRS; i++) {
+			index = PFM_PM_CTR_INPUT_MUX_GROUP_INDEX(s->pmcs[i]);
+			if (ppu_sig_num &&
+			    (ppu_sig_grp[index] != SIG_GROUP_NONE) &&
+			    is_counter_for_ppu_sig_grp(s->pmcs[i],
+						       ppu_sig_grp[index])) {
+
+				bit = PFM_PM_CTR_INPUT_MUX_BIT(s->pmcs[i]);
+				target_th_id = get_target_ppu_thread_id(
+					ppu_sig_grp[index], bit);
+				if (!target_th_id)
+					s->pmcs[i] |=
+						PFM_COUNTER_CTRL_PMC_PPU_TH0;
+				else
+					s->pmcs[i] |=
+						PFM_COUNTER_CTRL_PMC_PPU_TH1;
+				PFM_DBG("set:%d mark ctr:%d target_thread:%d",
+					s->id, i, target_th_id);
+			}
+		}
+	}
+
+	return 0;
 }
 
 /**
@@ -855,9 +985,9 @@ int pfm_cell_acquire_pmu(void)
 
 	if (machine_is(ps3)) {
 		PFM_DBG("");
-		ret = ps3_create_lpm(1, 0, 0, 1);
+		ret = ps3_lpm_open(1, 0, 0, 1);
 		if (ret) {
-			PFM_ERR("Can't create PS3 lpm. error:%d", ret);
+			PFM_ERR("Can't open PS3 lpm. error:%d", ret);
 			return -EFAULT;
 		}
 	}
@@ -874,10 +1004,8 @@ int pfm_cell_acquire_pmu(void)
 void pfm_cell_release_pmu(void)
 {
 #ifdef CONFIG_PPC_PS3
-	if (machine_is(ps3)) {
-		if (ps3_delete_lpm())
-			PFM_ERR("Can't delete PS3 lpm.");
-	}
+	if (machine_is(ps3))
+		ps3_lpm_close();
 #endif
 }
 
@@ -1026,6 +1154,7 @@ static struct pfm_arch_pmu_info pfm_cell_pmu_info = {
 	.get_ovfl_pmds    = pfm_cell_get_ovfl_pmds,
 	.restore_pmcs     = pfm_cell_restore_pmcs,
 	.ctxswout_thread  = pfm_cell_ctxswout_thread,
+	.load_context     = pfm_cell_load_context,
 	.unload_context   = pfm_cell_unload_context,
 };
 

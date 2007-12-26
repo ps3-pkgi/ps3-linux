@@ -2134,7 +2134,6 @@ static void gelic_wl_disconnect_event(struct gelic_wl_info *wl,
 				      u64 event)
 {
 	struct gelic_eurus_cmd *cmd;
-	union iwreq_data data;
 	int lock;
 
 	/*

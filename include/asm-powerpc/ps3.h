@@ -356,7 +356,6 @@ struct ps3_system_bus_device {
 	unsigned int port_number;         /* VUART */
 	struct {                          /* LPM */
 		u64 pu_id;
-		u64 lpar_id;
 		u64 rights;
 	} lpm;
 
@@ -454,39 +453,36 @@ enum ps3_lpm_rights {
 	PS3_LPM_RIGHTS_USE_LPM = 1,
 };
 
-extern int ps3_create_lpm(int is_default_tb_cache,
-			  void *tb_cache, u64 tb_cache_size, u64 tb_type);
-extern int ps3_delete_lpm(void);
-extern void ps3_set_bookmark(u64 bookmark);
-extern void ps3_set_pm_bookmark(u64 tag, u64 incident, u64 th_id);
-extern u64  ps3_copy_trace_buffer(u64 offset, u64 size, void *to, int to_user);
-extern int  ps3_set_signal(u64 rtas_signal_group, u8 signal_bit, u16 sub_unit,
-			   u8 bus_word);
+int ps3_lpm_open(int is_default_tb_cache, void *tb_cache, u64 tb_cache_size,
+	u64 tb_type);
+int ps3_lpm_close(void);
+void ps3_set_bookmark(u64 bookmark);
+void ps3_set_pm_bookmark(u64 tag, u64 incident, u64 th_id);
+u64 ps3_copy_trace_buffer(u64 offset, u64 size, void *to, int to_user);
+int ps3_set_signal(u64 rtas_signal_group, u8 signal_bit, u16 sub_unit,
+	u8 bus_word);
 
+u32 ps3_read_phys_ctr(u32 cpu, u32 phys_ctr);
+void ps3_write_phys_ctr(u32 cpu, u32 phys_ctr, u32 val);
+u32 ps3_read_ctr(u32 cpu, u32 ctr);
+void ps3_write_ctr(u32 cpu, u32 ctr, u32 val);
 
-extern u32  ps3_read_phys_ctr(u32 cpu, u32 phys_ctr);
-extern void ps3_write_phys_ctr(u32 cpu, u32 phys_ctr, u32 val);
-extern u32  ps3_read_ctr(u32 cpu, u32 ctr);
-extern void ps3_write_ctr(u32 cpu, u32 ctr, u32 val);
+u32 ps3_read_pm07_control(u32 cpu, u32 ctr);
+void ps3_write_pm07_control(u32 cpu, u32 ctr, u32 val);
+u32 ps3_read_pm(u32 cpu, enum pm_reg_name reg);
+void ps3_write_pm(u32 cpu, enum pm_reg_name reg, u32 val);
 
-extern u32  ps3_read_pm07_control(u32 cpu, u32 ctr);
-extern void ps3_write_pm07_control(u32 cpu, u32 ctr, u32 val);
-extern u32  ps3_read_pm(u32 cpu, enum pm_reg_name reg);
-extern void ps3_write_pm(u32 cpu, enum pm_reg_name reg, u32 val);
+u32 ps3_get_ctr_size(u32 cpu, u32 phys_ctr);
+void ps3_set_ctr_size(u32 cpu, u32 phys_ctr, u32 ctr_size);
 
-extern u32  ps3_get_ctr_size(u32 cpu, u32 phys_ctr);
-extern void ps3_set_ctr_size(u32 cpu, u32 phys_ctr, u32 ctr_size);
+void ps3_enable_pm(u32 cpu);
+void ps3_disable_pm(u32 cpu);
+void ps3_enable_pm_interrupts(u32 cpu, u32 thread, u32 mask);
+void ps3_disable_pm_interrupts(u32 cpu);
 
-extern void ps3_enable_pm(u32 cpu);
-extern void ps3_disable_pm(u32 cpu);
-
-extern void ps3_enable_pm_interrupts(u32 cpu, u32 thread, u32 mask);
-extern void ps3_disable_pm_interrupts(u32 cpu);
-extern u32  ps3_get_and_clear_pm_interrupts(u32 cpu);
-extern void ps3_sync_irq(int node);
-
-extern u32 ps3_get_hw_thread_id(int cpu);
-
-extern u64 ps3_get_spe_id(void *arg);
+u32 ps3_get_and_clear_pm_interrupts(u32 cpu);
+void ps3_sync_irq(int node);
+u32 ps3_get_hw_thread_id(int cpu);
+u64 ps3_get_spe_id(void *arg);
 
 #endif

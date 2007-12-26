@@ -55,7 +55,7 @@ static int __init ps3_register_lpm_devices(void)
 	if (result) {
 		pr_debug("%s:%d: ps3_repository_read_num_pu failed \n",
 			__func__, __LINE__);
-		return result;
+		goto fail_read_repo;
 	}
 
 	/* The current lpm driver only supports a single BE processor. */
@@ -70,7 +70,7 @@ static int __init ps3_register_lpm_devices(void)
 	if (result) {
 		pr_debug("%s:%d: ps3_repository_read_pu_id failed \n",
 			__func__, __LINE__);
-		return result;
+		goto fail_read_repo;
 	}
 
 	result = ps3_repository_read_lpm_privileges(0, &tmp1,
@@ -79,21 +79,23 @@ static int __init ps3_register_lpm_devices(void)
 	if (result) {
 		pr_debug("%s:%d: ps3_repository_read_lpm_privleges failed \n",
 			__func__, __LINE__);
-		return result;
+		goto fail_read_repo;
 	}
 
 	lv1_get_logical_partition_id(&tmp2);
 
 	if (tmp1 != tmp2) {
-		pr_debug("%s:%d: don't have rights to use lpm\n",
+		pr_debug("%s:%d: wrong lpar\n",
 			__func__, __LINE__);
-		return -1;
+		result = -1;
+		goto fail_rights;
 	}
 
-	if (p->dev.lpm.rights & PS3_LPM_RIGHTS_USE_LPM) {
+	if (!(p->dev.lpm.rights & PS3_LPM_RIGHTS_USE_LPM)) {
 		pr_debug("%s:%d: don't have rights to use lpm\n",
 			__func__, __LINE__);
-		return -1;
+		result = -1;
+		goto fail_rights;
 	}
 
 	pr_debug("%s:%d: pu_id %lu, rights %lu(%lxh)\n",
@@ -102,11 +104,21 @@ static int __init ps3_register_lpm_devices(void)
 
 	result = ps3_system_bus_device_register(&p->dev);
 
-	if (result)
+	if (result) {
 		pr_debug("%s:%d ps3_system_bus_device_register failed\n",
 			__func__, __LINE__);
+		goto fail_register;
+	}
 
 	pr_debug(" <- %s:%d\n", __func__, __LINE__);
+	return 0;
+
+
+fail_register:
+fail_rights:
+fail_read_repo:
+	kfree(p);
+	pr_debug(" <- %s:%d: failed\n", __func__, __LINE__);
 	return result;
 }
 
