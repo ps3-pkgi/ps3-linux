@@ -194,14 +194,6 @@ void do_notify_spus_active(void)
 }
 EXPORT_SYMBOL_GPL(do_notify_spus_active);
 
-#ifndef MODULE
-void notify_spus_active(void)
-{
-	do_notify_spus_active();
-}
-EXPORT_SYMBOL_GPL(notify_spus_active);
-#endif
-
 /**
  * spu_bind_context - bind spu context to physical spu
  * @spu:	physical spu to bind to
