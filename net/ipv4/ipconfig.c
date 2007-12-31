@@ -1436,6 +1436,7 @@ static int __init ip_auto_config_setup(char *addrs)
 	int num = 0;
 
 	ic_set_manually = 1;
+	ic_enable = 1;
 
 	ic_enable = (*addrs &&
 		(strcmp(addrs, "off") != 0) &&
