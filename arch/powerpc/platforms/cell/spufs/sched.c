@@ -192,7 +192,6 @@ void do_notify_spus_active(void)
 		mutex_unlock(&cbe_spu_info[node].list_mutex);
 	}
 }
-EXPORT_SYMBOL_GPL(do_notify_spus_active);
 
 /**
  * spu_bind_context - bind spu context to physical spu
