@@ -953,11 +953,15 @@ EXPORT_SYMBOL_GPL(ps3_disable_pm_interrupts);
 
 /**
  * ps3_lpm_open - Open the lpm device.
+ * @tb_cache: Optional user supplied buffer for the tb cache.  If NULL,
+ *  the driver will use an internally managed tb cache buffer.
+ * @tb_cache_size: The size in bytes of the user supplied tb cache buffer.
+ *  Unused if @tb_cache is NULL.
+ * @tb_type:
  *
  */
 
-int ps3_lpm_open(int is_default_tb_cache, void *tb_cache, u64 tb_cache_size,
-	u64 tb_type)
+int ps3_lpm_open(void *tb_cache, u64 tb_cache_size, u64 tb_type)
 {
 	int result;
 	u64 cbe_node_id;
@@ -982,12 +986,13 @@ int ps3_lpm_open(int is_default_tb_cache, void *tb_cache, u64 tb_cache_size,
 		goto unlock;
 	}
 
-	lpm_priv->tb_cache_internal = is_default_tb_cache;
-
-	if (is_default_tb_cache) {
+	if (tb_cache)
+		lpm_priv->tb_cache_internal = 0;
+	else {
 		dev_dbg(sbd_core(), "%s:%u: Using internal TB cache\n",
 			__func__, __LINE__);
 
+		lpm_priv->tb_cache_internal = 1;
 		tb_cache_size = PS3_SIZE_OF_PM_DEFAULT_TRACE_BUFFER_CACHE;
 		tb_cache = kzalloc(tb_cache_size, GFP_KERNEL);
 

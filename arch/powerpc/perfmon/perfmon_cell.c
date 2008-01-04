@@ -985,7 +985,7 @@ int pfm_cell_acquire_pmu(void)
 
 	if (machine_is(ps3)) {
 		PFM_DBG("");
-		ret = ps3_lpm_open(1, 0, 0, 1);
+		ret = ps3_lpm_open(NULL, 0, 1);
 		if (ret) {
 			PFM_ERR("Can't open PS3 lpm. error:%d", ret);
 			return -EFAULT;

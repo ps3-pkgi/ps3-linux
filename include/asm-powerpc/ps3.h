@@ -453,8 +453,7 @@ enum ps3_lpm_rights {
 	PS3_LPM_RIGHTS_USE_LPM = 1,
 };
 
-int ps3_lpm_open(int is_default_tb_cache, void *tb_cache, u64 tb_cache_size,
-	u64 tb_type);
+int ps3_lpm_open(void *tb_cache, u64 tb_cache_size, u64 tb_type);
 int ps3_lpm_close(void);
 void ps3_set_bookmark(u64 bookmark);
 void ps3_set_pm_bookmark(u64 tag, u64 incident, u64 th_id);
