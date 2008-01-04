@@ -33,12 +33,15 @@
  * struct ps3_lpm_priv - private lpm device data.
  *
  * @mutex: Open/close mutex.
- * @rights: lpm rigths granted by system policy module.
- * @pu_id: lv1's BE prosessor id.
- * @outlet_id: outlet created by lv1 for the lpm instance.
- * @lpm_id: lv1 lpm instance id
- * @constructed: the lpm driver has been opened -- can we just use (lpm_id == ???)
- * @sizeof_tb: lv1's trace buffer size
+ * @rights: The lpm rigths granted by the system policy module.
+ * @pu_id: The lv1 id of the BE prosessor for this lpm instance.
+ * @lpm_id: The lv1 id of this lpm instance.
+ * @outlet_id: The outlet created by lv1 for this lpm instance.
+ * @constructed: A flag indicating the lpm driver has been opened -- can we just use (lpm_id == ???)
+ * @tb_size: The lv1 trace buffer size
+ * @tb_cache: Trace buffer cache
+ * @tb_cache_internal: A flag indicating the trace buffer cache was allocated
+ *                     by the driver.
  * @tb_cache: Trace buffer cache
  * @sizeof_traced_data: Traced data size
  * @sbd: the struct ps3_system_bus_device attached to this driver
@@ -48,13 +51,13 @@ struct ps3_lpm_priv {
 	struct mutex mutex;
 	u64 rights;
 	u64 pu_id;
-	u64 outlet_id;
 	u64 lpm_id;
+	u64 outlet_id;
 	int constructed;
-	void *default_tb_cache;
-	u64 sizeof_tb;
+	u64 tb_size;
 	void *tb_cache;
-	u64 sizeof_tb_cache;
+	u64 tb_cache_size;
+	int tb_cache_internal;
 	u64 sizeof_traced_data;
 	u64 sizeof_total_copied_data;
 	u64 shadow_pm_control;
@@ -69,21 +72,29 @@ struct ps3_lpm_priv {
  * lpm_priv - Static instance of the lpm data.
  *
  * Since the exported routines don't support the notion of a device
- * instance, we need to keep this static variable to hold the instance
- * and not allow more than one instance to be created at any one time.
+ * instance we need to hold the instance in this static variable
+ * and only allow at most one instance to be created.
  */
 
 static struct ps3_lpm_priv *lpm_priv;
 
-/*
- * USE_START_STOP_BOOKMARK enables the PPU bookmark trace.
+static struct device *sbd_core(void)
+{
+	BUG_ON(!lpm_priv || !lpm_priv->sbd);
+	return &lpm_priv->sbd->core;
+}
+
+/**
+ * use_start_stop_bookmark - Enable the PPU bookmark trace.
+ *
  * And it enables PPU bookmark triggers ONLY if the other triggers are not set.
  * The start/stop bookmarks are inserted at ps3_enable_pm() and ps3_disable_pm()
  * to start/stop LPM.
  *
- * This macro is used to get good quality of the performance counter.
+ * Used to get good quality of the performance counter.
  */
-#define USE_START_STOP_BOOKMARK
+
+enum {use_start_stop_bookmark = 1,};
 
 /* BOOKMARK tag macros */
 #define PS3_PM_BOOKMARK_START                    0x8000000000000000ULL
@@ -135,18 +146,19 @@ static struct ps3_lpm_priv *lpm_priv;
 /* bookmark spr address */
 #define BOOKMARK_SPR_ADDR 1020
 
-inline void ps3_set_bookmark(u64 bookmark)
+void ps3_set_bookmark(u64 bookmark)
 {
-	/*
-	 * To avoid bookmark lost, the following nops are added.
-	 */
+	/* To avoid bookmark lost, the following nops are added. */
+	// WHY????
+	// is there a better way to do this???
+
 	asm volatile("nop;nop;nop;nop;nop;nop;nop;nop;nop;");
 	mtspr(BOOKMARK_SPR_ADDR, bookmark);
 	asm volatile("nop;nop;nop;nop;nop;nop;nop;nop;nop;");
 }
 EXPORT_SYMBOL_GPL(ps3_set_bookmark);
 
-inline void ps3_set_pm_bookmark(u64 tag, u64 incident, u64 th_id)
+void ps3_set_pm_bookmark(u64 tag, u64 incident, u64 th_id)
 {
 	u64 bookmark;
 
@@ -158,107 +170,118 @@ inline void ps3_set_pm_bookmark(u64 tag, u64 incident, u64 th_id)
 }
 EXPORT_SYMBOL_GPL(ps3_set_pm_bookmark);
 
-/*
- * Read physical counter registers.
- * Each physical counter can act as one 32-bit counter or two 16-bit counters.
+/**
+ * ps3_read_phys_ctr - Read physical counter registers.
+ *
+ * Each physical counter can act as one 32 bit counter or as two 16 bit
+ * counters.
  */
+
 u32 ps3_read_phys_ctr(u32 cpu, u32 phys_ctr)
 {
-	u32 val = 0;
+	int result;
 	u64 counter0415;
 	u64 counter2637;
-	int ret;
 
-	if (phys_ctr < NR_PHYS_CTRS) {
-		ret = lv1_set_lpm_counter(lpm_priv->lpm_id, 0, 0, 0, 0,
-					  &counter0415, &counter2637);
-		switch (phys_ctr) {
-		case 0:
-			val = (u32)(counter0415 >> 32);
-			break;
-		case 1:
-			val = (u32)(counter0415 & PS3_PM_COUNTER_MASK_LO);
-			break;
-		case 2:
-			val = (u32)(counter2637 >> 32);
-			break;
-		case 3:
-			val = (u32)(counter2637 & PS3_PM_COUNTER_MASK_LO);
-			break;
-		default:
-			val = 0;
-			break;
-		}
-		if (ret)
-			dev_err(&lpm_priv->sbd->core,
-				"%s:%u: cnum:%d error:%d\n", __func__,
-				__LINE__, phys_ctr, ret);
+	if (phys_ctr >= NR_PHYS_CTRS) {
+		dev_dbg(sbd_core(), "%s:%u: phys_ctr too big: %u\n", __func__,
+			__LINE__, phys_ctr);
+		return 0;
 	}
-	return val;
+
+	result = lv1_set_lpm_counter(lpm_priv->lpm_id, 0, 0, 0, 0, &counter0415,
+				     &counter2637);
+	if (result) {
+		dev_err(sbd_core(), "%s:%u: lv1_set_lpm_counter failed: "
+			"phys_ctr %u, %s\n", __func__, __LINE__, phys_ctr,
+			ps3_result(result));
+		return 0;
+	}
+
+	switch (phys_ctr) {
+	case 0:
+		return counter0415 >> 32;
+	case 1:
+		return counter0415 & PS3_PM_COUNTER_MASK_LO;
+	case 2:
+		return counter2637 >> 32;
+	case 3:
+		return counter2637 & PS3_PM_COUNTER_MASK_LO;
+	default:
+		BUG();
+	}
+	return 0;
 }
 EXPORT_SYMBOL_GPL(ps3_read_phys_ctr);
 
-/*
- * Write physical counter registers.
- * Each physical counter can act as one 32-bit counter or two 16-bit counters.
+/**
+ * ps3_write_phys_ctr - Write physical counter registers.
+ *
+ * Each physical counter can act as one 32 bit counter or as two 16 bit
+ * counters.
  */
+
 void ps3_write_phys_ctr(u32 cpu, u32 phys_ctr, u32 val)
 {
 	u64 counter0415;
 	u64 counter0415_mask;
 	u64 counter2637;
 	u64 counter2637_mask;
-	int ret;
-	u64 tmp;
+	int result;
 
-	ret = 0;
-	tmp = val;
-	if (phys_ctr < NR_PHYS_CTRS) {
-		switch (phys_ctr) {
-		case 0:
-			counter0415 = tmp << 32;
-			counter0415_mask = PS3_PM_COUNTER_MASK_HI;
-			counter2637 = 0x0;
-			counter2637_mask = 0x0;
-			break;
-		case 1:
-			counter0415 = tmp;
-			counter0415_mask = PS3_PM_COUNTER_MASK_LO;
-			counter2637 = 0x0;
-			counter2637_mask = 0x0;
-			break;
-		case 2:
-			counter0415 = 0x0;
-			counter0415_mask = 0x0;
-			counter2637 = tmp << 32;
-			counter2637_mask = PS3_PM_COUNTER_MASK_HI;
-			break;
-		case 3:
-			counter0415 = 0x0;
-			counter0415_mask = 0x0;
-			counter2637 = tmp;
-			counter2637_mask = PS3_PM_COUNTER_MASK_LO;
-			break;
-		default:
-			return ;
-		}
-
-		ret = lv1_set_lpm_counter(lpm_priv->lpm_id,
-					  counter0415, counter0415_mask,
-					  counter2637, counter2637_mask,
-					  &counter0415, &counter2637);
-		if (ret)
-			dev_err(&lpm_priv->sbd->core,
-				"%s:%u: cnum:%d value:0x%x error:%d\n",
-				__func__, __LINE__, phys_ctr, val, ret);
+	if (phys_ctr >= NR_PHYS_CTRS) {
+		dev_dbg(sbd_core(), "%s:%u: phys_ctr too big: %u\n", __func__,
+			__LINE__, phys_ctr);
+		return;
 	}
+
+	switch (phys_ctr) {
+	case 0:
+		counter0415 = (u64)val << 32;
+		counter0415_mask = PS3_PM_COUNTER_MASK_HI;
+		counter2637 = 0x0;
+		counter2637_mask = 0x0;
+		break;
+	case 1:
+		counter0415 = (u64)val;
+		counter0415_mask = PS3_PM_COUNTER_MASK_LO;
+		counter2637 = 0x0;
+		counter2637_mask = 0x0;
+		break;
+	case 2:
+		counter0415 = 0x0;
+		counter0415_mask = 0x0;
+		counter2637 = (u64)val << 32;
+		counter2637_mask = PS3_PM_COUNTER_MASK_HI;
+		break;
+	case 3:
+		counter0415 = 0x0;
+		counter0415_mask = 0x0;
+		counter2637 = (u64)val;
+		counter2637_mask = PS3_PM_COUNTER_MASK_LO;
+		break;
+	default:
+		BUG();
+	}
+
+	result = lv1_set_lpm_counter(lpm_priv->lpm_id,
+				     counter0415, counter0415_mask,
+				     counter2637, counter2637_mask,
+				     &counter0415, &counter2637);
+	if (result)
+		dev_err(sbd_core(), "%s:%u: lv1_set_lpm_counter failed: "
+			"phys_ctr %u, val %u, %s\n", __func__, __LINE__,
+			phys_ctr, val, ps3_result(result));
 }
 EXPORT_SYMBOL_GPL(ps3_write_phys_ctr);
 
-/*
- * read 16-bits or 32-bits depending on the
- * current size of the counter. Counters 4 - 7 are always 16-bit.
+/**
+ * ps3_read_ctr - Read counter.
+ *
+ * Read 16 or 32 bits depending on the current size of the counter.
+ * Counters 4, 5, 6 & 7 are always 16 bit.
  */
+
 u32 ps3_read_ctr(u32 cpu, u32 ctr)
 {
 	u32 val;
@@ -273,10 +296,13 @@ u32 ps3_read_ctr(u32 cpu, u32 ctr)
 }
 EXPORT_SYMBOL_GPL(ps3_read_ctr);
 
-/*
- * write 16-bits or 32-bits depending on the
- * current size of the counter. Counters 4 - 7 are always 16-bit.
+/**
+ * ps3_write_ctr - Write counter.
+ *
+ * Write 16 or 32 bits depending on the current size of the counter.
+ * Counters 4, 5, 6 & 7 are always 16 bit.
  */
+
 void ps3_write_ctr(u32 cpu, u32 ctr, u32 val)
 {
 	u32 phys_ctr;
@@ -297,175 +323,188 @@ void ps3_write_ctr(u32 cpu, u32 ctr, u32 val)
 }
 EXPORT_SYMBOL_GPL(ps3_write_ctr);
 
-/*
- * Read Counter-control registers.
- * Each "logical" counter has a corresponding control register.
+/**
+ * ps3_read_pm07_control - Read counter control registers.
+ *
+ * Each logical counter has a corresponding control register.
  */
+
 u32 ps3_read_pm07_control(u32 cpu, u32 ctr)
 {
 	return 0;
 }
 EXPORT_SYMBOL_GPL(ps3_read_pm07_control);
 
-/*
- * Write Counter-control registers.
- * Each "logical" counter has a corresponding control register.
+/**
+ * ps3_write_pm07_control - Write counter control registers.
+ *
+ * Each logical counter has a corresponding control register.
  */
+
 void ps3_write_pm07_control(u32 cpu, u32 ctr, u32 val)
 {
-	u64 mask;
+	int result;
+	static const u64 mask = 0xFFFFFFFFFFFFFFFFULL;
 	u64 old_value;
-	int ret;
 
-	if (ctr < NR_CTRS) {
-		mask = 0xFFFFFFFFFFFFFFFFULL;
-		ret = lv1_set_lpm_counter_control(lpm_priv->lpm_id, ctr,
-						  val, mask, &old_value);
-		if (ret)
-			dev_err(&lpm_priv->sbd->core,
-				"%s:%u: cnum:%d value:0x%x error:%d\n",
-				__func__, __LINE__, ctr, val, ret);
+	if (ctr >= NR_CTRS) {
+		dev_dbg(sbd_core(), "%s:%u: ctr too big: %u\n", __func__,
+			__LINE__, ctr);
+		return;
 	}
+
+	result = lv1_set_lpm_counter_control(lpm_priv->lpm_id, ctr, val, mask,
+					     &old_value);
+	if (result)
+		dev_err(sbd_core(), "%s:%u: lv1_set_lpm_counter_control "
+			"failed: ctr %u, %s\n", __func__, __LINE__, ctr,
+			ps3_result(result));
 }
 EXPORT_SYMBOL_GPL(ps3_write_pm07_control);
 
-/*
- * Read Other LPM control registers.
+/**
+ * ps3_read_pm - Read Other LPM control registers.
  */
+
 u32 ps3_read_pm(u32 cpu, enum pm_reg_name reg)
 {
-	u32 val = 0;
-
 	switch (reg) {
 	case pm_control:
-		val = lpm_priv->shadow_pm_control;
-		break;
+		return lpm_priv->shadow_pm_control;
 	case trace_address:
-		val = CBE_PM_TRACE_BUF_EMPTY;
-		break;
+		return CBE_PM_TRACE_BUF_EMPTY;
 	case pm_start_stop:
-		val = lpm_priv->shadow_pm_start_stop;
-		break;
+		return lpm_priv->shadow_pm_start_stop;
 	default:
-		val = 0;
+		dev_dbg(sbd_core(), "%s:%u: unknown reg: %d\n", __func__,
+			__LINE__, reg);
+		BUG(); //OK???
 		break;
 	}
-	return val;
+	return 0;
 }
 EXPORT_SYMBOL_GPL(ps3_read_pm);
 
-/*
- * Write Other LPM control registers.
+/**
+ * ps3_write_pm - Write Other LPM control registers.
  */
+
 void ps3_write_pm(u32 cpu, enum pm_reg_name reg, u32 val)
 {
-	int ret;
+	int result = 0;
 	u64 dummy;
 
-	ret = 0;
 	switch (reg) {
 	case group_control:
 		if (val != lpm_priv->shadow_group_control)
-			ret = lv1_set_lpm_group_control(lpm_priv->lpm_id, val,
-							PS3_WRITE_PM_MASK,
-							&dummy);
+			result = lv1_set_lpm_group_control(lpm_priv->lpm_id,
+							   val,
+							   PS3_WRITE_PM_MASK,
+							   &dummy);
 		lpm_priv->shadow_group_control = val;
 		break;
-
 	case debug_bus_control:
 		if (val != lpm_priv->shadow_debug_bus_control)
-			ret = lv1_set_lpm_debug_bus_control(lpm_priv->lpm_id, val,
- PS3_WRITE_PM_MASK,
-							    &dummy);
+			result = lv1_set_lpm_debug_bus_control(lpm_priv->lpm_id,
+							      val,
+							      PS3_WRITE_PM_MASK,
+							      &dummy);
 		lpm_priv->shadow_debug_bus_control = val;
 		break;
-
 	case pm_control:
-		/*
-		 * count mode is always problem-mode.
-		 * because lv-1 lpm allows only problem-mode.
-		 */
-		val = (val & ~PS3_PM_CONTROL_PPU_COUNT_MODE_MASK) |
-			PS3_PM_CONTROL_PPU_COUNT_MODE_PROBLEM;
-#ifdef USE_START_STOP_BOOKMARK
-		val = val | PS3_PM_CONTROL_PPU_TH0_BOOKMARK |
-			PS3_PM_CONTROL_PPU_TH1_BOOKMARK ;
-#endif
+		if (use_start_stop_bookmark)
+			val |= (PS3_PM_CONTROL_PPU_TH0_BOOKMARK |
+				PS3_PM_CONTROL_PPU_TH1_BOOKMARK);
 		if (val != lpm_priv->shadow_pm_control)
-			ret = lv1_set_lpm_general_control(lpm_priv->lpm_id, val,
-							  PS3_WRITE_PM_MASK,
-							  0, 0,
-							  &dummy, &dummy);
+			result = lv1_set_lpm_general_control(lpm_priv->lpm_id,
+							     val,
+							     PS3_WRITE_PM_MASK,
+							     0, 0, &dummy,
+							     &dummy);
 		lpm_priv->shadow_pm_control = val;
 		break;
-
 	case pm_interval:
 		if (val != lpm_priv->shadow_pm_interval)
-			ret = lv1_set_lpm_interval(lpm_priv->lpm_id, val,
+			result = lv1_set_lpm_interval(lpm_priv->lpm_id, val,
 						   PS3_WRITE_PM_MASK, &dummy);
 		lpm_priv->shadow_pm_interval = val;
 		break;
-
 	case pm_start_stop:
 		if (val != lpm_priv->shadow_pm_start_stop)
-			ret = lv1_set_lpm_trigger_control(lpm_priv->lpm_id, val,
-							  PS3_WRITE_PM_MASK,
-							  &dummy);
+			result = lv1_set_lpm_trigger_control(lpm_priv->lpm_id,
+							     val,
+							     PS3_WRITE_PM_MASK,
+							     &dummy);
 		lpm_priv->shadow_pm_start_stop = val;
 		break;
 	default:
-		ret = 0;
+		dev_dbg(sbd_core(), "%s:%u: unknown reg: %d\n", __func__,
+			__LINE__, reg);
+		BUG(); //OK???
 		break;
 	}
 
-	if (ret)
-		dev_err(&lpm_priv->sbd->core,
-			"%s:%u: reg:%d value:0x%x error:%d\n", __func__,
-			__LINE__, reg, val, ret);
+	if (result)
+		dev_err(sbd_core(), "%s:%u: lv1 set_control failed: "
+			"reg %u, %s\n", __func__, __LINE__, reg,
+			ps3_result(result));
 }
 EXPORT_SYMBOL_GPL(ps3_write_pm);
 
-/*
- * Get the size of a physical counter to either 16 or 32 bits.
+/**
+ * ps3_get_ctr_size - Get the size of a physical counter.
+ *
+ * Returns either 16 or 32.
  */
+
 u32 ps3_get_ctr_size(u32 cpu, u32 phys_ctr)
 {
-	u32 pm_ctrl, size = 0;
+	u32 pm_ctrl;
 
-	if (phys_ctr < NR_PHYS_CTRS) {
-		pm_ctrl = ps3_read_pm(cpu, pm_control);
-		size = (pm_ctrl & CBE_PM_16BIT_CTR(phys_ctr)) ? 16 : 32;
+	if (phys_ctr >= NR_PHYS_CTRS) {
+		dev_dbg(sbd_core(), "%s:%u: phys_ctr too big: %u\n", __func__,
+			__LINE__, phys_ctr);
+		return 0;
 	}
 
-	return size;
+	pm_ctrl = ps3_read_pm(cpu, pm_control);
+	return (pm_ctrl & CBE_PM_16BIT_CTR(phys_ctr)) ? 16 : 32;
 }
 EXPORT_SYMBOL_GPL(ps3_get_ctr_size);
 
-/*
- * Set the size of a physical counter to either 16 or 32 bits.
+/**
+ * ps3_set_ctr_size - Set the size of a physical counter to 16 or 32 bits.
  */
+
 void ps3_set_ctr_size(u32 cpu, u32 phys_ctr, u32 ctr_size)
 {
 	u32 pm_ctrl;
 
-	if (phys_ctr < NR_PHYS_CTRS) {
-		pm_ctrl = ps3_read_pm(cpu, pm_control);
-		switch (ctr_size) {
-		case 16:
-			pm_ctrl |= CBE_PM_16BIT_CTR(phys_ctr);
-			break;
+	if (phys_ctr >= NR_PHYS_CTRS) {
+		dev_dbg(sbd_core(), "%s:%u: phys_ctr too big: %u\n", __func__,
+			__LINE__, phys_ctr);
+		return;
+	}
 
-		case 32:
-			pm_ctrl &= ~CBE_PM_16BIT_CTR(phys_ctr);
-			break;
-		}
+	pm_ctrl = ps3_read_pm(cpu, pm_control);
+
+	switch (ctr_size) {
+	case 16:
+		pm_ctrl |= CBE_PM_16BIT_CTR(phys_ctr);
 		ps3_write_pm(cpu, pm_control, pm_ctrl);
+		break;
+
+	case 32:
+		pm_ctrl &= ~CBE_PM_16BIT_CTR(phys_ctr);
+		ps3_write_pm(cpu, pm_control, pm_ctrl);
+		break;
+	default:
+		BUG();
 	}
 }
 EXPORT_SYMBOL_GPL(ps3_set_ctr_size);
 
-static inline u64 pm_translate_signal_group_number_on_island2(
-	u64 subgroup)
+static u64 pm_translate_signal_group_number_on_island2(u64 subgroup)
 {
 
 	if (subgroup == 2)
@@ -479,8 +518,7 @@ static inline u64 pm_translate_signal_group_number_on_island2(
 		return PM_ISLAND2_SIGNAL_GROUP_NUMBER2;
 }
 
-static inline u64 pm_translate_signal_group_number_on_island3(
-	u64 subgroup)
+static u64 pm_translate_signal_group_number_on_island3(u64 subgroup)
 {
 
 	switch (subgroup) {
@@ -498,13 +536,12 @@ static inline u64 pm_translate_signal_group_number_on_island3(
 	return PM_ISLAND3_BASE_SIGNAL_GROUP_NUMBER + subgroup;
 }
 
-static inline u64 pm_translate_signal_group_number_on_island4(
-	u64 subgroup) {
+static u64 pm_translate_signal_group_number_on_island4(u64 subgroup)
+{
 	return PM_ISLAND4_BASE_SIGNAL_GROUP_NUMBER + subgroup;
 }
 
-static inline u64 pm_translate_signal_group_number_on_island5(
-	u64 subgroup)
+static u64 pm_translate_signal_group_number_on_island5(u64 subgroup)
 {
 
 	switch (subgroup) {
@@ -520,8 +557,8 @@ static inline u64 pm_translate_signal_group_number_on_island5(
 	return PM_ISLAND5_BASE_SIGNAL_GROUP_NUMBER + subgroup;
 }
 
-static inline u64 pm_translate_signal_group_number_on_island6(
-	u64 subgroup, u64 subsubgroup)
+static u64 pm_translate_signal_group_number_on_island6(u64 subgroup,
+							      u64 subsubgroup)
 {
 	switch (subgroup) {
 	case 3:
@@ -561,14 +598,12 @@ static inline u64 pm_translate_signal_group_number_on_island6(
 			+ subsubgroup - 1);
 }
 
-static inline u64 pm_translate_signal_group_number_on_island7(
-	u64 subgroup)
+static u64 pm_translate_signal_group_number_on_island7(u64 subgroup)
 {
 	return PM_ISLAND7_BASE_SIGNAL_GROUP_NUMBER + subgroup;
 }
 
-static inline u64 pm_translate_signal_group_number_on_island8(
-	u64 subgroup)
+static u64 pm_translate_signal_group_number_on_island8(u64 subgroup)
 {
 	return PM_ISLAND8_BASE_SIGNAL_GROUP_NUMBER + subgroup;
 }
@@ -578,10 +613,10 @@ static u64 pm_signal_group_to_ps3_lv1_signal_group(u64 group)
 	u64 island;
 	u64 subgroup;
 	u64 subsubgroup;
-	u64 lv1_signal_group;
 
 	subgroup = 0;
 	subsubgroup = 0;
+	island = 0;
 	if (group < 1000) {
 		if (group < 100) {
 			if (20 <= group && group < 30) {
@@ -605,8 +640,6 @@ static u64 pm_signal_group_to_ps3_lv1_signal_group(u64 group)
 			} else if (80 <= group && group < 90) {
 				island = 8;
 				subgroup = group - 80;
-			} else {
-				island = 0;
 			}
 		} else if (200 <= group && group < 300) {
 			island = 2;
@@ -615,52 +648,36 @@ static u64 pm_signal_group_to_ps3_lv1_signal_group(u64 group)
 			island = 6;
 			subgroup = 5;
 			subsubgroup = group - 650;
-		} else {
-			island = 0;
 		}
 	} else if (6000 <= group && group < 7000) {
 		island = 6;
 		subgroup = 5;
 		subsubgroup = group - 6500;
-	} else {
-		island = 0;
 	}
 
 	switch (island) {
 	case 2:
-		lv1_signal_group =
- pm_translate_signal_group_number_on_island2(subgroup);
-		break;
+		return pm_translate_signal_group_number_on_island2(subgroup);
 	case 3:
-		lv1_signal_group =
- pm_translate_signal_group_number_on_island3(subgroup);
-		break;
+		return pm_translate_signal_group_number_on_island3(subgroup);
 	case 4:
-		lv1_signal_group =
- pm_translate_signal_group_number_on_island4(subgroup);
-		break;
+		return pm_translate_signal_group_number_on_island4(subgroup);
 	case 5:
-		lv1_signal_group =
- pm_translate_signal_group_number_on_island5(subgroup);
-		break;
+		return pm_translate_signal_group_number_on_island5(subgroup);
 	case 6:
-		lv1_signal_group =
-			pm_translate_signal_group_number_on_island6(
-				subgroup, subsubgroup);
-		break;
+		return pm_translate_signal_group_number_on_island6(subgroup,
+								   subsubgroup);
 	case 7:
-		lv1_signal_group =
- pm_translate_signal_group_number_on_island7(subgroup);
-		break;
+		return pm_translate_signal_group_number_on_island7(subgroup);
 	case 8:
-		lv1_signal_group =
- pm_translate_signal_group_number_on_island8(subgroup);
-		break;
+		return pm_translate_signal_group_number_on_island8(subgroup);
 	default:
-		lv1_signal_group = 0;
+		dev_dbg(sbd_core(), "%s:%u: island not found: %lu\n", __func__,
+			__LINE__, group);
+		BUG(); //???
 		break;
 	}
-	return lv1_signal_group;
+	return 0;
 }
 
 static u64 pm_bus_word_to_ps3_lv1_bus_word(u8 word)
@@ -687,7 +704,7 @@ static int __ps3_set_signal(u64 lv1_signal_group, u64 bus_select,
 	ret = lv1_set_lpm_signal(lpm_priv->lpm_id, lv1_signal_group, bus_select,
 				 signal_select, attr1, attr2, attr3);
 	if (ret)
-		dev_err(&lpm_priv->sbd->core,
+		dev_err(sbd_core(),
 			"%s:%u: error:%d 0x%lx 0x%lx 0x%lx 0x%lx 0x%lx 0x%lx\n",
 			__func__, __LINE__, ret, lv1_signal_group, bus_select,
 			signal_select, attr1, attr2, attr3);
@@ -737,26 +754,21 @@ int ps3_set_signal(u64 signal_group, u8 signal_bit, u16 sub_unit,
 	 * PPE/SPE object.
 	 */
 	if (PM_SIG_GROUP_SPU <= signal_group &&
-	    signal_group < PM_SIG_GROUP_MFC_MAX) {
+		signal_group < PM_SIG_GROUP_MFC_MAX)
 		attr2 = sub_unit;
-	} else {
+	else
 		attr2 = lpm_priv->pu_id;;
-	}
 
 	/*
 	 * This parameter is only used for setting the SPE signal.
 	 */
 	attr3 = 0;
 
-	ret = __ps3_set_signal(lv1_signal_group,
-			       bus_select,
-			       signal_select,
-			       attr1,
-			       attr2,
-			       attr3);
+	ret = __ps3_set_signal(lv1_signal_group, bus_select, signal_select,
+			       attr1, attr2, attr3);
 	if (ret)
-		dev_err(&lpm_priv->sbd->core, "%s:%u: error:%d\n", __func__,
-			__LINE__, ret);
+		dev_err(sbd_core(), "%s:%u: __ps3_set_signal failed: %d\n",
+			__func__, __LINE__, ret);
 
 	return ret;
 }
@@ -768,90 +780,100 @@ inline u32 ps3_get_hw_thread_id(int cpu)
 }
 EXPORT_SYMBOL_GPL(ps3_get_hw_thread_id);
 
-
-/*
- * Enable the entire performance monitoring unit.
+/**
+ * ps3_enable_pm - Enable the entire performance monitoring unit.
+ *
  * When we enable the LPM, all pending writes to counters get committed.
  */
+
 void ps3_enable_pm(u32 cpu)
 {
-	int ret;
+	int result;
 	u64 tmp;
-	u32 tb;
-
-#ifdef USE_START_STOP_BOOKMARK
 	int insert_bookmark = 0;
-	if (!(lpm_priv->shadow_pm_start_stop &
-	      (PS3_PM_START_STOP_START_MASK | PS3_PM_START_STOP_STOP_MASK))) {
-		ret = lv1_set_lpm_trigger_control(
-			lpm_priv->lpm_id,
-			(PS3_PM_START_STOP_PPU_TH0_BOOKMARK_START |
-			 PS3_PM_START_STOP_PPU_TH1_BOOKMARK_START |
-			 PS3_PM_START_STOP_PPU_TH0_BOOKMARK_STOP |
-			 PS3_PM_START_STOP_PPU_TH1_BOOKMARK_STOP),
-			0xFFFFFFFFFFFFFFFFULL,
-			&tmp);
-		insert_bookmark = 1;
-	}
-#endif
-	ret = lv1_start_lpm(lpm_priv->lpm_id);
-	if (ret)
-		dev_err(&lpm_priv->sbd->core, "%s:%u: Lv-1 lpm: start lpm error\n",
-			__func__, __LINE__);
 
-#ifdef USE_START_STOP_BOOKMARK
-	if (insert_bookmark) {
-		tb = get_tb();
-		ps3_set_bookmark(PS3_PM_BOOKMARK_START | tb);
+	if (use_start_stop_bookmark) {
+		if (!(lpm_priv->shadow_pm_start_stop &
+			(PS3_PM_START_STOP_START_MASK
+			| PS3_PM_START_STOP_STOP_MASK))) {
+			result = lv1_set_lpm_trigger_control(lpm_priv->lpm_id,
+				(PS3_PM_START_STOP_PPU_TH0_BOOKMARK_START |
+				PS3_PM_START_STOP_PPU_TH1_BOOKMARK_START |
+				PS3_PM_START_STOP_PPU_TH0_BOOKMARK_STOP |
+				PS3_PM_START_STOP_PPU_TH1_BOOKMARK_STOP),
+				0xFFFFFFFFFFFFFFFFULL, &tmp);
+
+			if (result)
+				dev_err(sbd_core(), "%s:%u: "
+					"lv1_set_lpm_trigger_control failed: "
+					"%s\n", __func__, __LINE__,
+					ps3_result(result));
+
+			insert_bookmark = !result;
+		}
 	}
-#endif
+
+	result = lv1_start_lpm(lpm_priv->lpm_id);
+
+	if (result)
+		dev_err(sbd_core(), "%s:%u: lv1_start_lpm failed: %s\n",
+			__func__, __LINE__, ps3_result(result));
+
+	if (use_start_stop_bookmark && result && insert_bookmark)
+		ps3_set_bookmark(get_tb() | PS3_PM_BOOKMARK_START);
 }
 EXPORT_SYMBOL_GPL(ps3_enable_pm);
 
-/*
- * Disable the entire performance monitoring unit.
+/**
+ * ps3_disable_pm - Disable the entire performance monitoring unit.
  */
+
 void ps3_disable_pm(u32 cpu)
 {
-	int ret;
+	int result;
 	u64 param = 0;
-	u32 tb;
 
-	tb = get_tb();
-	ps3_set_bookmark(PS3_PM_BOOKMARK_STOP | tb);
+	ps3_set_bookmark(get_tb() | PS3_PM_BOOKMARK_STOP);
 
-	ret = lv1_stop_lpm(lpm_priv->lpm_id, &param);
-	if (!ret) {
-		lpm_priv->sizeof_traced_data = param;
-		lpm_priv->sizeof_total_copied_data = 0;
+	result = lv1_stop_lpm(lpm_priv->lpm_id, &param);
+
+	if (result) {
+		dev_err(sbd_core(), "%s:%u: lv1_stop_lpm failed: %s\n",
+			__func__, __LINE__, ps3_result(result));
+		return;
 	}
+
+	lpm_priv->sizeof_traced_data = param;
+	lpm_priv->sizeof_total_copied_data = 0;
 }
 EXPORT_SYMBOL_GPL(ps3_disable_pm);
 
-/*
- * Copy the trace buffer.
+/**
+ * _ps3_copy_trace_buffer - Copy the trace buffer.
  */
+
 static u64 _ps3_copy_trace_buffer(u64 offset, u64 size, u64 *to, int to_user)
 {
-	int ret;
+	int result;
 	u64 sizeof_copied_data;
 
 	if (offset >= lpm_priv->sizeof_traced_data)
 		return 0;
 
-	ret = lv1_copy_lpm_trace_buffer(lpm_priv->lpm_id, offset, size,
+	result = lv1_copy_lpm_trace_buffer(lpm_priv->lpm_id, offset, size,
 					&sizeof_copied_data);
-	if (ret) {
-		dev_err(&lpm_priv->sbd->core, "%s:%u: lv1_copy_lpm_trace_buffer error:%d "
-			"offset:0x%lx size:0x%lx\n", __func__, __LINE__, ret,
-			offset, size);
+	if (result) {
+		dev_err(sbd_core(), "%s:%u: lv1_copy_lpm_trace_buffer failed: "
+			"offset 0x%lx, size 0x%lx: %s\n", __func__, __LINE__,
+			offset, size, ps3_result(result));
 		return 0;
 	}
 
 	if (to_user) {
-		if (copy_to_user((void __user *)to, lpm_priv->tb_cache,
-				 sizeof_copied_data)) {
-			dev_err(&lpm_priv->sbd->core, "%s:%u: copy_to_user() error. "
+		result = copy_to_user((void __user *)to, lpm_priv->tb_cache,
+				      sizeof_copied_data);
+		if (result) {
+			dev_err(sbd_core(), "%s:%u: copy_to_user() error. "
 				"offset:0x%lx size:0x%lx dest:0x%p src:0x%p\n",
 				__func__, __LINE__, offset, sizeof_copied_data,
 				to, lpm_priv->tb_cache);
@@ -862,6 +884,7 @@ static u64 _ps3_copy_trace_buffer(u64 offset, u64 size, u64 *to, int to_user)
 
 	return sizeof_copied_data;
 }
+
 u64 ps3_copy_trace_buffer(u64 offset, u64 size, void *to, int to_user)
 {
 	u64 sz;
@@ -872,8 +895,8 @@ u64 ps3_copy_trace_buffer(u64 offset, u64 size, void *to, int to_user)
 		return 0;
 
 	cp_size = size;
-	if (cp_size > lpm_priv->sizeof_tb_cache)
-		cp_size = lpm_priv->sizeof_tb_cache;
+	if (cp_size > lpm_priv->tb_cache_size)
+		cp_size = lpm_priv->tb_cache_size;
 
 	total_cp_size = 0;
 	while (total_cp_size < size) {
@@ -888,30 +911,39 @@ u64 ps3_copy_trace_buffer(u64 offset, u64 size, void *to, int to_user)
 	return total_cp_size;
 }
 
-/*
+/**
+ * ps3_get_and_clear_pm_interrupts -
+ *
  * Clearing interrupts for the entire performance monitoring unit.
+ * Reading pm_status clears the interrupt bits.
  */
+
 u32 ps3_get_and_clear_pm_interrupts(u32 cpu)
 {
-	/* Reading pm_status clears the interrupt bits. */
 	return ps3_read_pm(cpu, pm_status);
 }
 EXPORT_SYMBOL_GPL(ps3_get_and_clear_pm_interrupts);
 
-/*
+/**
+ * ps3_enable_pm_interrupts -
+ *
  * Enabling interrupts for the entire performance monitoring unit.
+ * Enables the interrupt bits in the pm_status register.
  */
+
 void ps3_enable_pm_interrupts(u32 cpu, u32 thread, u32 mask)
 {
-	/* Enable the interrupt bits in the pm_status register. */
 	if (mask)
 		ps3_write_pm(cpu, pm_status, mask);
 }
 EXPORT_SYMBOL_GPL(ps3_enable_pm_interrupts);
 
-/*
+/**
+ * ps3_enable_pm_interrupts -
+ *
  * Disabling interrupts for the entire performance monitoring unit.
  */
+
 void ps3_disable_pm_interrupts(u32 cpu)
 {
 	ps3_get_and_clear_pm_interrupts(cpu);
@@ -919,10 +951,15 @@ void ps3_disable_pm_interrupts(u32 cpu)
 }
 EXPORT_SYMBOL_GPL(ps3_disable_pm_interrupts);
 
+/**
+ * ps3_lpm_open - Open the lpm device.
+ *
+ */
+
 int ps3_lpm_open(int is_default_tb_cache, void *tb_cache, u64 tb_cache_size,
 	u64 tb_type)
 {
-	int ret;
+	int result;
 	u64 cbe_node_id;
 	u64 tb_size;
 	u64 ctrl_opt;
@@ -939,22 +976,27 @@ int ps3_lpm_open(int is_default_tb_cache, void *tb_cache, u64 tb_cache_size,
 	mutex_lock(&lpm_priv->mutex);
 
 	if (lpm_priv->constructed) {
-		dev_err(&lpm_priv->sbd->core, "%s:%u: construct Lv-1 lpm error. context state error.\n",
-			__func__, __LINE__);
-		ret = -EBUSY;
+		dev_err(sbd_core(), "%s:%u: called twice.\n", __func__,
+			__LINE__);
+		result = -EBUSY;
 		goto unlock;
 	}
 
-	if (is_default_tb_cache) {
-		if (!lpm_priv->default_tb_cache) {
-			ret = -ENOMEM;
-			goto unlock;
-		}
+	lpm_priv->tb_cache_internal = is_default_tb_cache;
 
-		dev_dbg(&lpm_priv->sbd->core, "%s:%u: Use default TB cache\n",
+	if (is_default_tb_cache) {
+		dev_dbg(sbd_core(), "%s:%u: Using internal TB cache\n",
 			__func__, __LINE__);
-		tb_cache = lpm_priv->default_tb_cache;
+
 		tb_cache_size = PS3_SIZE_OF_PM_DEFAULT_TRACE_BUFFER_CACHE;
+		tb_cache = kzalloc(tb_cache_size, GFP_KERNEL);
+
+		if (!tb_cache) {
+			dev_err(sbd_core(), "%s:%u: alloc internal tb_cache "
+				"failed\n", __func__, __LINE__);
+			result = -ENOMEM;
+			goto fail_malloc;
+		}
 	}
 
 	cbe_node_id = 0;
@@ -970,10 +1012,10 @@ int ps3_lpm_open(int is_default_tb_cache, void *tb_cache, u64 tb_cache_size,
 			tb_size = PS3_SIZE_OF_PM_INTERNAL_TRACE_BUFFER;
 			ctrl_opt = 0;
 		} else {
-			dev_err(&lpm_priv->sbd->core, "%s:%u: Unkown TB type:0x%lx\n",
-			__func__, __LINE__, tb_type);
-			ret = -EINVAL;
-			goto unlock;
+			dev_err(sbd_core(), "%s:%u: Unkown TB type: 0x%lx\n",
+				__func__, __LINE__, tb_type);
+			result = -EINVAL;
+			goto fail_type;
 		}
 		tb_cache_lpar_addr = (u64)ps3_mm_phys_to_lpar(__pa(tb_cache));
 	} else {
@@ -984,44 +1026,57 @@ int ps3_lpm_open(int is_default_tb_cache, void *tb_cache, u64 tb_cache_size,
 		tb_cache_lpar_addr = 0;
 	}
 
-	ret = lv1_construct_lpm(cbe_node_id, tb_type, tb_size, ctrl_opt,
+	result = lv1_construct_lpm(cbe_node_id, tb_type, tb_size, ctrl_opt,
 				tb_cache_lpar_addr, tb_cache_size,
 				&lpm_id, &outlet_id, &used_tb_size);
 
-	if (ret) {
-		dev_err(&lpm_priv->sbd->core, "%s:%u: construct Lv-1 lpm error:%d\n",
-			__func__, __LINE__, ret);
-		ret = -EINVAL;
-		goto unlock;
+	if (result) {
+		dev_err(sbd_core(), "%s:%u: lv1_construct_lpm failed: %s\n",
+			__func__, __LINE__, ps3_result(result));
+		result = -EINVAL;
+		goto fail_construct;
 	}
 
 	lpm_priv->constructed = 1;
 	lpm_priv->tb_cache = tb_cache;
-	lpm_priv->sizeof_tb_cache = tb_cache_size;
+	lpm_priv->tb_cache_size = tb_cache_size;
 	lpm_priv->lpm_id = lpm_id;
 	lpm_priv->outlet_id = outlet_id;
-	lpm_priv->sizeof_tb = used_tb_size;
+	lpm_priv->tb_size = used_tb_size;
 	lpm_priv->shadow_pm_control = PS3_SHADOW_REG_INIT_VALUE;
 	lpm_priv->shadow_pm_start_stop = PS3_SHADOW_REG_INIT_VALUE;
 	lpm_priv->shadow_pm_interval = PS3_SHADOW_REG_INIT_VALUE;
 	lpm_priv->shadow_group_control = PS3_SHADOW_REG_INIT_VALUE;
 	lpm_priv->shadow_debug_bus_control = PS3_SHADOW_REG_INIT_VALUE;
 
-	dev_dbg(&lpm_priv->sbd->core, "%s:%u: Lv-1 lpm: id:0x%lx outlet:0x%lx sizeof_tb:0x%lx\n",
-		__func__, __LINE__, lpm_priv->lpm_id,
-		lpm_priv->outlet_id, lpm_priv->sizeof_tb);
-	ret = 0;
-	goto unlock;
+	dev_dbg(sbd_core(), "%s:%u: lpm id 0x%lx, outlet 0x%lx, "
+		"tb_size 0x%lx\n", __func__, __LINE__, lpm_priv->lpm_id,
+		lpm_priv->outlet_id, lpm_priv->tb_size);
 
+	mutex_unlock(&lpm_priv->mutex);
+	return 0;
+
+fail_construct:
+fail_type:
+	if (lpm_priv->tb_cache_internal) {
+		kfree(lpm_priv->tb_cache);
+		lpm_priv->tb_cache = NULL;
+	}
+fail_malloc:
 unlock:
 	mutex_unlock(&lpm_priv->mutex);
-	return ret;
+	return result;
 }
 EXPORT_SYMBOL_GPL(ps3_lpm_open);
 
+/**
+ * ps3_lpm_close - Close the lpm device.
+ *
+ */
+
 int ps3_lpm_close(void)
 {
-	dev_dbg(&lpm_priv->sbd->core, "%s:%u\n", __func__, __LINE__);
+	dev_dbg(sbd_core(), "%s:%u\n", __func__, __LINE__);
 
 	mutex_lock(&lpm_priv->mutex);
 
@@ -1030,6 +1085,11 @@ int ps3_lpm_close(void)
 
 	lpm_priv->constructed = 0;
 	lpm_priv->lpm_id = 0;
+
+	if (lpm_priv->tb_cache_internal) {
+		kfree(lpm_priv->tb_cache);
+		lpm_priv->tb_cache = NULL;
+	}
 
 	mutex_unlock(&lpm_priv->mutex);
 	return 0;
@@ -1056,14 +1116,6 @@ static int __devinit ps3_lpm_probe(struct ps3_system_bus_device *dev)
 	lpm_priv->rights = dev->lpm.rights;
 	mutex_init(&lpm_priv->mutex);
 
-	// this should be in ps3_create_lpm()???
-	lpm_priv->default_tb_cache = kzalloc(
-		PS3_SIZE_OF_PM_DEFAULT_TRACE_BUFFER_CACHE, GFP_KERNEL);
-
-        if (!lpm_priv->default_tb_cache)
-		dev_err(&dev->core, "%s:%u: alloc default_tb_cache failed\n",
-			__func__, __LINE__);
-
 	dev_info(&dev->core, " <- %s:%u:\n", __func__, __LINE__);
 
 	return 0;
@@ -1073,15 +1125,10 @@ static int ps3_lpm_remove(struct ps3_system_bus_device *dev)
 {
 	dev_dbg(&dev->core, " -> %s:%u:\n", __func__, __LINE__);
 
-	// need to do other cleanups here!!!
+	ps3_lpm_close();
 
-	if(lpm_priv) {
-		// this should be in ps3_create_lpm()???
-		kfree(lpm_priv->default_tb_cache);
-
-		kfree(lpm_priv);
-		lpm_priv = NULL;
-	}
+	kfree(lpm_priv);
+	lpm_priv = NULL;
 
 	dev_info(&dev->core, " <- %s:%u:\n", __func__, __LINE__);
 	return 0;
