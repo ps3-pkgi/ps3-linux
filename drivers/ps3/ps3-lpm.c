@@ -148,13 +148,15 @@ enum {use_start_stop_bookmark = 1,};
 
 void ps3_set_bookmark(u64 bookmark)
 {
-	/* To avoid bookmark lost, the following nops are added. */
-	// WHY????
-	// is there a better way to do this???
+	/*
+	 * As per PPE book IV, to avoid bookmark lost there
+	 * must not be a traced branch within 10 cycles of
+	 * setting the bookmark spr.
+	 */
 
-	asm volatile("nop;nop;nop;nop;nop;nop;nop;nop;nop;");
+	asm volatile("or 29, 29, 29;"); /* db10cyc */
 	mtspr(BOOKMARK_SPR_ADDR, bookmark);
-	asm volatile("nop;nop;nop;nop;nop;nop;nop;nop;nop;");
+	asm volatile("or 29, 29, 29;"); /* db10cyc */
 }
 EXPORT_SYMBOL_GPL(ps3_set_bookmark);
 
@@ -378,7 +380,7 @@ u32 ps3_read_pm(u32 cpu, enum pm_reg_name reg)
 	default:
 		dev_dbg(sbd_core(), "%s:%u: unknown reg: %d\n", __func__,
 			__LINE__, reg);
-		BUG(); //OK???
+		BUG();
 		break;
 	}
 	return 0;
@@ -440,7 +442,7 @@ void ps3_write_pm(u32 cpu, enum pm_reg_name reg, u32 val)
 	default:
 		dev_dbg(sbd_core(), "%s:%u: unknown reg: %d\n", __func__,
 			__LINE__, reg);
-		BUG(); //OK???
+		BUG();
 		break;
 	}
 
@@ -674,7 +676,7 @@ static u64 pm_signal_group_to_ps3_lv1_signal_group(u64 group)
 	default:
 		dev_dbg(sbd_core(), "%s:%u: island not found: %lu\n", __func__,
 			__LINE__, group);
-		BUG(); //???
+		BUG();
 		break;
 	}
 	return 0;

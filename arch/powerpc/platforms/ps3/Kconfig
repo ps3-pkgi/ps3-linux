@@ -127,6 +127,11 @@ config PS3_FLASH
 	  be disabled on the kernel command line using "ps3flash=off", to
 	  not allocate this fixed buffer.
 
+config OPROFILE_PS3
+	def_bool y
+	depends on PPC_PS3 && (OPROFILE = m || OPROFILE = y)
+	select PS3_LPM
+
 config PS3_LPM
 	tristate "PS3 Logical Performance Monitor support"
 	depends on PPC_PS3
