@@ -1,19 +1,27 @@
 /*
- * Cell Broadband Engine OProfile Support
+ * PS3 OProfile support
  *
- * (C) Copyright IBM Corporation 2006
+ * This file based on op_model_cell.c, but the spu profiling has not
+ * been implemented yet in the.
  *
- * Author: David Erb (djerb@us.ibm.com)
- * Modifications:
- *	   Carl Love <carll@us.ibm.com>
- *	   Maynard Johnson <maynardj@us.ibm.com>
+ * Copyright (C) 2007 Sony Computer Entertainment Inc.
+ * Copyright 2007 Sony Corporation.
  *
  * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version
- * 2 of the License, or (at your option) any later version.
+ * modify it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation; version 2 of the License.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
+ * 02111-1307 USA
  */
-#define DEBUG
+
 #include <linux/cpufreq.h>
 #include <linux/delay.h>
 #include <linux/init.h>
@@ -24,25 +32,26 @@
 #include <linux/smp.h>
 #include <linux/spinlock.h>
 #include <linux/timer.h>
-#include <linux/interrupt.h>
+#include <linux/firmware.h>
+#include <linux/io.h>
+#include <linux/ptrace.h>
 #include <asm/cell-pmu.h>
 #include <asm/cputable.h>
-#include <asm/firmware.h>
-#include <asm/io.h>
 #include <asm/oprofile_impl.h>
 #include <asm/processor.h>
 #include <asm/prom.h>
-#include <asm/ptrace.h>
 #include <asm/reg.h>
-//#include <asm/rtas.h>
 #include <asm/system.h>
 #include <asm/cell-regs.h>
+#include <asm/pmc.h>
+#include <asm/irq_regs.h>
 #include <asm/ps3.h>
 
 #include "../platforms/cell/interrupt.h"
-//#include "cell/pr_util.h"
+#include "cell/pr_util.h"
 
-static void cell_global_stop_spu(void);
+#define OP_ERR(f, x...)  pr_info("pmu: " f "\n", ## x)
+#define OP_DBG(f, x...)  pr_debug("pmu: " f "\n", ## x)
 
 /*
  * spu_cycle_reset is the number of cycles between samples.
@@ -63,7 +72,7 @@ static unsigned int spu_cycle_reset;
 #define NUM_THREADS 2         /* number of physical threads in
 			       * physical processor
 			       */
-#define NUM_TRACE_BUS_WORDS 4
+#define NUM_DEBUG_BUS_WORDS 4
 #define NUM_INPUT_BUS_WORDS 2
 
 #define MAX_SPU_COUNT 0xFFFFFF	/* maximum 24 bit LFSR value */
@@ -75,9 +84,6 @@ struct pmc_cntrl_data {
 	unsigned long enabled;
 };
 
-/*
- * ibm,cbe-perftools rtas parameters
- */
 struct pm_signal {
 	u16 cpu;		/* Processor to modify */
 	u16 sub_unit;		/* hw subunit this applies to (if applicable)*/
@@ -86,19 +92,6 @@ struct pm_signal {
 				 * Bus Word(s) (bitmask)
 				 */
 	u8 bit;			/* Trigger/Event bit (if applicable) */
-};
-
-/*
- * rtas call arguments
- */
-enum {
-	SUBFUNC_RESET = 1,
-	SUBFUNC_ACTIVATE = 2,
-	SUBFUNC_DEACTIVATE = 3,
-
-	PASSTHRU_IGNORE = 0,
-	PASSTHRU_ENABLE = 1,
-	PASSTHRU_DISABLE = 2,
 };
 
 struct pm_cntrl {
@@ -128,21 +121,6 @@ static DEFINE_PER_CPU(unsigned long[NR_PHYS_CTRS], pmc_values);
 static struct pmc_cntrl_data pmc_cntrl[NUM_THREADS][NR_PHYS_CTRS];
 
 /*
- * The CELL profiling code makes rtas calls to setup the debug bus to
- * route the performance signals.  Additionally, SPU profiling requires
- * a second rtas call to setup the hardware to capture the SPU PCs.
- * The EIO error value is returned if the token lookups or the rtas
- * call fail.  The EIO error number is the best choice of the existing
- * error numbers.  The probability of rtas related error is very low.  But
- * by returning EIO and printing additional information to dmsg the user
- * will know that OProfile did not start and dmesg will tell them why.
- * OProfile does not support returning errors on Stop.	Not a huge issue
- * since failure to reset the debug bus or stop the SPU PC collection is
- * not a fatel issue.  Chances are if the Stop failed, Start doesn't work
- * either.
- */
-
-/*
  * Interpetation of hdw_thread:
  * 0 - even virtual cpus 0, 2, 4,...
  * 1 - odd virtual cpus 1, 3, 5, ...
@@ -161,71 +139,25 @@ static struct timer_list timer_virt_cntr;
  * is available.
  */
 static struct pm_signal pm_signal[NR_PHYS_CTRS];
-static int pm_rtas_token;    /* token for debug bus setup call */
-static int spu_rtas_token;   /* token for SPU cycle profiling */
 
 static u32 reset_value[NR_PHYS_CTRS];
+static u32 count_value[NR_PHYS_CTRS];
 static int num_counters;
 static int oprofile_running;
 static DEFINE_SPINLOCK(virt_cntr_lock);
 
 static u32 ctr_enabled;
 
-static unsigned char trace_bus[NUM_TRACE_BUS_WORDS];
 static unsigned char input_bus[NUM_INPUT_BUS_WORDS];
 
-#if 0 // blade
-/*
- * Firmware interface functions
- */
-static int
-rtas_ibm_cbe_perftools(int subfunc, int passthru,
-		       void *address, unsigned long length)
+u32 cbe_cpu_to_node(int cpu)
 {
-	u64 paddr = __pa(address);
-
-	return rtas_call(pm_rtas_token, 5, 1, NULL, subfunc,
-			 passthru, paddr >> 32, paddr & 0xffffffff, length);
+	return 0;
 }
+EXPORT_SYMBOL_GPL(cbe_cpu_to_node);
 
-static void pm_rtas_reset_signals(u32 node)
+static int pm_activate_signals(u32 node, u32 count)
 {
-	int ret;
-	struct pm_signal pm_signal_local;
-
-	/*
-	 * The debug bus is being set to the passthru disable state.
-	 * However, the FW still expects atleast one legal signal routing
-	 * entry or it will return an error on the arguments.	If we don't
-	 * supply a valid entry, we must ignore all return values.  Ignoring
-	 * all return values means we might miss an error we should be
-	 * concerned about.
-	 */
-
-	/*  fw expects physical cpu #. */
-	pm_signal_local.cpu = node;
-	pm_signal_local.signal_group = 21;
-	pm_signal_local.bus_word = 1;
-	pm_signal_local.sub_unit = 0;
-	pm_signal_local.bit = 0;
-
-	ret = rtas_ibm_cbe_perftools(SUBFUNC_RESET, PASSTHRU_DISABLE,
-				     &pm_signal_local,
-				     sizeof(struct pm_signal));
-
-	if (unlikely(ret))
-		/*
-		 * Not a fatal error. For Oprofile stop, the oprofile
-		 * functions do not support returning an error for
-		 * failure to stop OProfile.
-		 */
-		printk(KERN_WARNING "%s: rtas returned: %d\n",
-		       __FUNCTION__, ret);
-}
-
-static int pm_rtas_activate_signals(u32 node, u32 count)
-{
-	int ret;
 	int i, j;
 	struct pm_signal pm_signal_local[NR_PHYS_CTRS];
 
@@ -244,50 +176,20 @@ static int pm_rtas_activate_signals(u32 node, u32 count)
 			/* fw expects physical cpu # */
 			pm_signal_local[i].cpu = node;
 			pm_signal_local[i].signal_group
-				= pm_signal[j].signal_group;
-			pm_signal_local[i].bus_word = pm_signal[j].bus_word;
-			pm_signal_local[i].sub_unit = pm_signal[j].sub_unit;
+			    = pm_signal[j].signal_group;
+			pm_signal_local[i].bus_word =
+			    pm_signal[j].bus_word;
+			pm_signal_local[i].sub_unit =
+			    pm_signal[j].sub_unit;
 			pm_signal_local[i].bit = pm_signal[j].bit;
+			ps3_set_signal(pm_signal[j].signal_group,
+				       pm_signal[j].bit,
+				       pm_signal[j].sub_unit,
+				       pm_signal[j].bus_word);
 			i++;
 		}
 	}
-
-	if (i != 0) {
-		ret = rtas_ibm_cbe_perftools(SUBFUNC_ACTIVATE, PASSTHRU_ENABLE,
-					     pm_signal_local,
-					     i * sizeof(struct pm_signal));
-
-		if (unlikely(ret)) {
-			printk(KERN_WARNING "%s: rtas returned: %d\n",
-			       __FUNCTION__, ret);
-			return -EIO;
-		}
-	}
-
 	return 0;
-}
-#endif
-
-u32 cbe_cpu_to_node(int cpu)
-{
-	return 0;
-}
-
-void cbe_sync_irq(int node)
-{
-	unsigned int irq;
-
-	irq = irq_find_mapping(NULL,
-			       IIC_IRQ_IOEX_PMI
-			       | (node << IIC_IRQ_NODE_SHIFT));
-
-	if (irq == NO_IRQ) {
-		printk(KERN_WARNING "ERROR, unable to get existing irq %d " \
-		"for node %d\n", irq, node);
-		return;
-	}
-
-	synchronize_irq(irq);
 }
 
 /*
@@ -300,7 +202,6 @@ static void set_pm_event(u32 ctr, int event, u32 unit_mask)
 	u32 bus_word, bus_type, count_cycles, polarity, input_control;
 	int j, i;
 
-	pr_debug("%s:%d:\n", __func__, __LINE__);
 	if (event == PPU_CYCLES_EVENT_NUM) {
 		/* Special Event: Count all cpu cycles */
 		pm_regs.pm07_cntrl[ctr] = CBE_COUNT_ALL_CYCLES;
@@ -325,7 +226,14 @@ static void set_pm_event(u32 ctr, int event, u32 unit_mask)
 
 	p->signal_group = event / 100;
 	p->bus_word = bus_word;
-	p->sub_unit = (unit_mask & 0x0000f000) >> 12;
+	p->sub_unit = GET_SUB_UNIT(unit_mask);
+
+	/*
+	 * This parameter is used to specify the target physical/logical
+	 * PPE/SPE object.
+	 */
+	if (p->signal_group < 42 || 56 < p->signal_group)
+		p->sub_unit = 1;
 
 	pm_regs.pm07_cntrl[ctr] = 0;
 	pm_regs.pm07_cntrl[ctr] |= PM07_CTR_COUNT_CYCLES(count_cycles);
@@ -337,7 +245,7 @@ static void set_pm_event(u32 ctr, int event, u32 unit_mask)
 	 * The debug bus words are 32 bits, the input words to the performance
 	 * counters are defined as 32 bits.  Need to convert the 64 bit island
 	 * specification to the appropriate 32 input bit and bus word for the
-	 * performance counter event selection.	 See the CELL Performance
+	 * performance counter event selection.  See the CELL Performance
 	 * monitoring signals manual and the Perf cntr hardware descriptions
 	 * for the details.
 	 */
@@ -352,6 +260,9 @@ static void set_pm_event(u32 ctr, int event, u32 unit_mask)
 
 		if ((bus_type == 0) && p->signal_group >= 60)
 			bus_type = 2;
+		if ((bus_type == 0) &&
+		    (30 <= p->signal_group && p->signal_group <= 40))
+			bus_type = 2;
 		if ((bus_type == 1) && p->signal_group >= 50)
 			bus_type = 0;
 
@@ -361,22 +272,24 @@ static void set_pm_event(u32 ctr, int event, u32 unit_mask)
 		p->bit = signal_bit;
 	}
 
-	for (i = 0; i < NUM_TRACE_BUS_WORDS; i++) {
+	for (i = 0; i < NUM_DEBUG_BUS_WORDS; i++) {
 		if (bus_word & (1 << i)) {
 			pm_regs.debug_bus_control |=
-			    (bus_type << (31 - (2 * i) + 1));
-
+				(bus_type << (30 - (2 * i)));
 			for (j = 0; j < NUM_INPUT_BUS_WORDS; j++) {
 				if (input_bus[j] == 0xff) {
 					input_bus[j] = i;
 					pm_regs.group_control |=
-					    (i << (31 - i));
+						(i << (30 - (2 * j)));
 
 					break;
 				}
 			}
 		}
 	}
+	OP_DBG("pm07_ctrl[%d] : 0x%x", ctr, pm_regs.pm07_cntrl[ctr]);
+	OP_DBG("group_control : 0x%x", pm_regs.group_control);
+	OP_DBG("debug_bus_control : 0x%x", pm_regs.debug_bus_control);
 out:
 	;
 }
@@ -389,8 +302,6 @@ static void write_pm_cntrl(int cpu)
 	 */
 
 	u32 val = 0;
-
-	pr_debug("%s:%d:\n", __func__, __LINE__);
 	if (pm_regs.pm_cntrl.enable == 1)
 		val |= CBE_PM_ENABLE_PERF_MON;
 
@@ -414,33 +325,65 @@ static void write_pm_cntrl(int cpu)
 static inline void
 set_count_mode(u32 kernel, u32 user)
 {
-	pr_debug("%s:%d:\n", __func__, __LINE__);
+	OP_DBG("set_count_mode k:%d u:%d", kernel, user);
 	/*
 	 * The user must specify user and kernel if they want them. If
 	 *  neither is specified, OProfile will count in hypervisor mode.
 	 *  pm_regs.pm_cntrl is a global
+	 *
+	 *  NOTE : PS3 hypervisor rejects ALL_MODES and HYPERVISOR_MODE.
+	 *         So, ALL_MODES and HYPERVISOR_MODE are changed to
+	 *         PROBLEM_MODE.
 	 */
 	if (kernel) {
 		if (user)
-			pm_regs.pm_cntrl.count_mode = CBE_COUNT_ALL_MODES;
+			pm_regs.pm_cntrl.count_mode =
+				CBE_COUNT_PROBLEM_MODE;
 		else
 			pm_regs.pm_cntrl.count_mode =
 				CBE_COUNT_SUPERVISOR_MODE;
 	} else {
 		if (user)
-			pm_regs.pm_cntrl.count_mode = CBE_COUNT_PROBLEM_MODE;
+			pm_regs.pm_cntrl.count_mode =
+				CBE_COUNT_PROBLEM_MODE;
 		else
 			pm_regs.pm_cntrl.count_mode =
-				CBE_COUNT_HYPERVISOR_MODE;
+				CBE_COUNT_PROBLEM_MODE;
 	}
 }
 
-static inline void enable_ctr(u32 cpu, u32 ctr, u32 * pm07_cntrl)
+static inline void enable_ctr(u32 cpu, u32 ctr, u32 *pm07_cntrl)
 {
-	pr_debug("%s:%d:\n", __func__, __LINE__);
 
 	pm07_cntrl[ctr] |= CBE_PM_CTR_ENABLE;
 	ps3_write_pm07_control(cpu, ctr, pm07_cntrl[ctr]);
+}
+
+static void add_sample(u32 cpu)
+{
+	struct pt_regs *regs;
+	u64 pc;
+	int is_kernel;
+	int i;
+	u32 value;
+
+	regs = get_irq_regs();
+	if (oprofile_running == 1) {
+		pc = regs->nip;
+		is_kernel = is_kernel_addr(pc);
+
+		for (i = 0; i < num_counters; ++i) {
+			value = ps3_read_ctr(cpu, i);
+			if (value >= count_value[i] && count_value[i] != 0) {
+				OP_DBG("pmu:add_sample ctr:%d"
+				       " value:0x%x reset:0x%x count:0x%x",
+				       i, value, reset_value[i],
+				       count_value[i]);
+				oprofile_add_pc(pc, is_kernel, i);
+				ps3_write_ctr(cpu, i, reset_value[i]);
+			}
+		}
+	}
 }
 
 /*
@@ -468,7 +411,6 @@ static void cell_virtual_cntr(unsigned long data)
 	u32 cpu;
 	unsigned long flags;
 
-	pr_debug("%s:%d:\n", __func__, __LINE__);
 	/*
 	 * Make sure that the interrupt_hander and the virt counter are
 	 * not both playing with the counters on the same node.
@@ -481,6 +423,12 @@ static void cell_virtual_cntr(unsigned long data)
 	/* switch the cpu handling the interrupts */
 	hdw_thread = 1 ^ hdw_thread;
 	next_hdw_thread = hdw_thread;
+
+	pm_regs.group_control = 0;
+	pm_regs.debug_bus_control = 0;
+
+	for (i = 0; i < NUM_INPUT_BUS_WORDS; i++)
+		input_bus[i] = 0xff;
 
 	/*
 	 * There are some per thread events.  Must do the
@@ -505,29 +453,13 @@ static void cell_virtual_cntr(unsigned long data)
 		 */
 		ps3_disable_pm(cpu);
 		ps3_disable_pm_interrupts(cpu);
-		for (i = 0; i < num_counters; i++) {
-			per_cpu(pmc_values, cpu + prev_hdw_thread)[i]
-			    = ps3_read_ctr(cpu, i);
 
-			if (per_cpu(pmc_values, cpu + next_hdw_thread)[i]
-			    == 0xFFFFFFFF)
-				/* If the cntr value is 0xffffffff, we must
-				 * reset that to 0xfffffff0 when the current
-				 * thread is restarted.	 This will generate a
-				 * new interrupt and make sure that we never
-				 * restore the counters to the max value.  If
-				 * the counters were restored to the max value,
-				 * they do not increment and no interrupts are
-				 * generated.  Hence no more samples will be
-				 * collected on that cpu.
-				 */
-				ps3_write_ctr(cpu, i, 0xFFFFFFF0);
-			else
-				ps3_write_ctr(cpu, i,
-					      per_cpu(pmc_values,
-						      cpu +
-						      next_hdw_thread)[i]);
-		}
+		/*
+		 * Add sample data at here.
+		 * Because PS3 hypervisor does not have
+		 * the performance monitor interrupt feature.
+		 */
+		add_sample(cpu);
 
 		/*
 		 * Switch to the other thread. Change the interrupt
@@ -561,7 +493,6 @@ static void cell_virtual_cntr(unsigned long data)
 
 static void start_virt_cntrs(void)
 {
-	pr_debug("%s:%d:\n", __func__, __LINE__);
 	init_timer(&timer_virt_cntr);
 	timer_virt_cntr.function = cell_virtual_cntr;
 	timer_virt_cntr.data = 0UL;
@@ -574,45 +505,18 @@ static int cell_reg_setup(struct op_counter_config *ctr,
 			struct op_system_config *sys, int num_ctrs)
 {
 	int i, j, cpu;
+	int ret;
+
 	spu_cycle_reset = 0;
 
-	pr_debug("%s:%d:\n", __func__, __LINE__);
-	if (ctr[0].event == SPU_CYCLES_EVENT_NUM) {
+	ret = ps3_lpm_open(NULL, 0, 0);
+	if (ret) {
+		OP_ERR("lpm_open error. %d", ret);
+		return -EFAULT;
+	}
+
+	if (ctr[0].event == SPU_CYCLES_EVENT_NUM)
 		spu_cycle_reset = ctr[0].count;
-#if 0 // blade
-		/*
-		 * Each node will need to make the rtas call to start
-		 * and stop SPU profiling.  Get the token once and store it.
-		 */
-		spu_rtas_token = rtas_token("ibm,cbe-spu-perftools");
-
-		if (unlikely(spu_rtas_token == RTAS_UNKNOWN_SERVICE)) {
-			printk(KERN_ERR
-			       "%s: rtas token ibm,cbe-spu-perftools unknown\n",
-			       __FUNCTION__);
-			return -EIO;
-		}
-#endif
-	}
-
-#if 0 // blade
-	pm_rtas_token = rtas_token("ibm,cbe-perftools");
-
-	/*
-	 * For all events excetp PPU CYCLEs, each node will need to make
-	 * the rtas cbe-perftools call to setup and reset the debug bus.
-	 * Make the token lookup call once and store it in the global
-	 * variable pm_rtas_token.
-	 */
-	if (unlikely(pm_rtas_token == RTAS_UNKNOWN_SERVICE)) {
-		printk(KERN_ERR
-		       "%s: rtas token ibm,cbe-perftools unknown\n",
-		       __FUNCTION__);
-		return -EIO;
-	}
-#else
-	ps3_lpm_open(NULL, 0, 1);
-#endif
 
 	num_counters = num_ctrs;
 
@@ -658,9 +562,6 @@ static int cell_reg_setup(struct op_counter_config *ctr,
 		pmc_cntrl[1][i].vcntr = i;
 	}
 
-	for (i = 0; i < NUM_TRACE_BUS_WORDS; i++)
-		trace_bus[i] = 0xff;
-
 	for (i = 0; i < NUM_INPUT_BUS_WORDS; i++)
 		input_bus[i] = 0xff;
 
@@ -674,8 +575,8 @@ static int cell_reg_setup(struct op_counter_config *ctr,
 	for (i = 0; i < num_counters; ++i) {
 		/* start with virtual counter set 0 */
 		if (pmc_cntrl[0][i].enabled) {
-			/* Using 32bit counters, reset max - count */
-			reset_value[i] = 0xFFFFFFFF - ctr[i].count;
+			reset_value[i] = 0;
+			count_value[i] = ctr[i].count;
 			set_pm_event(i,
 				     pmc_cntrl[0][i].evnts,
 				     pmc_cntrl[0][i].masks);
@@ -687,9 +588,8 @@ static int cell_reg_setup(struct op_counter_config *ctr,
 
 	/* initialize the previous counts for the virtual cntrs */
 	for_each_online_cpu(cpu)
-		for (i = 0; i < num_counters; ++i) {
+		for (i = 0; i < num_counters; ++i)
 			per_cpu(pmc_values, cpu)[i] = reset_value[i];
-		}
 
 	return 0;
 }
@@ -703,7 +603,6 @@ static int cell_cpu_setup(struct op_counter_config *cntr)
 	u32 num_enabled = 0;
 	int i;
 
-	pr_debug("%s:%d:\n", __func__, __LINE__);
 	if (spu_cycle_reset)
 		return 0;
 
@@ -730,296 +629,13 @@ static int cell_cpu_setup(struct op_counter_config *cntr)
 		}
 	}
 
-#if 0 // blade
-	/*
-	 * The pm_rtas_activate_signals will return -EIO if the FW
-	 * call failed.
-	 */
-	return pm_rtas_activate_signals(cbe_cpu_to_node(cpu), num_enabled);
-#else
-	return 0;
-#endif
+	return pm_activate_signals(cbe_cpu_to_node(cpu), num_enabled);
 }
 
-#define ENTRIES	 303
-#define MAXLFSR	 0xFFFFFF
-
-/* precomputed table of 24 bit LFSR values */
-static int initial_lfsr[] = {
- 8221349, 12579195, 5379618, 10097839, 7512963, 7519310, 3955098, 10753424,
- 15507573, 7458917, 285419, 2641121, 9780088, 3915503, 6668768, 1548716,
- 4885000, 8774424, 9650099, 2044357, 2304411, 9326253, 10332526, 4421547,
- 3440748, 10179459, 13332843, 10375561, 1313462, 8375100, 5198480, 6071392,
- 9341783, 1526887, 3985002, 1439429, 13923762, 7010104, 11969769, 4547026,
- 2040072, 4025602, 3437678, 7939992, 11444177, 4496094, 9803157, 10745556,
- 3671780, 4257846, 5662259, 13196905, 3237343, 12077182, 16222879, 7587769,
- 14706824, 2184640, 12591135, 10420257, 7406075, 3648978, 11042541, 15906893,
- 11914928, 4732944, 10695697, 12928164, 11980531, 4430912, 11939291, 2917017,
- 6119256, 4172004, 9373765, 8410071, 14788383, 5047459, 5474428, 1737756,
- 15967514, 13351758, 6691285, 8034329, 2856544, 14394753, 11310160, 12149558,
- 7487528, 7542781, 15668898, 12525138, 12790975, 3707933, 9106617, 1965401,
- 16219109, 12801644, 2443203, 4909502, 8762329, 3120803, 6360315, 9309720,
- 15164599, 10844842, 4456529, 6667610, 14924259, 884312, 6234963, 3326042,
- 15973422, 13919464, 5272099, 6414643, 3909029, 2764324, 5237926, 4774955,
- 10445906, 4955302, 5203726, 10798229, 11443419, 2303395, 333836, 9646934,
- 3464726, 4159182, 568492, 995747, 10318756, 13299332, 4836017, 8237783,
- 3878992, 2581665, 11394667, 5672745, 14412947, 3159169, 9094251, 16467278,
- 8671392, 15230076, 4843545, 7009238, 15504095, 1494895, 9627886, 14485051,
- 8304291, 252817, 12421642, 16085736, 4774072, 2456177, 4160695, 15409741,
- 4902868, 5793091, 13162925, 16039714, 782255, 11347835, 14884586, 366972,
- 16308990, 11913488, 13390465, 2958444, 10340278, 1177858, 1319431, 10426302,
- 2868597, 126119, 5784857, 5245324, 10903900, 16436004, 3389013, 1742384,
- 14674502, 10279218, 8536112, 10364279, 6877778, 14051163, 1025130, 6072469,
- 1988305, 8354440, 8216060, 16342977, 13112639, 3976679, 5913576, 8816697,
- 6879995, 14043764, 3339515, 9364420, 15808858, 12261651, 2141560, 5636398,
- 10345425, 10414756, 781725, 6155650, 4746914, 5078683, 7469001, 6799140,
- 10156444, 9667150, 10116470, 4133858, 2121972, 1124204, 1003577, 1611214,
- 14304602, 16221850, 13878465, 13577744, 3629235, 8772583, 10881308, 2410386,
- 7300044, 5378855, 9301235, 12755149, 4977682, 8083074, 10327581, 6395087,
- 9155434, 15501696, 7514362, 14520507, 15808945, 3244584, 4741962, 9658130,
- 14336147, 8654727, 7969093, 15759799, 14029445, 5038459, 9894848, 8659300,
- 13699287, 8834306, 10712885, 14753895, 10410465, 3373251, 309501, 9561475,
- 5526688, 14647426, 14209836, 5339224, 207299, 14069911, 8722990, 2290950,
- 3258216, 12505185, 6007317, 9218111, 14661019, 10537428, 11731949, 9027003,
- 6641507, 9490160, 200241, 9720425, 16277895, 10816638, 1554761, 10431375,
- 7467528, 6790302, 3429078, 14633753, 14428997, 11463204, 3576212, 2003426,
- 6123687, 820520, 9992513, 15784513, 5778891, 6428165, 8388607
-};
-
-/*
- * The hardware uses an LFSR counting sequence to determine when to capture
- * the SPU PCs.	 An LFSR sequence is like a puesdo random number sequence
- * where each number occurs once in the sequence but the sequence is not in
- * numerical order. The SPU PC capture is done when the LFSR sequence reaches
- * the last value in the sequence.  Hence the user specified value N
- * corresponds to the LFSR number that is N from the end of the sequence.
- *
- * To avoid the time to compute the LFSR, a lookup table is used.  The 24 bit
- * LFSR sequence is broken into four ranges.  The spacing of the precomputed
- * values is adjusted in each range so the error between the user specifed
- * number (N) of events between samples and the actual number of events based
- * on the precomputed value will be les then about 6.2%.  Note, if the user
- * specifies N < 2^16, the LFSR value that is 2^16 from the end will be used.
- * This is to prevent the loss of samples because the trace buffer is full.
- *
- *	   User specified N		     Step between	   Index in
- *					 precomputed values	 precomputed
- *								    table
- * 0		    to	2^16-1			----		      0
- * 2^16	    to	2^16+2^19-1		2^12		    1 to 128
- * 2^16+2^19	    to	2^16+2^19+2^22-1	2^15		  129 to 256
- * 2^16+2^19+2^22  to	2^24-1			2^18		  257 to 302
- *
- *
- * For example, the LFSR values in the second range are computed for 2^16,
- * 2^16+2^12, ... , 2^19-2^16, 2^19 and stored in the table at indicies
- * 1, 2,..., 127, 128.
- *
- * The 24 bit LFSR value for the nth number in the sequence can be
- * calculated using the following code:
- *
- * #define size 24
- * int calculate_lfsr(int n)
- * {
- *	int i;
- *	unsigned int newlfsr0;
- *	unsigned int lfsr = 0xFFFFFF;
- *	unsigned int howmany = n;
- *
- *	for (i = 2; i < howmany + 2; i++) {
- *		newlfsr0 = (((lfsr >> (size - 1 - 0)) & 1) ^
- *		((lfsr >> (size - 1 - 1)) & 1) ^
- *		(((lfsr >> (size - 1 - 6)) & 1) ^
- *		((lfsr >> (size - 1 - 23)) & 1)));
- *
- *		lfsr >>= 1;
- *		lfsr = lfsr | (newlfsr0 << (size - 1));
- *	}
- *	return lfsr;
- * }
- */
-
-#define V2_16  (0x1 << 16)
-#define V2_19  (0x1 << 19)
-#define V2_22  (0x1 << 22)
-
-static int calculate_lfsr(int n)
-{
-	/*
-	 * The ranges and steps are in powers of 2 so the calculations
-	 * can be done using shifts rather then divide.
-	 */
-	int index;
-
-	pr_debug("%s:%d:\n", __func__, __LINE__);
-	if ((n >> 16) == 0)
-		index = 0;
-	else if (((n - V2_16) >> 19) == 0)
-		index = ((n - V2_16) >> 12) + 1;
-	else if (((n - V2_16 - V2_19) >> 22) == 0)
-		index = ((n - V2_16 - V2_19) >> 15 ) + 1 + 128;
-	else if (((n - V2_16 - V2_19 - V2_22) >> 24) == 0)
-		index = ((n - V2_16 - V2_19 - V2_22) >> 18 ) + 1 + 256;
-	else
-		index = ENTRIES-1;
-
-	/* make sure index is valid */
-	if ((index > ENTRIES) || (index < 0))
-		index = ENTRIES-1;
-
-	return initial_lfsr[index];
-}
-
-static int pm_rtas_activate_spu_profiling(u32 node)
-{
-	int ret, i;
-	struct pm_signal pm_signal_local[NR_PHYS_CTRS];
-
-	pr_debug("%s:%d:\n", __func__, __LINE__);
-	/*
-	 * Set up the rtas call to configure the debug bus to
-	 * route the SPU PCs.  Setup the pm_signal for each SPU
-	 */
-	for (i = 0; i < NUM_SPUS_PER_NODE; i++) {
-		pm_signal_local[i].cpu = node;
-		pm_signal_local[i].signal_group = 41;
-		/* spu i on word (i/2) */
-		pm_signal_local[i].bus_word = 1 << i / 2;
-		/* spu i */
-		pm_signal_local[i].sub_unit = i;
-		pm_signal_local[i].bit = 63;
-	}
-
-#if 0 // blade
-	ret = rtas_ibm_cbe_perftools(SUBFUNC_ACTIVATE,
-				     PASSTHRU_ENABLE, pm_signal_local,
-				     (NUM_SPUS_PER_NODE
-				      * sizeof(struct pm_signal)));
-
-	if (unlikely(ret)) {
-		printk(KERN_WARNING "%s: rtas returned: %d\n",
-		       __FUNCTION__, ret);
-		return -EIO;
-	}
-#endif
-
-	return 0;
-}
-
-#ifdef CONFIG_CPU_FREQ
-static int
-oprof_cpufreq_notify(struct notifier_block *nb, unsigned long val, void *data)
-{
-	int ret = 0;
-	pr_debug("%s:%d:\n", __func__, __LINE__);
-	struct cpufreq_freqs *frq = data;
-	if ((val == CPUFREQ_PRECHANGE && frq->old < frq->new) ||
-	    (val == CPUFREQ_POSTCHANGE && frq->old > frq->new) ||
-	    (val == CPUFREQ_RESUMECHANGE || val == CPUFREQ_SUSPENDCHANGE))
-		set_spu_profiling_frequency(frq->new, spu_cycle_reset);
-	return ret;
-}
-
-static struct notifier_block cpu_freq_notifier_block = {
-	.notifier_call	= oprof_cpufreq_notify
-};
-#endif
 
 static int cell_global_start_spu(struct op_counter_config *ctr)
 {
-	int subfunc;
-	unsigned int lfsr_value;
-	int cpu;
-	int ret;
-	int rtas_error;
-	unsigned int cpu_khzfreq = 0;
-
-	pr_debug("%s:%d:\n", __func__, __LINE__);
-	/* The SPU profiling uses time-based profiling based on
-	 * cpu frequency, so if configured with the CPU_FREQ
-	 * option, we should detect frequency changes and react
-	 * accordingly.
-	 */
-#ifdef CONFIG_CPU_FREQ
-	ret = cpufreq_register_notifier(&cpu_freq_notifier_block,
-					CPUFREQ_TRANSITION_NOTIFIER);
-	if (ret < 0)
-		/* this is not a fatal error */
-		printk(KERN_ERR "CPU freq change registration failed: %d\n",
-		       ret);
-
-	else
-		cpu_khzfreq = cpufreq_quick_get(smp_processor_id());
-#endif
-
-#if 0 // blade
-	set_spu_profiling_frequency(cpu_khzfreq, spu_cycle_reset);
-#endif
-
-	for_each_online_cpu(cpu) {
-		if (ps3_get_hw_thread_id(cpu))
-			continue;
-
-		/*
-		 * Setup SPU cycle-based profiling.
-		 * Set perf_mon_control bit 0 to a zero before
-		 * enabling spu collection hardware.
-		 */
-		ps3_write_pm(cpu, pm_control, 0);
-
-		if (spu_cycle_reset > MAX_SPU_COUNT)
-			/* use largest possible value */
-			lfsr_value = calculate_lfsr(MAX_SPU_COUNT-1);
-		else
-			lfsr_value = calculate_lfsr(spu_cycle_reset);
-
-		/* must use a non zero value. Zero disables data collection. */
-		if (lfsr_value == 0)
-			lfsr_value = calculate_lfsr(1);
-
-		lfsr_value = lfsr_value << 8; /* shift lfsr to correct
-						* register location
-						*/
-
-		/* debug bus setup */
-		ret = pm_rtas_activate_spu_profiling(cbe_cpu_to_node(cpu));
-
-		if (unlikely(ret)) {
-			rtas_error = ret;
-			goto out;
-		}
-
-
-		subfunc = 2;	/* 2 - activate SPU tracing, 3 - deactivate */
-
-		/* start profiling */
-#if 0 // blade
-		ret = rtas_call(spu_rtas_token, 3, 1, NULL, subfunc,
-		  cbe_cpu_to_node(cpu), lfsr_value);
-
-		if (unlikely(ret != 0)) {
-			printk(KERN_ERR
-			       "%s: rtas call ibm,cbe-spu-perftools failed, return = %d\n",
-			       __FUNCTION__, ret);
-			rtas_error = -EIO;
-			goto out;
-		}
-#endif
-	}
-
-#if 0 // blade
-	rtas_error = start_spu_profiling(spu_cycle_reset);
-	if (rtas_error)
-		goto out_stop;
-#endif
-
-	oprofile_running = 1;
-	return 0;
-
-out_stop:
-	cell_global_stop_spu();		/* clean up the PMU/debug bus */
-out:
-	return rtas_error;
+	return -ENOSYS;
 }
 
 static int cell_global_start_ppu(struct op_counter_config *ctr)
@@ -1027,7 +643,6 @@ static int cell_global_start_ppu(struct op_counter_config *ctr)
 	u32 cpu, i;
 	u32 interrupt_mask = 0;
 
-	pr_debug("%s:%d:\n", __func__, __LINE__);
 	/* This routine gets called once for the system.
 	 * There is one performance monitor per node, so we
 	 * only need to perform this function once per node.
@@ -1057,6 +672,7 @@ static int cell_global_start_ppu(struct op_counter_config *ctr)
 
 	virt_cntr_inter_mask = interrupt_mask;
 	oprofile_running = 1;
+	/* complete the previous store */
 	smp_wmb();
 
 	/*
@@ -1072,71 +688,20 @@ static int cell_global_start_ppu(struct op_counter_config *ctr)
 
 static int cell_global_start(struct op_counter_config *ctr)
 {
-	pr_debug("%s:%d:\n", __func__, __LINE__);
 	if (spu_cycle_reset)
 		return cell_global_start_spu(ctr);
 	else
 		return cell_global_start_ppu(ctr);
 }
 
-/*
- * Note the generic OProfile stop calls do not support returning
- * an error on stop.  Hence, will not return an error if the FW
- * calls fail on stop.	Failure to reset the debug bus is not an issue.
- * Failure to disable the SPU profiling is not an issue.  The FW calls
- * to enable the performance counters and debug bus will work even if
- * the hardware was not cleanly reset.
- */
 static void cell_global_stop_spu(void)
 {
-	int subfunc, rtn_value;
-	unsigned int lfsr_value;
-	int cpu;
-
-	pr_debug("%s:%d:\n", __func__, __LINE__);
-	oprofile_running = 0;
-
-#ifdef CONFIG_CPU_FREQ
-	cpufreq_unregister_notifier(&cpu_freq_notifier_block,
-				    CPUFREQ_TRANSITION_NOTIFIER);
-#endif
-
-	for_each_online_cpu(cpu) {
-		if (ps3_get_hw_thread_id(cpu))
-			continue;
-
-		subfunc = 3;	/*
-				 * 2 - activate SPU tracing,
-				 * 3 - deactivate
-				 */
-		lfsr_value = 0x8f100000;
-
-#if 0 // blade
-		rtn_value = rtas_call(spu_rtas_token, 3, 1, NULL,
-				      subfunc, cbe_cpu_to_node(cpu),
-				      lfsr_value);
-
-		if (unlikely(rtn_value != 0)) {
-			printk(KERN_ERR
-			       "%s: rtas call ibm,cbe-spu-perftools failed, return = %d\n",
-			       __FUNCTION__, rtn_value);
-		}
-
-		/* Deactivate the signals */
-		pm_rtas_reset_signals(cbe_cpu_to_node(cpu));
-#endif
-	}
-
-#if 0 // blade
-	stop_spu_profiling();
-#endif
 }
 
 static void cell_global_stop_ppu(void)
 {
 	int cpu;
 
-	pr_debug("%s:%d:\n", __func__, __LINE__);
 	/*
 	 * This routine will be called once for the system.
 	 * There is one performance monitor per node, so we
@@ -1144,18 +709,18 @@ static void cell_global_stop_ppu(void)
 	 */
 	del_timer_sync(&timer_virt_cntr);
 	oprofile_running = 0;
+	/* complete the previous store */
 	smp_wmb();
 
 	for_each_online_cpu(cpu) {
 		if (ps3_get_hw_thread_id(cpu))
 			continue;
 
-		cbe_sync_irq(cbe_cpu_to_node(cpu));
 		/* Stop the counters */
 		ps3_disable_pm(cpu);
 
 		/* Deactivate the signals */
-		//pm_rtas_reset_signals(cbe_cpu_to_node(cpu));
+		ps3_set_signal(0, 0, 0, 0);	/*clear all */
 
 		/* Deactivate interrupts */
 		ps3_disable_pm_interrupts(cpu);
@@ -1164,85 +729,12 @@ static void cell_global_stop_ppu(void)
 
 static void cell_global_stop(void)
 {
-	pr_debug("%s:%d:\n", __func__, __LINE__);
 	if (spu_cycle_reset)
 		cell_global_stop_spu();
 	else
 		cell_global_stop_ppu();
 }
 
-static void cell_handle_interrupt(struct pt_regs *regs,
-				struct op_counter_config *ctr)
-{
-	u32 cpu;
-	u64 pc;
-	int is_kernel;
-	unsigned long flags = 0;
-	u32 interrupt_mask;
-	int i;
-
-	cpu = smp_processor_id();
-
-	/*
-	 * Need to make sure the interrupt handler and the virt counter
-	 * routine are not running at the same time. See the
-	 * cell_virtual_cntr() routine for additional comments.
-	 */
-	spin_lock_irqsave(&virt_cntr_lock, flags);
-
-	/*
-	 * Need to disable and reenable the performance counters
-	 * to get the desired behavior from the hardware.  This
-	 * is hardware specific.
-	 */
-
-	ps3_disable_pm(cpu);
-
-	interrupt_mask = ps3_get_and_clear_pm_interrupts(cpu);
-
-	/*
-	 * If the interrupt mask has been cleared, then the virt cntr
-	 * has cleared the interrupt.  When the thread that generated
-	 * the interrupt is restored, the data count will be restored to
-	 * 0xffffff0 to cause the interrupt to be regenerated.
-	 */
-
-	if ((oprofile_running == 1) && (interrupt_mask != 0)) {
-		pc = regs->nip;
-		is_kernel = is_kernel_addr(pc);
-
-		for (i = 0; i < num_counters; ++i) {
-			if ((interrupt_mask & CBE_PM_CTR_OVERFLOW_INTR(i))
-			    && ctr[i].enabled) {
-				oprofile_add_pc(pc, is_kernel, i);
-				ps3_write_ctr(cpu, i, reset_value[i]);
-			}
-		}
-
-		/*
-		 * The counters were frozen by the interrupt.
-		 * Reenable the interrupt and restart the counters.
-		 * If there was a race between the interrupt handler and
-		 * the virtual counter routine.	 The virutal counter
-		 * routine may have cleared the interrupts.  Hence must
-		 * use the virt_cntr_inter_mask to re-enable the interrupts.
-		 */
-		ps3_enable_pm_interrupts(cpu, hdw_thread,
-					 virt_cntr_inter_mask);
-
-		/*
-		 * The writes to the various performance counters only writes
-		 * to a latch.	The new values (interrupt setting bits, reset
-		 * counter value etc.) are not copied to the actual registers
-		 * until the performance monitor is enabled.  In order to get
-		 * this to work as desired, the permormance monitor needs to
-		 * be disabled while writing to the latches.  This is a
-		 * HW design issue.
-		 */
-		ps3_enable_pm(cpu);
-	}
-	spin_unlock_irqrestore(&virt_cntr_lock, flags);
-}
 
 /*
  * This function is called from the generic OProfile
@@ -1251,29 +743,19 @@ static void cell_handle_interrupt(struct pt_regs *regs,
  */
 static int cell_sync_start(void)
 {
-	pr_debug("%s:%d:\n", __func__, __LINE__);
-#if 0 // spu
-	if (spu_cycle_reset)
-		return spu_sync_start();
-		return 0;
-	else
-		return DO_GENERIC_SYNC;
-#else
-	return 1;
-#endif
+	OP_ERR("PS3 oprofile support");
+	return DO_GENERIC_SYNC;
 }
 
 static int cell_sync_stop(void)
 {
-	pr_debug("%s:%d:\n", __func__, __LINE__);
-#if 0 // spu
-	if (spu_cycle_reset)
-		return spu_sync_stop();
-	else
-		return 1;
-#else
+	int ret;
+
+	ret = ps3_lpm_close();
+	if (ret)
+		OP_ERR("lpm_close error. %d", ret);
+
 	return 1;
-#endif
 }
 
 struct op_powerpc_model op_model_ps3 = {
@@ -1283,5 +765,4 @@ struct op_powerpc_model op_model_ps3 = {
 	.global_stop = cell_global_stop,
 	.sync_start = cell_sync_start,
 	.sync_stop = cell_sync_stop,
-	.handle_interrupt = cell_handle_interrupt,
 };

@@ -370,6 +370,9 @@ EXPORT_SYMBOL_GPL(ps3_write_pm07_control);
 
 u32 ps3_read_pm(u32 cpu, enum pm_reg_name reg)
 {
+	int result = 0;
+	u64 val = 0;
+
 	switch (reg) {
 	case pm_control:
 		return lpm_priv->shadow_pm_control;
@@ -377,12 +380,31 @@ u32 ps3_read_pm(u32 cpu, enum pm_reg_name reg)
 		return CBE_PM_TRACE_BUF_EMPTY;
 	case pm_start_stop:
 		return lpm_priv->shadow_pm_start_stop;
+	case pm_interval:
+		return lpm_priv->shadow_pm_interval;
+	case group_control:
+		return lpm_priv->shadow_group_control;
+	case debug_bus_control:
+		return lpm_priv->shadow_debug_bus_control;
+	case pm_status:
+		result = lv1_get_lpm_interrupt_status(lpm_priv->lpm_id,
+						      &val);
+		if (result) {
+			val = 0;
+			dev_dbg(sbd_core(), "%s:%u: lv1 get_lpm_status failed: "
+				"reg %u, %s\n", __func__, __LINE__, reg,
+				ps3_result(result));
+		}
+		return (u32)val;
+	case ext_tr_timer:
+		return 0;
 	default:
 		dev_dbg(sbd_core(), "%s:%u: unknown reg: %d\n", __func__,
 			__LINE__, reg);
 		BUG();
 		break;
 	}
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(ps3_read_pm);
@@ -438,6 +460,10 @@ void ps3_write_pm(u32 cpu, enum pm_reg_name reg, u32 val)
 							     PS3_WRITE_PM_MASK,
 							     &dummy);
 		lpm_priv->shadow_pm_start_stop = val;
+		break;
+	case trace_address:
+	case ext_tr_timer:
+	case pm_status:
 		break;
 	default:
 		dev_dbg(sbd_core(), "%s:%u: unknown reg: %d\n", __func__,
@@ -821,7 +847,7 @@ void ps3_enable_pm(u32 cpu)
 		dev_err(sbd_core(), "%s:%u: lv1_start_lpm failed: %s\n",
 			__func__, __LINE__, ps3_result(result));
 
-	if (use_start_stop_bookmark && result && insert_bookmark)
+	if (use_start_stop_bookmark && !result && insert_bookmark)
 		ps3_set_bookmark(get_tb() | PS3_PM_BOOKMARK_START);
 }
 EXPORT_SYMBOL_GPL(ps3_enable_pm);
