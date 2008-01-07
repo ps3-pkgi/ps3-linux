@@ -285,8 +285,8 @@ static void gelic_card_reset_chain(struct gelic_card *card,
 		descr->next_descr_addr = cpu_to_be32(descr->next->bus_addr);
 	}
 
-	chain->tail = start_descr;
-	chain->head = (descr - 1);
+	chain->head = start_descr;
+	chain->tail = (descr - 1);
 
 	(descr - 1)->next_descr_addr = 0;
 }
@@ -413,7 +413,7 @@ static int gelic_card_alloc_rx_skbs(struct gelic_card *card)
 	int ret;
 	chain = &card->rx_chain;
 	ret = gelic_card_fill_rx_chain(card);
-	chain->head = card->rx_top->prev; /* point to the last */
+	chain->tail = card->rx_top->prev; /* point to the last */
 	return ret;
 }
 
@@ -589,17 +589,19 @@ static inline void gelic_card_enable_rxdmac(struct gelic_card *card)
 {
 	int status;
 
-	if (gelic_descr_get_status(card->rx_chain.tail) !=
+#ifdef DEBUG
+	if (gelic_descr_get_status(card->rx_chain.head) !=
 	    GELIC_DESCR_DMA_CARDOWNED) {
 		printk(KERN_ERR "%s: status=%x\n", __func__,
-		       be32_to_cpu(card->rx_chain.tail->dmac_cmd_status));
+		       be32_to_cpu(card->rx_chain.head->dmac_cmd_status));
 		printk(KERN_ERR "%s: nextphy=%x\n", __func__,
-		       be32_to_cpu(card->rx_chain.tail->next_descr_addr));
-		printk(KERN_ERR "%s: tail=%p\n", __func__,
-		       card->rx_chain.tail);
+		       be32_to_cpu(card->rx_chain.head->next_descr_addr));
+		printk(KERN_ERR "%s: head=%p\n", __func__,
+		       card->rx_chain.head);
 	}
+#endif
 	status = lv1_net_start_rx_dma(bus_id(card), dev_id(card),
-				card->rx_chain.tail->bus_addr, 0);
+				card->rx_chain.head->bus_addr, 0);
 	if (status)
 		dev_info(ctodev(card),
 			 "lv1_net_start_rx_dma failed, status=%d\n", status);
@@ -962,7 +964,7 @@ static int gelic_card_decode_one_descr(struct gelic_card *card)
 {
 	enum gelic_descr_dma_status status;
 	struct gelic_descr_chain *chain = &card->rx_chain;
-	struct gelic_descr *descr = chain->tail;
+	struct gelic_descr *descr = chain->head;
 	struct net_device *netdev = NULL;
 	int dmac_chain_ended;
 
@@ -1049,8 +1051,8 @@ refill:
 	 */
 	gelic_descr_prepare_rx(card, descr);
 
-	chain->head = descr;
-	chain->tail = descr->next;
+	chain->tail = descr;
+	chain->head = descr->next;
 
 	/*
 	 * Set this descriptor the end of the chain.
