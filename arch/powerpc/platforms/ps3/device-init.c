@@ -37,18 +37,16 @@ static int __init ps3_register_lpm_devices(void)
 	unsigned int pu_count;
 	u64 tmp1;
 	u64 tmp2;
-	struct layout {
-		struct ps3_system_bus_device dev;
-	} *p;
+	struct ps3_system_bus_device *dev;
 
 	pr_debug(" -> %s:%d\n", __func__, __LINE__);
 
-	p = kzalloc(sizeof(*p), GFP_KERNEL);
-	if (!p)
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
+	if (!dev)
 		return -ENOMEM;
 
-	p->dev.match_id = PS3_MATCH_ID_LPM;
-	p->dev.dev_type = PS3_DEVICE_TYPE_LPM;
+	dev->match_id = PS3_MATCH_ID_LPM;
+	dev->dev_type = PS3_DEVICE_TYPE_LPM;
 
 	result = ps3_repository_read_num_pu(&pu_count);
 
@@ -65,7 +63,7 @@ static int __init ps3_register_lpm_devices(void)
 			__func__, __LINE__, pu_count);
 	}
 
-	result = ps3_repository_read_pu_id(0, &p->dev.lpm.pu_id);
+	result = ps3_repository_read_pu_id(0, &dev->lpm.pu_id);
 
 	if (result) {
 		pr_debug("%s:%d: ps3_repository_read_pu_id failed \n",
@@ -74,7 +72,7 @@ static int __init ps3_register_lpm_devices(void)
 	}
 
 	result = ps3_repository_read_lpm_privileges(0, &tmp1,
-		&p->dev.lpm.rights);
+		&dev->lpm.rights);
 
 	if (result) {
 		pr_debug("%s:%d: ps3_repository_read_lpm_privleges failed \n",
@@ -87,22 +85,22 @@ static int __init ps3_register_lpm_devices(void)
 	if (tmp1 != tmp2) {
 		pr_debug("%s:%d: wrong lpar\n",
 			__func__, __LINE__);
-		result = -1;
+		result = -ENODEV;
 		goto fail_rights;
 	}
 
-	if (!(p->dev.lpm.rights & PS3_LPM_RIGHTS_USE_LPM)) {
+	if (!(dev->lpm.rights & PS3_LPM_RIGHTS_USE_LPM)) {
 		pr_debug("%s:%d: don't have rights to use lpm\n",
 			__func__, __LINE__);
-		result = -1;
+		result = -EPERM;
 		goto fail_rights;
 	}
 
 	pr_debug("%s:%d: pu_id %lu, rights %lu(%lxh)\n",
-		__func__, __LINE__, p->dev.lpm.pu_id, p->dev.lpm.rights,
-		p->dev.lpm.rights);
+		__func__, __LINE__, dev->lpm.pu_id, dev->lpm.rights,
+		dev->lpm.rights);
 
-	result = ps3_system_bus_device_register(&p->dev);
+	result = ps3_system_bus_device_register(dev);
 
 	if (result) {
 		pr_debug("%s:%d ps3_system_bus_device_register failed\n",
@@ -117,7 +115,7 @@ static int __init ps3_register_lpm_devices(void)
 fail_register:
 fail_rights:
 fail_read_repo:
-	kfree(p);
+	kfree(dev);
 	pr_debug(" <- %s:%d: failed\n", __func__, __LINE__);
 	return result;
 }

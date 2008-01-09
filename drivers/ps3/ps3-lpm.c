@@ -26,75 +26,6 @@
 #include <asm/lv1call.h>
 #include <asm/cell-pmu.h>
 
-#define PS3_SIZE_OF_PM_INTERNAL_TRACE_BUFFER        0x4000
-#define PS3_SIZE_OF_PM_DEFAULT_TRACE_BUFFER_CACHE   0x4000
-
-/**
- * struct ps3_lpm_priv - private lpm device data.
- *
- * @mutex: Open/close mutex.
- * @rights: The lpm rigths granted by the system policy module.
- * @pu_id: The lv1 id of the BE prosessor for this lpm instance.
- * @lpm_id: The lv1 id of this lpm instance.
- * @outlet_id: The outlet created by lv1 for this lpm instance.
- * @constructed: A flag indicating the lpm driver has been opened -- can we just use (lpm_id == ???)
- * @tb_size: The lv1 trace buffer size
- * @tb_cache: Trace buffer cache
- * @tb_cache_internal: A flag indicating the trace buffer cache was allocated
- *                     by the driver.
- * @tb_cache: Trace buffer cache
- * @sizeof_traced_data: Traced data size
- * @sbd: the struct ps3_system_bus_device attached to this driver
- */
-
-struct ps3_lpm_priv {
-	struct mutex mutex;
-	u64 rights;
-	u64 pu_id;
-	u64 lpm_id;
-	u64 outlet_id;
-	int constructed;
-	u64 tb_size;
-	void *tb_cache;
-	u64 tb_cache_size;
-	int tb_cache_internal;
-	u64 sizeof_traced_data;
-	u64 sizeof_total_copied_data;
-	u64 shadow_pm_control;
-	u64 shadow_pm_start_stop;
-	u64 shadow_pm_interval;
-	u64 shadow_group_control;
-	u64 shadow_debug_bus_control;
-	struct ps3_system_bus_device *sbd;
-};
-
-/**
- * lpm_priv - Static instance of the lpm data.
- *
- * Since the exported routines don't support the notion of a device
- * instance we need to hold the instance in this static variable
- * and only allow at most one instance to be created.
- */
-
-static struct ps3_lpm_priv *lpm_priv;
-
-static struct device *sbd_core(void)
-{
-	BUG_ON(!lpm_priv || !lpm_priv->sbd);
-	return &lpm_priv->sbd->core;
-}
-
-/**
- * use_start_stop_bookmark - Enable the PPU bookmark trace.
- *
- * And it enables PPU bookmark triggers ONLY if the other triggers are not set.
- * The start/stop bookmarks are inserted at ps3_enable_pm() and ps3_disable_pm()
- * to start/stop LPM.
- *
- * Used to get good quality of the performance counter.
- */
-
-enum {use_start_stop_bookmark = 1,};
 
 /* BOOKMARK tag macros */
 #define PS3_PM_BOOKMARK_START                    0x8000000000000000ULL
@@ -140,22 +71,115 @@ enum {use_start_stop_bookmark = 1,};
 #define PM_SIG_GROUP_SPU_EVENT               43
 #define PM_SIG_GROUP_MFC_MAX                 60
 
-/* shadow register macros */
-#define PS3_SHADOW_REG_INIT_VALUE          0xFFFFFFFF00000000ULL
+/**
+ * struct ps3_lpm_shadow_regs - Performance monitor shadow registers.
+ *
+ * @pm_control: Shadow of the processor's pm_control register.
+ * @pm_start_stop: Shadow of the processor's pm_start_stop register.
+ * @pm_interval: Shadow of the processor's pm_interval register.
+ * @group_control: Shadow of the processor's group_control register.
+ * @debug_bus_control: Shadow of the processor's debug_bus_control register.
+ *
+ * The logical performance monitor provides a write-only interface to
+ * these processor registers.  These shadow variables cache the processor
+ * register values for reading.
+ *
+ * The initial value of the shadow registers at lpm creation is
+ * PS3_LPM_SHADOW_REG_INIT.
+ */
 
-/* bookmark spr address */
-#define BOOKMARK_SPR_ADDR 1020
+struct ps3_lpm_shadow_regs {
+	u64 pm_control;
+	u64 pm_start_stop;
+	u64 pm_interval;
+	u64 group_control;
+	u64 debug_bus_control;
+};
+
+#define PS3_LPM_SHADOW_REG_INIT 0xFFFFFFFF00000000ULL
+
+/**
+ * struct ps3_lpm_priv - Private lpm device data.
+ *
+ * @open: An atomic variable indicating the lpm driver has been opened.
+ * @rights: The lpm rigths granted by the system policy module.  A logical
+ *  OR of enum ps3_lpm_rights.
+ * @pu_id: The lv1 id of the BE prosessor for this lpm instance.
+ * @lpm_id: The lv1 id of this lpm instance.
+ * @outlet_id: The outlet created by lv1 for this lpm instance.
+ * @tb_count: The number of bytes of data held in the lv1 trace buffer.
+ * @tb_cache: Kernel buffer to receive the data from the lv1 trace buffer.
+ *  Must be 128 byte aligned.
+ * @tb_cache_size: Size of the kernel @tb_cache buffer.  Must be 128 byte
+ *  aligned.
+ * @tb_cache_internal: An unaligned buffer allocated by this driver to be
+ *  used for the trace buffer cache when ps3_lpm_open() is called with a
+ *  NULL tb_cache argument.  Otherwise unused.
+ * @shadow: Processor register shadow of type struct ps3_lpm_shadow_regs.
+ * @sbd: The struct ps3_system_bus_device attached to this driver.
+ *
+ * The trace buffer is a buffer allocated and used internally to the lv1
+ * hypervisor to collect trace data.  The trace buffer cache is a guest
+ * buffer that accepts the trace data from the trace buffer.
+ */
+
+struct ps3_lpm_priv {
+	atomic_t open;
+	u64 rights;
+	u64 pu_id;
+	u64 lpm_id;
+	u64 outlet_id;
+	u64 tb_count;
+	void *tb_cache;
+	u64 tb_cache_size;
+	void *tb_cache_internal;
+	struct ps3_lpm_shadow_regs shadow;
+	struct ps3_system_bus_device *sbd;
+};
+
+enum {
+	PS3_LPM_DEFAULT_TB_CACHE_SIZE = 0x4000,
+};
+
+/**
+ * lpm_priv - Static instance of the lpm data.
+ *
+ * Since the exported routines don't support the notion of a device
+ * instance we need to hold the instance in this static variable
+ * and then only allow at most one instance at a time to be created.
+ */
+
+static struct ps3_lpm_priv *lpm_priv;
+
+static struct device *sbd_core(void)
+{
+	BUG_ON(!lpm_priv || !lpm_priv->sbd);
+	return &lpm_priv->sbd->core;
+}
+
+/**
+ * use_start_stop_bookmark - Enable the PPU bookmark trace.
+ *
+ * And it enables PPU bookmark triggers ONLY if the other triggers are not set.
+ * The start/stop bookmarks are inserted at ps3_enable_pm() and ps3_disable_pm()
+ * to start/stop LPM.
+ *
+ * Used to get good quality of the performance counter.
+ */
+
+enum {use_start_stop_bookmark = 1,};
 
 void ps3_set_bookmark(u64 bookmark)
 {
 	/*
-	 * As per PPE book IV, to avoid bookmark lost there
-	 * must not be a traced branch within 10 cycles of
-	 * setting the bookmark spr.
+	 * As per the PPE book IV, to avoid bookmark lost there must
+	 * not be a traced branch within 10 cycles of setting the
+	 * SPRN_BKMK register.  The actual text is unclear if 'within'
+	 * includes cycles before the call.
 	 */
 
 	asm volatile("or 29, 29, 29;"); /* db10cyc */
-	mtspr(BOOKMARK_SPR_ADDR, bookmark);
+	mtspr(SPRN_BKMK, bookmark);
 	asm volatile("or 29, 29, 29;"); /* db10cyc */
 }
 EXPORT_SYMBOL_GPL(ps3_set_bookmark);
@@ -375,17 +399,17 @@ u32 ps3_read_pm(u32 cpu, enum pm_reg_name reg)
 
 	switch (reg) {
 	case pm_control:
-		return lpm_priv->shadow_pm_control;
+		return lpm_priv->shadow.pm_control;
 	case trace_address:
 		return CBE_PM_TRACE_BUF_EMPTY;
 	case pm_start_stop:
-		return lpm_priv->shadow_pm_start_stop;
+		return lpm_priv->shadow.pm_start_stop;
 	case pm_interval:
-		return lpm_priv->shadow_pm_interval;
+		return lpm_priv->shadow.pm_interval;
 	case group_control:
-		return lpm_priv->shadow_group_control;
+		return lpm_priv->shadow.group_control;
 	case debug_bus_control:
-		return lpm_priv->shadow_debug_bus_control;
+		return lpm_priv->shadow.debug_bus_control;
 	case pm_status:
 		result = lv1_get_lpm_interrupt_status(lpm_priv->lpm_id,
 						      &val);
@@ -420,46 +444,46 @@ void ps3_write_pm(u32 cpu, enum pm_reg_name reg, u32 val)
 
 	switch (reg) {
 	case group_control:
-		if (val != lpm_priv->shadow_group_control)
+		if (val != lpm_priv->shadow.group_control)
 			result = lv1_set_lpm_group_control(lpm_priv->lpm_id,
 							   val,
 							   PS3_WRITE_PM_MASK,
 							   &dummy);
-		lpm_priv->shadow_group_control = val;
+		lpm_priv->shadow.group_control = val;
 		break;
 	case debug_bus_control:
-		if (val != lpm_priv->shadow_debug_bus_control)
+		if (val != lpm_priv->shadow.debug_bus_control)
 			result = lv1_set_lpm_debug_bus_control(lpm_priv->lpm_id,
 							      val,
 							      PS3_WRITE_PM_MASK,
 							      &dummy);
-		lpm_priv->shadow_debug_bus_control = val;
+		lpm_priv->shadow.debug_bus_control = val;
 		break;
 	case pm_control:
 		if (use_start_stop_bookmark)
 			val |= (PS3_PM_CONTROL_PPU_TH0_BOOKMARK |
 				PS3_PM_CONTROL_PPU_TH1_BOOKMARK);
-		if (val != lpm_priv->shadow_pm_control)
+		if (val != lpm_priv->shadow.pm_control)
 			result = lv1_set_lpm_general_control(lpm_priv->lpm_id,
 							     val,
 							     PS3_WRITE_PM_MASK,
 							     0, 0, &dummy,
 							     &dummy);
-		lpm_priv->shadow_pm_control = val;
+		lpm_priv->shadow.pm_control = val;
 		break;
 	case pm_interval:
-		if (val != lpm_priv->shadow_pm_interval)
+		if (val != lpm_priv->shadow.pm_interval)
 			result = lv1_set_lpm_interval(lpm_priv->lpm_id, val,
 						   PS3_WRITE_PM_MASK, &dummy);
-		lpm_priv->shadow_pm_interval = val;
+		lpm_priv->shadow.pm_interval = val;
 		break;
 	case pm_start_stop:
-		if (val != lpm_priv->shadow_pm_start_stop)
+		if (val != lpm_priv->shadow.pm_start_stop)
 			result = lv1_set_lpm_trigger_control(lpm_priv->lpm_id,
 							     val,
 							     PS3_WRITE_PM_MASK,
 							     &dummy);
-		lpm_priv->shadow_pm_start_stop = val;
+		lpm_priv->shadow.pm_start_stop = val;
 		break;
 	case trace_address:
 	case ext_tr_timer:
@@ -586,7 +610,7 @@ static u64 pm_translate_signal_group_number_on_island5(u64 subgroup)
 }
 
 static u64 pm_translate_signal_group_number_on_island6(u64 subgroup,
-							      u64 subsubgroup)
+						       u64 subsubgroup)
 {
 	switch (subgroup) {
 	case 3:
@@ -785,7 +809,7 @@ int ps3_set_signal(u64 signal_group, u8 signal_bit, u16 sub_unit,
 		signal_group < PM_SIG_GROUP_MFC_MAX)
 		attr2 = sub_unit;
 	else
-		attr2 = lpm_priv->pu_id;;
+		attr2 = lpm_priv->pu_id;
 
 	/*
 	 * This parameter is only used for setting the SPE signal.
@@ -802,9 +826,9 @@ int ps3_set_signal(u64 signal_group, u8 signal_bit, u16 sub_unit,
 }
 EXPORT_SYMBOL_GPL(ps3_set_signal);
 
-inline u32 ps3_get_hw_thread_id(int cpu)
+u32 ps3_get_hw_thread_id(int cpu)
 {
-	return cpu;
+	return get_hard_smp_processor_id(cpu);
 }
 EXPORT_SYMBOL_GPL(ps3_get_hw_thread_id);
 
@@ -820,8 +844,10 @@ void ps3_enable_pm(u32 cpu)
 	u64 tmp;
 	int insert_bookmark = 0;
 
+	lpm_priv->tb_count = 0;
+
 	if (use_start_stop_bookmark) {
-		if (!(lpm_priv->shadow_pm_start_stop &
+		if (!(lpm_priv->shadow.pm_start_stop &
 			(PS3_PM_START_STOP_START_MASK
 			| PS3_PM_START_STOP_STOP_MASK))) {
 			result = lv1_set_lpm_trigger_control(lpm_priv->lpm_id,
@@ -859,11 +885,11 @@ EXPORT_SYMBOL_GPL(ps3_enable_pm);
 void ps3_disable_pm(u32 cpu)
 {
 	int result;
-	u64 param = 0;
+	u64 tmp;
 
 	ps3_set_bookmark(get_tb() | PS3_PM_BOOKMARK_STOP);
 
-	result = lv1_stop_lpm(lpm_priv->lpm_id, &param);
+	result = lv1_stop_lpm(lpm_priv->lpm_id, &tmp);
 
 	if (result) {
 		dev_err(sbd_core(), "%s:%u: lv1_stop_lpm failed: %s\n",
@@ -871,73 +897,130 @@ void ps3_disable_pm(u32 cpu)
 		return;
 	}
 
-	lpm_priv->sizeof_traced_data = param;
-	lpm_priv->sizeof_total_copied_data = 0;
+	lpm_priv->tb_count = tmp;
+
+	dev_err(sbd_core(), "%s:%u: tb_count %lu (%lxh)\n", __func__, __LINE__,
+		lpm_priv->tb_count, lpm_priv->tb_count);
 }
 EXPORT_SYMBOL_GPL(ps3_disable_pm);
 
 /**
- * _ps3_copy_trace_buffer - Copy the trace buffer.
+ * ps3_lpm_copy_tb - Copy data from the trace buffer to a kernel buffer.
+ * @offset: Offset in bytes from the start of the trace buffer.
+ * @buf: Copy destination.
+ * @count: Maximum count of bytes to copy.
+ * @bytes_copied: Pointer to a variable that will recieve the number of
+ *  bytes copied to @buf.
+ *
+ * On error @buf will contain any successfully copied trace buffer data
+ * and bytes_copied will be set to the number of bytes successfully copied.
  */
 
-static u64 _ps3_copy_trace_buffer(u64 offset, u64 size, u64 *to, int to_user)
+int ps3_lpm_copy_tb(unsigned long offset, void *buf, unsigned long count,
+		    unsigned long *bytes_copied)
 {
 	int result;
-	u64 sizeof_copied_data;
 
-	if (offset >= lpm_priv->sizeof_traced_data)
-		return 0;
-
-	result = lv1_copy_lpm_trace_buffer(lpm_priv->lpm_id, offset, size,
-					&sizeof_copied_data);
-	if (result) {
-		dev_err(sbd_core(), "%s:%u: lv1_copy_lpm_trace_buffer failed: "
-			"offset 0x%lx, size 0x%lx: %s\n", __func__, __LINE__,
-			offset, size, ps3_result(result));
-		return 0;
-	}
-
-	if (to_user) {
-		result = copy_to_user((void __user *)to, lpm_priv->tb_cache,
-				      sizeof_copied_data);
-		if (result) {
-			dev_err(sbd_core(), "%s:%u: copy_to_user() error. "
-				"offset:0x%lx size:0x%lx dest:0x%p src:0x%p\n",
-				__func__, __LINE__, offset, sizeof_copied_data,
-				to, lpm_priv->tb_cache);
-			return 0;
-		}
-	} else
-		memcpy(to, lpm_priv->tb_cache, sizeof_copied_data);
-
-	return sizeof_copied_data;
-}
-
-u64 ps3_copy_trace_buffer(u64 offset, u64 size, void *to, int to_user)
-{
-	u64 sz;
-	u64 cp_size;
-	u64 total_cp_size;
+	*bytes_copied = 0;
 
 	if (!lpm_priv->tb_cache)
+		return -EPERM;
+
+	if (offset >= lpm_priv->tb_count)
 		return 0;
 
-	cp_size = size;
-	if (cp_size > lpm_priv->tb_cache_size)
-		cp_size = lpm_priv->tb_cache_size;
+	count = min(count, lpm_priv->tb_count - offset);
 
-	total_cp_size = 0;
-	while (total_cp_size < size) {
-		sz = _ps3_copy_trace_buffer(offset, cp_size, to, to_user);
-		if (!sz)
-			break;
+	while (*bytes_copied < count) {
+		const unsigned long request = count - *bytes_copied;
+		u64 tmp;
 
-		total_cp_size += sz;
-		offset += sz;
-		to = ((u8 *)to + sz);
+		result = lv1_copy_lpm_trace_buffer(lpm_priv->lpm_id, offset,
+						   request, &tmp);
+		if (result) {
+			dev_dbg(sbd_core(), "%s:%u: 0x%lx bytes at 0x%lx\n",
+				__func__, __LINE__, request, offset);
+
+			dev_err(sbd_core(), "%s:%u: lv1_copy_lpm_trace_buffer "
+				"failed: %s\n", __func__, __LINE__,
+				ps3_result(result));
+			return result == LV1_WRONG_STATE ? -EBUSY : -EINVAL;
+		}
+
+		memcpy(buf, lpm_priv->tb_cache, tmp);
+		buf += tmp;
+		*bytes_copied += tmp;
+		offset += tmp;
 	}
-	return total_cp_size;
+	dev_dbg(sbd_core(), "%s:%u: copied %lxh bytes\n", __func__, __LINE__,
+		*bytes_copied);
+
+	return 0;
 }
+EXPORT_SYMBOL_GPL(ps3_lpm_copy_tb);
+
+/**
+ * ps3_lpm_copy_tb_to_user - Copy data from the trace buffer to a user buffer.
+ * @offset: Offset in bytes from the start of the trace buffer.
+ * @buf: A __user copy destination.
+ * @count: Maximum count of bytes to copy.
+ * @bytes_copied: Pointer to a variable that will recieve the number of
+ *  bytes copied to @buf.
+ *
+ * On error @buf will contain any successfully copied trace buffer data
+ * and bytes_copied will be set to the number of bytes successfully copied.
+ */
+
+int ps3_lpm_copy_tb_to_user(unsigned long offset, void __user *buf,
+			    unsigned long count, unsigned long *bytes_copied)
+{
+	int result;
+
+	*bytes_copied = 0;
+
+	if (!lpm_priv->tb_cache)
+		return -EPERM;
+
+	if (offset >= lpm_priv->tb_count)
+		return 0;
+
+	count = min(count, lpm_priv->tb_count - offset);
+
+	while (*bytes_copied < count) {
+		const unsigned long request = count - *bytes_copied;
+		u64 tmp;
+
+		result = lv1_copy_lpm_trace_buffer(lpm_priv->lpm_id, offset,
+						   request, &tmp);
+		if (result) {
+			dev_dbg(sbd_core(), "%s:%u: 0x%lx bytes at 0x%lx\n",
+				__func__, __LINE__, request, offset);
+			dev_err(sbd_core(), "%s:%u: lv1_copy_lpm_trace_buffer "
+				"failed: %s\n", __func__, __LINE__,
+				ps3_result(result));
+			return result == LV1_WRONG_STATE ? -EBUSY : -EINVAL;
+		}
+
+		result = copy_to_user(buf, lpm_priv->tb_cache, tmp);
+
+		if (result) {
+			dev_dbg(sbd_core(), "%s:%u: 0x%lx bytes at 0x%p\n",
+				__func__, __LINE__, tmp, buf);
+			dev_err(sbd_core(), "%s:%u: copy_to_user failed: %d\n",
+				__func__, __LINE__, result);
+			return -EFAULT;
+		}
+
+		buf += tmp;
+		*bytes_copied += tmp;
+		offset += tmp;
+	}
+	dev_dbg(sbd_core(), "%s:%u: copied %lxh bytes\n", __func__, __LINE__,
+		*bytes_copied);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(ps3_lpm_copy_tb_to_user);
 
 /**
  * ps3_get_and_clear_pm_interrupts -
@@ -980,88 +1063,68 @@ void ps3_disable_pm_interrupts(u32 cpu)
 EXPORT_SYMBOL_GPL(ps3_disable_pm_interrupts);
 
 /**
- * ps3_lpm_open - Open the lpm device.
- * @tb_cache: Optional user supplied buffer for the tb cache.  If NULL,
- *  the driver will use an internally managed tb cache buffer.
- * @tb_cache_size: The size in bytes of the user supplied tb cache buffer.
- *  Unused if @tb_cache is NULL.
- * @tb_type:
- *
+ * ps3_lpm_open - Open the logical performance monitor device.
+ * @tb_type: Specifies the type of trace buffer lv1 sould use for this lpm
+ *  instance, specified by one of enum ps3_lpm_tb_type.
+ * @tb_cache: Optional user supplied buffer to use as the trace buffer cache.
+ *  If NULL, the driver will allocate and manage an internal buffer.
+ *  Unused when when @tb_type is PS3_LPM_TB_TYPE_NONE.
+ * @tb_cache_size: The size in bytes of the user supplied @tb_cache buffer.
+ *  Unused when @tb_cache is NULL or @tb_type is PS3_LPM_TB_TYPE_NONE.
  */
 
-int ps3_lpm_open(void *tb_cache, u64 tb_cache_size, u64 tb_type)
+int ps3_lpm_open(enum ps3_lpm_tb_type tb_type, void *tb_cache,
+	u64 tb_cache_size)
 {
 	int result;
-	u64 cbe_node_id;
 	u64 tb_size;
-	u64 ctrl_opt;
-	u64 tb_cache_lpar_addr;
-	u64 lpm_id;
-	u64 outlet_id;
-	u64 used_tb_size;
 
-	if (!lpm_priv) {
-		BUG();
-		return -ENODEV;
+	BUG_ON(!lpm_priv);
+	BUG_ON(tb_type != PS3_LPM_TB_TYPE_NONE
+		&& tb_type != PS3_LPM_TB_TYPE_INTERNAL);
+
+	if (tb_type == PS3_LPM_TB_TYPE_NONE && tb_cache)
+		dev_dbg(sbd_core(), "%s:%u: bad in vals\n", __func__, __LINE__);
+
+	if (!atomic_add_unless(&lpm_priv->open, 1, 1)) {
+		dev_dbg(sbd_core(), "%s:%u: busy\n", __func__, __LINE__);
+		return -EBUSY;
 	}
 
-	mutex_lock(&lpm_priv->mutex);
-
-	if (lpm_priv->constructed) {
-		dev_err(sbd_core(), "%s:%u: called twice.\n", __func__,
-			__LINE__);
-		result = -EBUSY;
-		goto unlock;
-	}
-
-	if (tb_cache)
-		lpm_priv->tb_cache_internal = 0;
-	else {
-		dev_dbg(sbd_core(), "%s:%u: Using internal TB cache\n",
-			__func__, __LINE__);
-
-		lpm_priv->tb_cache_internal = 1;
-		tb_cache_size = PS3_SIZE_OF_PM_DEFAULT_TRACE_BUFFER_CACHE;
-		tb_cache = kzalloc(tb_cache_size, GFP_KERNEL);
-
-		if (!tb_cache) {
+	if (tb_type == PS3_LPM_TB_TYPE_NONE) {
+		lpm_priv->tb_cache_internal = NULL;
+		lpm_priv->tb_cache_size = 0;
+		lpm_priv->tb_cache = NULL;
+	} else if (tb_cache) {
+		if (tb_cache != (void *)_ALIGN_UP((unsigned long)tb_cache, 128)
+			|| tb_cache_size != _ALIGN_UP(tb_cache_size, 128)) {
+			dev_err(sbd_core(), "%s:%u: unaligned tb_cache\n",
+				__func__, __LINE__);
+			result = -EINVAL;
+			goto fail_align;
+		}
+		lpm_priv->tb_cache_internal = NULL;
+		lpm_priv->tb_cache_size = tb_cache_size;
+		lpm_priv->tb_cache = tb_cache;
+	} else {
+		/* tb_cache needs 128 byte alignment. */
+		lpm_priv->tb_cache_size = PS3_LPM_DEFAULT_TB_CACHE_SIZE;
+		lpm_priv->tb_cache_internal = kzalloc(tb_cache_size + 127,
+			GFP_KERNEL);
+		if (!lpm_priv->tb_cache_internal) {
 			dev_err(sbd_core(), "%s:%u: alloc internal tb_cache "
 				"failed\n", __func__, __LINE__);
 			result = -ENOMEM;
 			goto fail_malloc;
 		}
+		lpm_priv->tb_cache = (void *)_ALIGN_UP(
+			(unsigned long)lpm_priv->tb_cache_internal, 128);
 	}
 
-	cbe_node_id = 0;
-	if (tb_cache) {
-		if (tb_type == 0) {
-			/* no trace buffer */
-			tb_type = 0;
-			tb_size = 0;
-			ctrl_opt = 0;
-			tb_cache_lpar_addr = 0;
-		} else if (tb_type == 1) {
-			/* internal trace buffer */
-			tb_size = PS3_SIZE_OF_PM_INTERNAL_TRACE_BUFFER;
-			ctrl_opt = 0;
-		} else {
-			dev_err(sbd_core(), "%s:%u: Unkown TB type: 0x%lx\n",
-				__func__, __LINE__, tb_type);
-			result = -EINVAL;
-			goto fail_type;
-		}
-		tb_cache_lpar_addr = (u64)ps3_mm_phys_to_lpar(__pa(tb_cache));
-	} else {
-		/* no trace buffer */
-		tb_type = 0;
-		tb_size = 0;
-		ctrl_opt = 0;
-		tb_cache_lpar_addr = 0;
-	}
-
-	result = lv1_construct_lpm(cbe_node_id, tb_type, tb_size, ctrl_opt,
-				tb_cache_lpar_addr, tb_cache_size,
-				&lpm_id, &outlet_id, &used_tb_size);
+	result = lv1_construct_lpm(0, tb_type, 0, 0,
+				ps3_mm_phys_to_lpar(__pa(lpm_priv->tb_cache)),
+				lpm_priv->tb_cache_size, &lpm_priv->lpm_id,
+				&lpm_priv->outlet_id, &tb_size);
 
 	if (result) {
 		dev_err(sbd_core(), "%s:%u: lv1_construct_lpm failed: %s\n",
@@ -1070,34 +1133,24 @@ int ps3_lpm_open(void *tb_cache, u64 tb_cache_size, u64 tb_type)
 		goto fail_construct;
 	}
 
-	lpm_priv->constructed = 1;
-	lpm_priv->tb_cache = tb_cache;
-	lpm_priv->tb_cache_size = tb_cache_size;
-	lpm_priv->lpm_id = lpm_id;
-	lpm_priv->outlet_id = outlet_id;
-	lpm_priv->tb_size = used_tb_size;
-	lpm_priv->shadow_pm_control = PS3_SHADOW_REG_INIT_VALUE;
-	lpm_priv->shadow_pm_start_stop = PS3_SHADOW_REG_INIT_VALUE;
-	lpm_priv->shadow_pm_interval = PS3_SHADOW_REG_INIT_VALUE;
-	lpm_priv->shadow_group_control = PS3_SHADOW_REG_INIT_VALUE;
-	lpm_priv->shadow_debug_bus_control = PS3_SHADOW_REG_INIT_VALUE;
+	lpm_priv->shadow.pm_control = PS3_LPM_SHADOW_REG_INIT;
+	lpm_priv->shadow.pm_start_stop = PS3_LPM_SHADOW_REG_INIT;
+	lpm_priv->shadow.pm_interval = PS3_LPM_SHADOW_REG_INIT;
+	lpm_priv->shadow.group_control = PS3_LPM_SHADOW_REG_INIT;
+	lpm_priv->shadow.debug_bus_control = PS3_LPM_SHADOW_REG_INIT;
 
-	dev_dbg(sbd_core(), "%s:%u: lpm id 0x%lx, outlet 0x%lx, "
+	dev_dbg(sbd_core(), "%s:%u: lpm_id 0x%lx, outlet_id 0x%lx, "
 		"tb_size 0x%lx\n", __func__, __LINE__, lpm_priv->lpm_id,
-		lpm_priv->outlet_id, lpm_priv->tb_size);
+		lpm_priv->outlet_id, tb_size);
 
-	mutex_unlock(&lpm_priv->mutex);
 	return 0;
 
 fail_construct:
-fail_type:
-	if (lpm_priv->tb_cache_internal) {
-		kfree(lpm_priv->tb_cache);
-		lpm_priv->tb_cache = NULL;
-	}
+	kfree(lpm_priv->tb_cache_internal);
+	lpm_priv->tb_cache_internal = NULL;
 fail_malloc:
-unlock:
-	mutex_unlock(&lpm_priv->mutex);
+fail_align:
+	atomic_dec(&lpm_priv->open);
 	return result;
 }
 EXPORT_SYMBOL_GPL(ps3_lpm_open);
@@ -1111,20 +1164,13 @@ int ps3_lpm_close(void)
 {
 	dev_dbg(sbd_core(), "%s:%u\n", __func__, __LINE__);
 
-	mutex_lock(&lpm_priv->mutex);
-
-	if (lpm_priv->constructed)
-		lv1_destruct_lpm(lpm_priv->lpm_id);
-
-	lpm_priv->constructed = 0;
+	lv1_destruct_lpm(lpm_priv->lpm_id);
 	lpm_priv->lpm_id = 0;
 
-	if (lpm_priv->tb_cache_internal) {
-		kfree(lpm_priv->tb_cache);
-		lpm_priv->tb_cache = NULL;
-	}
+	kfree(lpm_priv->tb_cache_internal);
+	lpm_priv->tb_cache_internal = NULL;
 
-	mutex_unlock(&lpm_priv->mutex);
+	atomic_dec(&lpm_priv->open);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(ps3_lpm_close);
@@ -1147,7 +1193,6 @@ static int __devinit ps3_lpm_probe(struct ps3_system_bus_device *dev)
 	lpm_priv->sbd = dev;
 	lpm_priv->pu_id = dev->lpm.pu_id;
 	lpm_priv->rights = dev->lpm.rights;
-	mutex_init(&lpm_priv->mutex);
 
 	dev_info(&dev->core, " <- %s:%u:\n", __func__, __LINE__);
 

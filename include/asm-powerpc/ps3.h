@@ -449,15 +449,40 @@ extern struct ps3_prealloc ps3flash_bounce_buffer;
 
 /* logical performance monitor */
 
+/**
+ * enum ps3_lpm_rights - Rigths granted by the system policy module.
+ *
+ * @PS3_LPM_RIGHTS_USE_LPM: The right to use the lpm.
+ * @PS3_LPM_RIGHTS_USE_TB: The right to use the internal trace buffer.
+ */
+
 enum ps3_lpm_rights {
-	PS3_LPM_RIGHTS_USE_LPM = 1,
+	PS3_LPM_RIGHTS_USE_LPM = 0x001,
+	PS3_LPM_RIGHTS_USE_TB = 0x100,
 };
 
-int ps3_lpm_open(void *tb_cache, u64 tb_cache_size, u64 tb_type);
+/**
+ * enum ps3_lpm_tb_type - Type of trace buffer lv1 should use.
+ *
+ * @PS3_LPM_TB_TYPE_NONE: Do not use a trace buffer.
+ * @PS3_LPM_RIGHTS_USE_TB: Use the lv1 internal trace buffer.  Must have
+ *  rights @PS3_LPM_RIGHTS_USE_TB.
+ */
+
+enum ps3_lpm_tb_type {
+	PS3_LPM_TB_TYPE_NONE = 0,
+	PS3_LPM_TB_TYPE_INTERNAL = 1,
+};
+
+int ps3_lpm_open(enum ps3_lpm_tb_type tb_type, void *tb_cache,
+	u64 tb_cache_size);
 int ps3_lpm_close(void);
+int ps3_lpm_copy_tb(unsigned long offset, void *buf, unsigned long count,
+	unsigned long *bytes_copied);
+int ps3_lpm_copy_tb_to_user(unsigned long offset, void __user *buf,
+	unsigned long count, unsigned long *bytes_copied);
 void ps3_set_bookmark(u64 bookmark);
 void ps3_set_pm_bookmark(u64 tag, u64 incident, u64 th_id);
-u64 ps3_copy_trace_buffer(u64 offset, u64 size, void *to, int to_user);
 int ps3_set_signal(u64 rtas_signal_group, u8 signal_bit, u16 sub_unit,
 	u8 bus_word);
 

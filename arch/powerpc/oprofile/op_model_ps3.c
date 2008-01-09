@@ -509,7 +509,7 @@ static int cell_reg_setup(struct op_counter_config *ctr,
 
 	spu_cycle_reset = 0;
 
-	ret = ps3_lpm_open(NULL, 0, 0);
+	ret = ps3_lpm_open(PS3_LPM_TB_TYPE_NONE, NULL, 0);
 	if (ret) {
 		OP_ERR("lpm_open error. %d", ret);
 		return -EFAULT;

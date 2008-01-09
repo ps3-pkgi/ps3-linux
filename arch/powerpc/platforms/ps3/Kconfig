@@ -135,7 +135,6 @@ config OPROFILE_PS3
 config PS3_LPM
 	tristate "PS3 Logical Performance Monitor support"
 	depends on PPC_PS3
-	default n
 	help
 	  Include support for the PS3 Logical Performance Monitor.
 
@@ -144,6 +143,6 @@ config PS3_LPM
 
 	  If you intend to use the advanced performance monitoring and
 	  profiling support of the Cell processor with programs like
-	  oprofile and perfmon, then say Y or M, otherwise say N.
+	  oprofile and perfmon2, then say Y or M, otherwise say N.
 
 endmenu
