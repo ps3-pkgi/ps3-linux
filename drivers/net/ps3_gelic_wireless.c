@@ -250,7 +250,7 @@ static u32 gelic_wl_get_link(struct net_device *netdev)
 	return ret;
 }
 
-void gelic_wl_send_iwap_event(struct gelic_wl_info *wl, u8 *bssid)
+static void gelic_wl_send_iwap_event(struct gelic_wl_info *wl, u8 *bssid)
 {
 	union iwreq_data data;
 
@@ -1417,7 +1417,7 @@ static int hex2bin(u8 *str, u8 *bin, unsigned int len)
 	return 0;
 };
 
-int gelic_wl_priv_set_psk(struct net_device *net_dev,
+static int gelic_wl_priv_set_psk(struct net_device *net_dev,
 				 struct iw_request_info *info,
 				 union iwreq_data *data, char *extra)
 {
@@ -2195,7 +2195,7 @@ static const char *eventstr(enum gelic_lv1_wl_event event)
 #else
 static const char *eventstr(enum gelic_lv1_wl_event event)
 {
-	return 0;
+	return NULL;
 }
 #endif
 static void gelic_wl_event_worker(struct work_struct *work)
@@ -2457,7 +2457,7 @@ fail_bss:
 
 }
 
-void gelic_wl_free(struct gelic_wl_info *wl)
+static void gelic_wl_free(struct gelic_wl_info *wl)
 {
 	struct gelic_wl_scan_info *scan_info;
 	unsigned int i;
@@ -2478,7 +2478,7 @@ void gelic_wl_free(struct gelic_wl_info *wl)
 	pr_debug("%s: ->\n", __func__);
 }
 
-int  gelic_wl_try_associate(struct net_device *netdev)
+static int gelic_wl_try_associate(struct net_device *netdev)
 {
 	struct gelic_wl_info *wl = port_wl(netdev_priv(netdev));
 	int ret = -1;
