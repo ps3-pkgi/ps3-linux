@@ -578,6 +578,39 @@ static int ps3_register_repository_device(
 	return result;
 }
 
+static void ps3_find_and_add_device(u64 bus_id, u64 dev_id)
+{
+	struct ps3_repository_device repo;
+	int res;
+	unsigned int retries;
+	unsigned long rem;
+
+	/*
+	 * On some firmware versions (e.g. 1.90), the device may not show up
+	 * in the repository immediately
+	 */
+	for (retries = 0; retries < 10; retries++) {
+		res = ps3_repository_find_device_by_id(&repo, bus_id, dev_id);
+		if (!res)
+			goto found;
+
+		rem = msleep_interruptible(100);
+		if (rem)
+			break;
+	}
+	pr_warning("%s:%u: device %lu:%lu not found\n", __func__, __LINE__,
+		   bus_id, dev_id);
+	return;
+
+found:
+	if (retries)
+		pr_debug("%s:%u: device %lu:%lu found after %u retries\n",
+			 __func__, __LINE__, bus_id, dev_id, retries);
+
+	ps3_register_repository_device(&repo);
+	return;
+}
+
 
 #define PS3_NOTIFICATION_DEV_ID		ULONG_MAX
 #define PS3_NOTIFICATION_INTERRUPT_ID	0
@@ -657,7 +690,9 @@ static int ps3_notification_read_write(struct ps3_notification_device *dev,
 
 	res = wait_event_interruptible(dev->done.wait,
 				       dev->done.done || kthread_should_stop());
-	if (res || kthread_should_stop()) {
+	if (kthread_should_stop())
+		res = -EINTR;
+	if (res) {
 		pr_debug("%s:%u: interrupted %s\n", __func__, __LINE__, op);
 		return res;
 	}
@@ -672,39 +707,8 @@ static int ps3_notification_read_write(struct ps3_notification_device *dev,
 	return 0;
 }
 
-static void ps3_find_and_add_device(u64 bus_id, u64 dev_id)
-{
-	struct ps3_repository_device repo;
-	int res;
-	unsigned int retries;
-	unsigned long rem;
 
-	/*
-	 * On some firmware versions (e.g. 1.90), the device may not show up
-	 * in the repository immediately
-	 */
-	for (retries = 0; retries < 10; retries++) {
-		res = ps3_repository_find_device_by_id(&repo, bus_id, dev_id);
-		if (!res)
-			goto found;
-
-		rem = msleep_interruptible(100);
-		if (rem)
-			break;
-	}
-	pr_warning("%s:%u: device %lu:%lu not found\n", __func__, __LINE__,
-		   bus_id, dev_id);
-	return;
-
-found:
-	if (retries)
-		pr_debug("%s:%u: device %lu:%lu found after %u retries\n",
-			 __func__, __LINE__, bus_id, dev_id, retries);
-
-	ps3_register_repository_device(&repo);
-	return;
-}
-
+static struct task_struct *probe_task;
 
 /**
  * ps3_probe_thread - Background repository probing at system startup.
@@ -813,6 +817,8 @@ fail_close_device:
 fail_free:
 	kfree(buf);
 
+	probe_task = NULL;
+
 	pr_debug(" <- %s:%u: kthread finished\n", __func__, __LINE__);
 
 	return 0;
@@ -822,8 +828,6 @@ fail_free:
  * ps3_stop_probe_thread - Stops the background probe thread.
  *
  */
-
-static struct task_struct *probe_task;
 
 static int ps3_stop_probe_thread(struct notifier_block *nb, unsigned long code,
 				 void *data)
