@@ -60,6 +60,12 @@ for prefix in ${prefixes}; do
 		exit -1
 	fi
 
+	${dir}/opcontrol --event=cache_hit:10000 --event=cache_miss:10000
+
+	if [ $? -ne 0 ]; then
+		echo "$0: opcontrol --event=cache_hit:10000 --event=cache_miss:10000 failed."
+	fi
+
 	${dir}/opcontrol --verbose --start
 
 	if [ $? -ne 0 ]; then
