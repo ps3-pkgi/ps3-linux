@@ -104,7 +104,7 @@ struct ps3_lpm_shadow_regs {
  * @open: An atomic variable indicating the lpm driver has been opened.
  * @rights: The lpm rigths granted by the system policy module.  A logical
  *  OR of enum ps3_lpm_rights.
- * @node_id: The node id of a BE prosessor whos performance monitor this
+ * @node_id: The node id of a BE prosessor whose performance monitor this
  *  lpar has the right to use.
  * @pu_id: The lv1 id of the logical PU.
  * @lpm_id: The lv1 id of this lpm instance.
