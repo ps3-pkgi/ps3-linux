@@ -34,7 +34,6 @@
 static int __init ps3_register_lpm_devices(void)
 {
 	int result;
-	unsigned int pu_count;
 	u64 tmp1;
 	u64 tmp2;
 	struct ps3_system_bus_device *dev;
@@ -48,30 +47,17 @@ static int __init ps3_register_lpm_devices(void)
 	dev->match_id = PS3_MATCH_ID_LPM;
 	dev->dev_type = PS3_DEVICE_TYPE_LPM;
 
-	result = ps3_repository_read_num_pu(&pu_count);
-
-	if (result) {
-		pr_debug("%s:%d: ps3_repository_read_num_pu failed \n",
-			__func__, __LINE__);
-		goto fail_read_repo;
-	}
-
 	/* The current lpm driver only supports a single BE processor. */
 
-	if (pu_count > 1) {
-		pr_info("%s:%d: found %u BE processors, only one supported\n",
-			__func__, __LINE__, pu_count);
-	}
-
-	result = ps3_repository_read_pu_id(0, &dev->lpm.pu_id);
+	result = ps3_repository_read_be_node_id(0, &dev->lpm.node_id);
 
 	if (result) {
-		pr_debug("%s:%d: ps3_repository_read_pu_id failed \n",
+		pr_debug("%s:%d: ps3_repository_read_be_node_id failed \n",
 			__func__, __LINE__);
 		goto fail_read_repo;
 	}
 
-	result = ps3_repository_read_lpm_privileges(0, &tmp1,
+	result = ps3_repository_read_lpm_privileges(dev->lpm.node_id, &tmp1,
 		&dev->lpm.rights);
 
 	if (result) {
@@ -99,6 +85,14 @@ static int __init ps3_register_lpm_devices(void)
 	pr_debug("%s:%d: pu_id %lu, rights %lu(%lxh)\n",
 		__func__, __LINE__, dev->lpm.pu_id, dev->lpm.rights,
 		dev->lpm.rights);
+
+	result = ps3_repository_read_pu_id(0, &dev->lpm.pu_id);
+
+	if (result) {
+		pr_debug("%s:%d: ps3_repository_read_pu_id failed \n",
+			__func__, __LINE__);
+		goto fail_read_repo;
+	}
 
 	result = ps3_system_bus_device_register(dev);
 

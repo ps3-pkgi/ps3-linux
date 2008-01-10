@@ -355,6 +355,7 @@ struct ps3_system_bus_device {
 	struct ps3_mmio_region *m_region; /* SB, IOC0*/
 	unsigned int port_number;         /* VUART */
 	struct {                          /* LPM */
+		u64 node_id;
 		u64 pu_id;
 		u64 rights;
 	} lpm;

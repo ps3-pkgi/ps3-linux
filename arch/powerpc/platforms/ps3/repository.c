@@ -711,6 +711,35 @@ int ps3_repository_read_stor_dev_region(unsigned int bus_index,
 	return result;
 }
 
+/**
+ * ps3_repository_read_num_pu - Number of logical PU processors for this lpar.
+ */
+
+int ps3_repository_read_num_pu(u64 *num_pu)
+{
+	*num_pu = 0;
+	return read_node(PS3_LPAR_ID_CURRENT,
+			   make_first_field("bi", 0),
+			   make_field("pun", 0),
+			   0, 0,
+			   num_pu, NULL);
+}
+
+/**
+ * ps3_repository_read_pu_id - Read the logical PU id.
+ * @pu_index: Zero based index.
+ * @pu_id: The logical PU id.
+ */
+
+int ps3_repository_read_pu_id(unsigned int pu_index, u64 *pu_id)
+{
+	return read_node(PS3_LPAR_ID_CURRENT,
+		make_first_field("bi", 0),
+		make_field("pu", pu_index),
+		0, 0,
+		pu_id, NULL);
+}
+
 int ps3_repository_read_rm_size(unsigned int ppe_id, u64 *rm_size)
 {
 	return read_node(PS3_LPAR_ID_CURRENT,
@@ -883,6 +912,10 @@ int ps3_repository_read_boot_dat_info(u64 *lpar_addr, unsigned int *size)
 		: ps3_repository_read_boot_dat_size(size);
 }
 
+/**
+ * ps3_repository_read_num_be - Number of physical BE processors in the system.
+ */
+
 int ps3_repository_read_num_be(unsigned int *num_be)
 {
 	int result;
@@ -898,6 +931,12 @@ int ps3_repository_read_num_be(unsigned int *num_be)
 	return result;
 }
 
+/**
+ * ps3_repository_read_be_node_id - Read the physical BE processor node id.
+ * @be_index: Zero based index.
+ * @node_id: The BE processor node id.
+ */
+
 int ps3_repository_read_be_node_id(unsigned int be_index, u64 *node_id)
 {
 	return read_node(PS3_LPAR_ID_PME,
@@ -906,6 +945,22 @@ int ps3_repository_read_be_node_id(unsigned int be_index, u64 *node_id)
 		0,
 		0,
 		node_id, NULL);
+}
+
+/**
+ * ps3_repository_read_be_id - Read the physical BE processor id.
+ * @node_id: The BE processor node id.
+ * @be_id: The BE processor id.
+ */
+
+int ps3_repository_read_be_id(u64 node_id, u64 *be_id)
+{
+	return read_node(PS3_LPAR_ID_PME,
+		make_first_field("be", 0),
+		node_id,
+		0,
+		0,
+		be_id, NULL);
 }
 
 int ps3_repository_read_tb_freq(u64 node_id, u64 *tb_freq)
@@ -924,7 +979,7 @@ int ps3_repository_read_be_tb_freq(unsigned int be_index, u64 *tb_freq)
 	u64 node_id;
 
 	*tb_freq = 0;
-	result = ps3_repository_read_be_node_id(0, &node_id);
+	result = ps3_repository_read_be_node_id(be_index, &node_id);
 	return result ? result
 		: ps3_repository_read_tb_freq(node_id, tb_freq);
 }
@@ -945,36 +1000,6 @@ int ps3_repository_read_lpm_privileges(unsigned int be_index, u64 *lpar,
 			    make_field("lpm", 0),
 			    make_field("priv", 0),
 			    lpar, rights);
-}
-
-int ps3_repository_read_num_pu(unsigned int *num_pu)
-{
-	int result;
-	u64 v1;
-
-	v1 = 0;
-	result = read_node(PS3_LPAR_ID_CURRENT,
-			   make_first_field("bi", 0),
-			   make_field("pun", 0),
-			   0, 0,
-			   &v1, NULL);
-	*num_pu = v1;
-	return result;
-}
-
-int ps3_repository_read_pu_id(unsigned int pu_index, u64 *pu_id)
-{
-	int result;
-	u64 v1;
-
-	v1 = 0;
-	result = read_node(PS3_LPAR_ID_CURRENT,
-		make_first_field("bi", 0),
-		make_field("pu", pu_index),
-		0, 0,
-		&v1, NULL);
-	*pu_id = v1;
-	return result;
 }
 
 #if defined(DEBUG)

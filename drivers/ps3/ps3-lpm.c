@@ -104,7 +104,9 @@ struct ps3_lpm_shadow_regs {
  * @open: An atomic variable indicating the lpm driver has been opened.
  * @rights: The lpm rigths granted by the system policy module.  A logical
  *  OR of enum ps3_lpm_rights.
- * @pu_id: The lv1 id of the BE prosessor for this lpm instance.
+ * @node_id: The node id of a BE prosessor whos performance monitor this
+ *  lpar has the right to use.
+ * @pu_id: The lv1 id of the logical PU.
  * @lpm_id: The lv1 id of this lpm instance.
  * @outlet_id: The outlet created by lv1 for this lpm instance.
  * @tb_count: The number of bytes of data held in the lv1 trace buffer.
@@ -126,6 +128,7 @@ struct ps3_lpm_shadow_regs {
 struct ps3_lpm_priv {
 	atomic_t open;
 	u64 rights;
+	u64 node_id;
 	u64 pu_id;
 	u64 lpm_id;
 	u64 outlet_id;
@@ -172,7 +175,7 @@ enum {use_start_stop_bookmark = 1,};
 void ps3_set_bookmark(u64 bookmark)
 {
 	/*
-	 * As per the PPE book IV, to avoid bookmark lost there must
+	 * As per the PPE book IV, to avoid bookmark loss there must
 	 * not be a traced branch within 10 cycles of setting the
 	 * SPRN_BKMK register.  The actual text is unclear if 'within'
 	 * includes cycles before the call.
@@ -892,14 +895,15 @@ void ps3_disable_pm(u32 cpu)
 	result = lv1_stop_lpm(lpm_priv->lpm_id, &tmp);
 
 	if (result) {
-		dev_err(sbd_core(), "%s:%u: lv1_stop_lpm failed: %s\n",
-			__func__, __LINE__, ps3_result(result));
+		if(result != LV1_WRONG_STATE)
+			dev_err(sbd_core(), "%s:%u: lv1_stop_lpm failed: %s\n",
+				__func__, __LINE__, ps3_result(result));
 		return;
 	}
 
 	lpm_priv->tb_count = tmp;
 
-	dev_err(sbd_core(), "%s:%u: tb_count %lu (%lxh)\n", __func__, __LINE__,
+	dev_dbg(sbd_core(), "%s:%u: tb_count %lu (%lxh)\n", __func__, __LINE__,
 		lpm_priv->tb_count, lpm_priv->tb_count);
 }
 EXPORT_SYMBOL_GPL(ps3_disable_pm);
@@ -1091,9 +1095,11 @@ int ps3_lpm_open(enum ps3_lpm_tb_type tb_type, void *tb_cache,
 		return -EBUSY;
 	}
 
+	/* Note tb_cache needs 128 byte alignment. */
+
 	if (tb_type == PS3_LPM_TB_TYPE_NONE) {
-		lpm_priv->tb_cache_internal = NULL;
 		lpm_priv->tb_cache_size = 0;
+		lpm_priv->tb_cache_internal = NULL;
 		lpm_priv->tb_cache = NULL;
 	} else if (tb_cache) {
 		if (tb_cache != (void *)_ALIGN_UP((unsigned long)tb_cache, 128)
@@ -1103,14 +1109,13 @@ int ps3_lpm_open(enum ps3_lpm_tb_type tb_type, void *tb_cache,
 			result = -EINVAL;
 			goto fail_align;
 		}
-		lpm_priv->tb_cache_internal = NULL;
 		lpm_priv->tb_cache_size = tb_cache_size;
+		lpm_priv->tb_cache_internal = NULL;
 		lpm_priv->tb_cache = tb_cache;
 	} else {
-		/* tb_cache needs 128 byte alignment. */
 		lpm_priv->tb_cache_size = PS3_LPM_DEFAULT_TB_CACHE_SIZE;
-		lpm_priv->tb_cache_internal = kzalloc(tb_cache_size + 127,
-			GFP_KERNEL);
+		lpm_priv->tb_cache_internal = kzalloc(
+			lpm_priv->tb_cache_size + 127, GFP_KERNEL);
 		if (!lpm_priv->tb_cache_internal) {
 			dev_err(sbd_core(), "%s:%u: alloc internal tb_cache "
 				"failed\n", __func__, __LINE__);
@@ -1121,7 +1126,7 @@ int ps3_lpm_open(enum ps3_lpm_tb_type tb_type, void *tb_cache,
 			(unsigned long)lpm_priv->tb_cache_internal, 128);
 	}
 
-	result = lv1_construct_lpm(0, tb_type, 0, 0,
+	result = lv1_construct_lpm(lpm_priv->node_id, tb_type, 0, 0,
 				ps3_mm_phys_to_lpar(__pa(lpm_priv->tb_cache)),
 				lpm_priv->tb_cache_size, &lpm_priv->lpm_id,
 				&lpm_priv->outlet_id, &tb_size);
@@ -1191,6 +1196,7 @@ static int __devinit ps3_lpm_probe(struct ps3_system_bus_device *dev)
 		return -ENOMEM;
 
 	lpm_priv->sbd = dev;
+	lpm_priv->node_id = dev->lpm.node_id;
 	lpm_priv->pu_id = dev->lpm.pu_id;
 	lpm_priv->rights = dev->lpm.rights;
 
