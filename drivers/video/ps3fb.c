@@ -494,8 +494,6 @@ static int ps3fb_sync(struct fb_info *info, u32 frame)
 	int error = 0;
 	u64 ddr_base, xdr_base;
 
-	acquire_console_sem();
-
 	if (frame > par->num_frames - 1) {
 		dev_dbg(info->device, "%s: invalid frame number (%u)\n",
 			__func__, frame);
@@ -512,7 +510,6 @@ static int ps3fb_sync(struct fb_info *info, u32 frame)
 			 info->fix.line_length);
 
 out:
-	release_console_sem();
 	return error;
 }
 
@@ -901,7 +898,9 @@ static int ps3fb_ioctl(struct fb_info *info, unsigned int cmd,
 			break;
 
 		dev_dbg(info->device, "PS3FB_IOCTL_FSEL:%d\n", val);
+		acquire_console_sem();
 		retval = ps3fb_sync(info, val);
+		release_console_sem();
 		break;
 
 	default:
@@ -921,7 +920,9 @@ static int ps3fbd(void *arg)
 		set_current_state(TASK_INTERRUPTIBLE);
 		if (ps3fb.is_kicked) {
 			ps3fb.is_kicked = 0;
+			acquire_console_sem();
 			ps3fb_sync(info, 0);	/* single buffer */
+			release_console_sem();
 		}
 		schedule();
 	}
@@ -1257,12 +1258,6 @@ static int ps3fb_shutdown(struct ps3_system_bus_device *dev)
 	ps3fb_flip_ctl(0, &ps3fb);	/* flip off */
 	ps3fb.dinfo->irq.mask = 0;
 
-	if (info) {
-		unregister_framebuffer(info);
-		fb_dealloc_cmap(&info->cmap);
-		framebuffer_release(info);
-	}
-
 	ps3av_register_flip_ctl(NULL, NULL);
 	if (ps3fb.task) {
 		struct task_struct *task = ps3fb.task;
@@ -1272,6 +1267,12 @@ static int ps3fb_shutdown(struct ps3_system_bus_device *dev)
 	if (ps3fb.irq_no) {
 		free_irq(ps3fb.irq_no, &dev->core);
 		ps3_irq_plug_destroy(ps3fb.irq_no);
+	}
+	if (info) {
+		unregister_framebuffer(info);
+		fb_dealloc_cmap(&info->cmap);
+		framebuffer_release(info);
+		info = dev->core.driver_data = NULL;
 	}
 	iounmap((u8 __force __iomem *)ps3fb.dinfo);
 
