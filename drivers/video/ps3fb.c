@@ -524,7 +524,10 @@ static int ps3fb_release(struct fb_info *info, int user)
 	if (atomic_dec_and_test(&ps3fb.f_count)) {
 		if (atomic_read(&ps3fb.ext_flip)) {
 			atomic_set(&ps3fb.ext_flip, 0);
-			ps3fb_sync(info, 0);	/* single buffer */
+			if (!try_acquire_console_sem()) {
+				ps3fb_sync(info, 0);	/* single buffer */
+				release_console_sem();
+			}
 		}
 	}
 	return 0;
