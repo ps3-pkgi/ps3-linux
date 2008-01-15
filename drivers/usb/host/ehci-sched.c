@@ -1069,32 +1069,6 @@ iso_stream_find (struct ehci_hcd *ehci, struct urb *urb)
 	return stream;
 }
 
-/**
- * itd_in_use -  Fix for Cell Super Companion Chip ISO transfers
- *
- * The EHCI host controller in the Cell Processor's Super Companion
- * Chip has a hardware errata in its handling of ISO TDs.  The
- * controller will continue to access the iTD after the transaction
- * active bit has been cleared.  The condition can be avoided by
- * delaying the reuse of the iTD until the frame number changes.
- */
-
-#if defined(CONFIG_PPC_PS3)
-#include <asm/firmware.h>
-
-static int itd_in_use(struct ehci_hcd *ehci, unsigned int itd_frame)
-{
-	return (firmware_has_feature(FW_FEATURE_PS3_LV1)
-		&& (itd_frame == (ehci_readl(ehci,
-		&ehci->regs->frame_index) >> 3) % ehci->periodic_size));
-}
-#else
-static int itd_in_use(struct ehci_hcd *ehci, unsigned int itd_frame)
-{
-	return 0;
-}
-#endif /* defined(CONFIG_PPC_PS3) */
-
 /*-------------------------------------------------------------------------*/
 
 /* ehci_iso_sched ops can be ITD-only or SITD-only */
@@ -1206,12 +1180,8 @@ itd_urb_transaction (
 		if (likely (!list_empty(&stream->free_list))) {
 			itd = list_entry (stream->free_list.prev,
 					struct ehci_itd, itd_list);
-			if (itd_in_use(ehci, itd->frame))
-				itd = NULL;
-			else {
-				list_del (&itd->itd_list);
-				itd_dma = itd->itd_dma;
-			}
+			list_del (&itd->itd_list);
+			itd_dma = itd->itd_dma;
 		} else
 			itd = NULL;
 
@@ -1595,6 +1565,16 @@ itd_link_urb (
 
 #define	ISO_ERRS (EHCI_ISOC_BUF_ERR | EHCI_ISOC_BABBLE | EHCI_ISOC_XACTERR)
 
+/* Process and recycle a completed ITD.  Return true iff its urb completed,
+ * and hence its completion callback probably added things to the hardware
+ * schedule.
+ *
+ * Note that we carefully avoid recycling this descriptor until after any
+ * completion callback runs, so that it won't be reused quickly.  That is,
+ * assuming (a) no more than two urbs per frame on this endpoint, and also
+ * (b) only this endpoint's completions submit URBs.  It seems some silicon
+ * corrupts things if you reuse completed descriptors very quickly...
+ */
 static unsigned
 itd_complete (
 	struct ehci_hcd	*ehci,
@@ -1607,6 +1587,7 @@ itd_complete (
 	int					urb_index = -1;
 	struct ehci_iso_stream			*stream = itd->stream;
 	struct usb_device			*dev;
+	unsigned				retval = false;
 
 	/* for each uframe with a packet */
 	for (uframe = 0; uframe < 8; uframe++) {
@@ -1640,15 +1621,9 @@ itd_complete (
 		}
 	}
 
-	usb_put_urb (urb);
-	itd->urb = NULL;
-	itd->stream = NULL;
-	list_move (&itd->itd_list, &stream->free_list);
-	iso_stream_put (ehci, stream);
-
 	/* handle completion now? */
 	if (likely ((urb_index + 1) != urb->number_of_packets))
-		return 0;
+		goto done;
 
 	/* ASSERT: it's really the last itd for this urb
 	list_for_each_entry (itd, &stream->td_list, itd_list)
@@ -1658,6 +1633,7 @@ itd_complete (
 	/* give urb back to the driver ... can be out-of-order */
 	dev = urb->dev;
 	ehci_urb_done(ehci, urb, 0);
+	retval = true;
 	urb = NULL;
 
 	/* defer stopping schedule; completion can submit */
@@ -1675,8 +1651,15 @@ itd_complete (
 			(stream->bEndpointAddress & USB_DIR_IN) ? "in" : "out");
 	}
 	iso_stream_put (ehci, stream);
+	/* OK to recycle this ITD now that its completion callback ran. */
+done:
+	usb_put_urb(urb);
+	itd->urb = NULL;
+	itd->stream = NULL;
+	list_move(&itd->itd_list, &stream->free_list);
+	iso_stream_put(ehci, stream);
 
-	return 1;
+	return retval;
 }
 
 /*-------------------------------------------------------------------------*/
@@ -1837,12 +1820,8 @@ sitd_urb_transaction (
 		if (!list_empty(&stream->free_list)) {
 			sitd = list_entry (stream->free_list.prev,
 					 struct ehci_sitd, sitd_list);
-			if (itd_in_use(ehci, sitd->frame))
-				sitd = NULL;
-			else {
-				list_del (&sitd->sitd_list);
-				sitd_dma = sitd->sitd_dma;
-			}
+			list_del (&sitd->sitd_list);
+			sitd_dma = sitd->sitd_dma;
 		} else
 			sitd = NULL;
 
@@ -1984,6 +1963,16 @@ sitd_link_urb (
 #define	SITD_ERRS (SITD_STS_ERR | SITD_STS_DBE | SITD_STS_BABBLE \
 				| SITD_STS_XACT | SITD_STS_MMF)
 
+/* Process and recycle a completed SITD.  Return true iff its urb completed,
+ * and hence its completion callback probably added things to the hardware
+ * schedule.
+ *
+ * Note that we carefully avoid recycling this descriptor until after any
+ * completion callback runs, so that it won't be reused quickly.  That is,
+ * assuming (a) no more than two urbs per frame on this endpoint, and also
+ * (b) only this endpoint's completions submit URBs.  It seems some silicon
+ * corrupts things if you reuse completed descriptors very quickly...
+ */
 static unsigned
 sitd_complete (
 	struct ehci_hcd		*ehci,
@@ -1995,6 +1984,7 @@ sitd_complete (
 	int					urb_index = -1;
 	struct ehci_iso_stream			*stream = sitd->stream;
 	struct usb_device			*dev;
+	unsigned				retval = false;
 
 	urb_index = sitd->index;
 	desc = &urb->iso_frame_desc [urb_index];
@@ -2015,17 +2005,11 @@ sitd_complete (
 		desc->status = 0;
 		desc->actual_length = desc->length - SITD_LENGTH (t);
 	}
-
-	usb_put_urb (urb);
-	sitd->urb = NULL;
-	sitd->stream = NULL;
-	list_move (&sitd->sitd_list, &stream->free_list);
 	stream->depth -= stream->interval << 3;
-	iso_stream_put (ehci, stream);
 
 	/* handle completion now? */
 	if ((urb_index + 1) != urb->number_of_packets)
-		return 0;
+		goto done;
 
 	/* ASSERT: it's really the last sitd for this urb
 	list_for_each_entry (sitd, &stream->td_list, sitd_list)
@@ -2035,6 +2019,7 @@ sitd_complete (
 	/* give urb back to the driver */
 	dev = urb->dev;
 	ehci_urb_done(ehci, urb, 0);
+	retval = true;
 	urb = NULL;
 
 	/* defer stopping schedule; completion can submit */
@@ -2052,8 +2037,15 @@ sitd_complete (
 			(stream->bEndpointAddress & USB_DIR_IN) ? "in" : "out");
 	}
 	iso_stream_put (ehci, stream);
+	/* OK to recycle this SITD now that its completion callback ran. */
+done:
+	usb_put_urb(urb);
+	sitd->urb = NULL;
+	sitd->stream = NULL;
+	list_move(&sitd->sitd_list, &stream->free_list);
+	iso_stream_put(ehci, stream);
 
-	return 1;
+	return retval;
 }
 
 
