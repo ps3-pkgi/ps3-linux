@@ -605,7 +605,6 @@ found:
 	return;
 }
 
-
 #define PS3_NOTIFICATION_DEV_ID		ULONG_MAX
 #define PS3_NOTIFICATION_INTERRUPT_ID	0
 
@@ -700,7 +699,6 @@ static int ps3_notification_read_write(struct ps3_notification_device *dev,
 
 	return 0;
 }
-
 
 static struct task_struct *probe_task;
 
@@ -834,7 +832,6 @@ static int ps3_stop_probe_thread(struct notifier_block *nb, unsigned long code,
 static struct notifier_block nb = {
 	.notifier_call = ps3_stop_probe_thread
 };
-
 
 /**
  * ps3_start_probe_thread - Starts the background probe thread.
