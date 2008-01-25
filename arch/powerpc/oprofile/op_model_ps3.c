@@ -2,7 +2,7 @@
  * PS3 OProfile support
  *
  * This file based on op_model_cell.c, but the spu profiling has not
- * been implemented yet in the.
+ * been implemented yet.
  *
  * Copyright (C) 2007 Sony Computer Entertainment Inc.
  * Copyright 2007 Sony Corporation.
@@ -150,11 +150,10 @@ static u32 ctr_enabled;
 
 static unsigned char input_bus[NUM_INPUT_BUS_WORDS];
 
-u32 cbe_cpu_to_node(int cpu)
+static u32 ps3_cpu_to_node(int cpu)
 {
 	return 0;
 }
-EXPORT_SYMBOL_GPL(cbe_cpu_to_node);
 
 static int pm_activate_signals(u32 node, u32 count)
 {
@@ -624,12 +623,12 @@ static int cell_cpu_setup(struct op_counter_config *cntr)
 
 	for (i = 0; i < num_counters; ++i) {
 		if (ctr_enabled & (1 << i)) {
-			pm_signal[num_enabled].cpu = cbe_cpu_to_node(cpu);
+			pm_signal[num_enabled].cpu = ps3_cpu_to_node(cpu);
 			num_enabled++;
 		}
 	}
 
-	return pm_activate_signals(cbe_cpu_to_node(cpu), num_enabled);
+	return pm_activate_signals(ps3_cpu_to_node(cpu), num_enabled);
 }
 
 
