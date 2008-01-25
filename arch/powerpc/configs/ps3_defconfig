@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
-# Linux kernel version: 2.6.24-rc6
-# Fri Jan  4 15:30:55 2008
+# Linux kernel version: 2.6.24
+# Fri Jan 25 13:57:32 2008
 #
 CONFIG_PPC64=y
 
@@ -191,12 +191,7 @@ CONFIG_SPU_BASE=y
 #
 # Hardware Performance Monitoring support
 #
-CONFIG_PERFMON=y
-# CONFIG_PERFMON_DEBUG is not set
-# CONFIG_PERFMON_POWER4 is not set
-# CONFIG_PERFMON_POWER5 is not set
-# CONFIG_PERFMON_POWER6 is not set
-CONFIG_PERFMON_CELL=m
+# CONFIG_PERFMON is not set
 
 #
 # Kernel options
@@ -1121,6 +1116,7 @@ CONFIG_IRQSTACKS=y
 CONFIG_CRYPTO=y
 CONFIG_CRYPTO_ALGAPI=y
 CONFIG_CRYPTO_BLKCIPHER=y
+# CONFIG_CRYPTO_SEQIV is not set
 CONFIG_CRYPTO_MANAGER=y
 # CONFIG_CRYPTO_HMAC is not set
 # CONFIG_CRYPTO_XCBC is not set
@@ -1138,6 +1134,9 @@ CONFIG_CRYPTO_CBC=y
 CONFIG_CRYPTO_PCBC=m
 # CONFIG_CRYPTO_LRW is not set
 # CONFIG_CRYPTO_XTS is not set
+# CONFIG_CRYPTO_CTR is not set
+# CONFIG_CRYPTO_GCM is not set
+# CONFIG_CRYPTO_CCM is not set
 # CONFIG_CRYPTO_CRYPTD is not set
 CONFIG_CRYPTO_DES=y
 # CONFIG_CRYPTO_FCRYPT is not set
@@ -1152,11 +1151,13 @@ CONFIG_CRYPTO_ARC4=m
 # CONFIG_CRYPTO_KHAZAD is not set
 # CONFIG_CRYPTO_ANUBIS is not set
 # CONFIG_CRYPTO_SEED is not set
+# CONFIG_CRYPTO_SALSA20 is not set
 # CONFIG_CRYPTO_DEFLATE is not set
 CONFIG_CRYPTO_MICHAEL_MIC=m
 # CONFIG_CRYPTO_CRC32C is not set
 # CONFIG_CRYPTO_CAMELLIA is not set
 # CONFIG_CRYPTO_TEST is not set
 # CONFIG_CRYPTO_AUTHENC is not set
+# CONFIG_CRYPTO_LZO is not set
 CONFIG_CRYPTO_HW=y
 # CONFIG_PPC_CLOCK is not set
