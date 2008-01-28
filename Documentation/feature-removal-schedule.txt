@@ -191,15 +191,6 @@ Who:	Kay Sievers <kay.sievers@suse.de>
 
 ---------------------------
 
-What:	i2c_adapter.list
-When:	July 2007
-Why:	Superfluous, this list duplicates the one maintained by the driver
-	core.
-Who:	Jean Delvare <khali@linux-fr.org>,
-	David Brownell <dbrownell@users.sourceforge.net>
-
----------------------------
-
 What:	ACPI procfs interface
 When:	July 2008
 Why:	ACPI sysfs conversion should be finished by January 2008.
@@ -222,14 +213,6 @@ When:	February 2008
 Why:	/proc/acpi/event has been replaced by events via the input layer
 	and netlink since 2.6.23.
 Who:	Len Brown <len.brown@intel.com>
-
----------------------------
-
-What:	i2c-ixp2000, i2c-ixp4xx and scx200_i2c drivers
-When:	September 2007
-Why:	Obsolete. The new i2c-gpio driver replaces all hardware-specific
-	I2C-over-GPIO drivers.
-Who:	Jean Delvare <khali@linux-fr.org>
 
 ---------------------------
 
@@ -266,13 +249,6 @@ Who:  Tejun Heo <htejun@gmail.com>
 
 ---------------------------
 
-What:	Legacy RTC drivers (under drivers/i2c/chips)
-When:	November 2007
-Why:	Obsolete. We have a RTC subsystem with better drivers.
-Who:	Jean Delvare <khali@linux-fr.org>
-
----------------------------
-
 What:	iptables SAME target
 When:	1.1. 2008
 Files:	net/ipv4/netfilter/ipt_SAME.c, include/linux/netfilter_ipv4/ipt_SAME.h
@@ -292,16 +268,6 @@ Why:  The arch/powerpc tree is the merged architecture for ppc32 and ppc64
       that are not ported by June 2008 will be removed due to the lack of an
       interested maintainer.
 Who:  linuxppc-dev@ozlabs.org
-
----------------------------
-
-What:	mthca driver's MSI support
-When:	January 2008
-Files:	drivers/infiniband/hw/mthca/*.[ch]
-Why:	All mthca hardware also supports MSI-X, which provides
-	strictly more functionality than MSI.  So there is no point in
-	having both MSI-X and MSI support in the driver.
-Who:	Roland Dreier <rolandd@cisco.com>
 
 ---------------------------
 
@@ -331,5 +297,12 @@ Why:	This driver has been marked obsolete for many years.
 	flaws that lead to machine crashes. The qdisc infrastructure in
 	2.4 or later kernels, provides richer features and is more robust.
 Who:	Stephen Hemminger <shemminger@linux-foundation.org>
+
+---------------------------
+
+What:	i2c-i810, i2c-prosavage and i2c-savage4
+When:	May 2008
+Why:	These drivers are superseded by i810fb, intelfb and savagefb.
+Who:	Jean Delvare <khali@linux-fr.org>
 
 ---------------------------
