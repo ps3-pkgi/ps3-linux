@@ -603,6 +603,7 @@ enum pfm_stats_names {
 	PFM_ST_fmt_handler_ns,
 	PFM_ST_set_switch_count,
 	PFM_ST_set_switch_ns,
+	PFM_ST_set_switch_exp,
 	PFM_ST_ctxsw_count,
 	PFM_ST_ctxsw_ns,
 	PFM_ST_handle_timeout_count,

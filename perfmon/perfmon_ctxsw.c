@@ -201,6 +201,9 @@ static void __pfm_ctxswin_thread(struct task_struct *task,
 					task->pid);
 			set->hrtimer_rem.tv64 = 0;
 		} else {
+			if (set->hrtimer_rem.tv64 < 0)
+				pfm_stats_inc(set_switch_exp);
+
 			hrtimer_start(h, set->hrtimer_exp, HRTIMER_MODE_REL);
 			PFM_DBG_ovfl("armed exp for [%d]", task->pid);
 		}

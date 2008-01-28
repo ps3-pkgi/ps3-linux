@@ -52,14 +52,25 @@ static struct pfm_regmap_desc pfm_power5_pmd_desc[]={
 };
 #define PFM_PM_NUM_PMDS	ARRAY_SIZE(pfm_power5_pmd_desc)
 
+#define HID0_PMC5_6_GR_MODE (1UL << (63 - 40))
+
+/* forward decl */
+static void pfm_power5_disable_counters(struct pfm_context *ctx,
+					struct pfm_event_set *set);
+
 static int pfm_power5_probe_pmu(void)
 {
 	unsigned long pvr = mfspr(SPRN_PVR);
+	unsigned long hid0 = mfspr(SPRN_HID0);
 
-	if (PVR_VER(pvr) != PV_POWER5)
-		return -1;
-
-	return 0;
+	switch (PVR_VER(pvr)) {
+		case PV_POWER5:
+			return 0;
+		case PV_POWER5p:
+			return (hid0 & HID0_PMC5_6_GR_MODE) ? 0 : -1;
+		default:
+			return -1;
+	}
 }
 
 static void pfm_power5_write_pmc(unsigned int cnum, u64 value)
@@ -149,18 +160,28 @@ static u64 pfm_power5_read_pmd(unsigned int cnum)
 /**
  * pfm_power5_enable_counters
  *
- * Just need to load the current values into the control registers.
  **/
 static void pfm_power5_enable_counters(struct pfm_context *ctx,
 				       struct pfm_event_set *set)
 {
 	unsigned int i, max_pmc;
 
+	/*
+	 * Make sure the counters are disabled before touching the
+	 * other control registers
+	 */
+	pfm_power5_disable_counters(ctx, set);
+
 	max_pmc = pfm_pmu_conf->regs.max_pmc;
 
-	for (i = 0; i < max_pmc; i++)
-		if (test_bit(i, set->used_pmcs))
-			pfm_power5_write_pmc(i, set->pmcs[i]);
+	/*
+	 * Write MMCR0 last, and a fairly easy way to do
+	 * this is to write the registers in the reverse
+	 * order
+	 */
+	for (i = max_pmc; i != 0; i--)
+		if (test_bit(i - 1, set->used_pmcs))
+			pfm_power5_write_pmc(i - 1, set->pmcs[i - 1]);
 }
 
 /**
@@ -171,13 +192,9 @@ static void pfm_power5_enable_counters(struct pfm_context *ctx,
 static void pfm_power5_disable_counters(struct pfm_context *ctx,
 					struct pfm_event_set *set)
 {
-	unsigned int i, max;
-
-	max = pfm_pmu_conf->regs.max_pmc;
-
-	for (i = 0; i < max; i++)
-		if (test_bit(i, set->used_pmcs))
-			pfm_power5_write_pmc(i, 0);
+	/* Set the Freeze Counters bit */
+	mtspr(SPRN_MMCR0, mfspr(SPRN_MMCR0) | MMCR0_FC);
+	asm volatile ("sync");
 }
 
 /**
@@ -198,6 +215,24 @@ static void pfm_power5_get_ovfl_pmds(struct pfm_context *ctx,
 
 	bitmap_and(cast_ulp(mask), cast_ulp(intr_pmds),
 		   cast_ulp(used_pmds), max);
+	/*
+	 * If either PMC5 or PMC6 are not being used, just zero out the unused
+	 * ones so that they won't interrupt again for another 2^31 counts.
+	 * Note that if no other counters overflowed, set->npend_ovfls will
+	 * be zero upon returning from this call (i.e. a spurious
+	 * interrupt), but that should be ok.
+	 *
+	 * If neither PMC5 nor PMC6 are used, the counters should be frozen
+	 * via MMCR0_FC5_6 and zeroed out.
+	 *
+	 * If both PMC5 and PMC6 are used, they can be handled correctly by
+	 * the loop that follows.
+	 */
+
+	if  (!test_bit(5, cast_ulp(used_pmds)))
+		mtspr(SPRN_PMC5, 0);
+	if  (!test_bit(6, cast_ulp(used_pmds)))
+		mtspr(SPRN_PMC6, 0);
 
 	for (i = 0; i < max; i++) {
 		if (test_bit(i, mask)) {
@@ -214,14 +249,12 @@ static void pfm_power5_irq_handler(struct pt_regs *regs,
 				   struct pfm_context *ctx)
 {
 	u32 mmcr0;
-	u64 mmcra;
 
 	/* Disable the counters (set the freeze bit) to not polute
 	 * the counts.
 	 */
 	mmcr0 = mfspr(SPRN_MMCR0);
 	mtspr(SPRN_MMCR0, (mmcr0 | MMCR0_FC));
-	mmcra = mfspr(SPRN_MMCRA);
 
 	/* Set the PMM bit (see comment below). */
 	mtmsrd(mfmsr() | MSR_PMM);
@@ -229,18 +262,19 @@ static void pfm_power5_irq_handler(struct pt_regs *regs,
 	pfm_interrupt_handler(instruction_pointer(regs), regs);
 
 	mmcr0 = mfspr(SPRN_MMCR0);
-	/* Reset the perfmon trigger. */
-	mmcr0 |= MMCR0_PMXE;
+
+	/*
+	 * Reset the perfmon trigger if
+	 * not in masking mode.
+	 */
+	if (ctx->state != PFM_CTX_MASKED)
+		mmcr0 |= MMCR0_PMXE;
 
 	/*
 	 * We must clear the PMAO bit on some (GQ) chips. Just do it
 	 * all the time.
 	 */
 	mmcr0 &= ~MMCR0_PMAO;
-
-	/* Clear the appropriate bits in the MMCRA. */
-	mmcra &= POWER6_MMCRA_THRM | POWER6_MMCRA_OTHER;
-	mtspr(SPRN_MMCRA, mmcra);
 
 	/*
 	 * Now clear the freeze bit, counting will not start until we

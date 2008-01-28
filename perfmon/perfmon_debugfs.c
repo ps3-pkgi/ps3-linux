@@ -77,6 +77,7 @@ static const char *pfm_stats_strs[] = {
 	"fmt_handler_ns",
 	"set_switch_count",
 	"set_switch_ns",
+	"set_switch_exp",
 	"ctxsw_count",
 	"ctxsw_ns",
 	"handle_timeout_count",

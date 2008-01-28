@@ -132,12 +132,17 @@ static inline struct thread_info *current_thread_info(void)
 #define TIF_SYSCALL_AUDIT	6	/* syscall auditing active */
 #define TIF_SECCOMP		7	/* secure computing */
 #define TIF_RESTORE_SIGMASK	8	/* restore signal mask in do_signal() */
+<<<<<<< HEAD:include/asm-x86/thread_info_32.h
 #define TIF_HRTICK_RESCHED	9	/* reprogram hrtick timer */
+=======
+#define TIF_PERFMON_WORK	9	/* work for pfm_handle_work() */
+>>>>>>> bdeffca7d749d0ee681d20eec4d3d7d3ccb2d57e:include/asm-x86/thread_info_32.h
 #define TIF_MEMDIE		16
 #define TIF_DEBUG		17	/* uses debug registers */
 #define TIF_IO_BITMAP		18	/* uses I/O bitmap */
 #define TIF_FREEZE		19	/* is freezing for suspend */
 #define TIF_NOTSC		20	/* TSC is not accessible in userland */
+#define TIF_PERFMON_CTXSW	21	/* perfmon needs ctxsw calls */
 
 #define _TIF_SYSCALL_TRACE	(1<<TIF_SYSCALL_TRACE)
 #define _TIF_SIGPENDING		(1<<TIF_SIGPENDING)

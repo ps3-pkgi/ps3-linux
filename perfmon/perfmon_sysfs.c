@@ -316,22 +316,24 @@ int __init pfm_init_sysfs(void)
 {
 	int ret;
 
-	kobject_init(&pfm_kernel_kobj);
-	kobject_init(&pfm_kernel_fmt_kobj);
+	kobject_init(&pfm_kernel_kobj, &pfm_pmu_ktype);
+	kobject_init(&pfm_kernel_fmt_kobj, &pfm_fmt_ktype);
 
+#if 0  
 	pfm_kernel_kobj.parent = &kernel_subsys.kobj;
 	kobject_set_name(&pfm_kernel_kobj, "perfmon");
 
 	pfm_kernel_fmt_kobj.parent = &pfm_kernel_kobj;
 	kobject_set_name(&pfm_kernel_fmt_kobj, "formats");
-
-	ret = kobject_add(&pfm_kernel_kobj);
+#endif
+  
+	ret = kobject_add(&pfm_kernel_kobj, kernel_kobj, "%s", "perfmon");
 	if (ret) {
 		PFM_INFO("cannot add kernel object: %d", ret);
 		goto error;
 	}
 
-	ret = kobject_add(&pfm_kernel_fmt_kobj);
+	ret = kobject_add(&pfm_kernel_fmt_kobj, &pfm_kernel_kobj, "%s", "formats");
 	if (ret) {
 		PFM_INFO("cannot add fmt object: %d", ret);
 		goto error_fmt;
@@ -459,13 +461,15 @@ int pfm_sysfs_add_fmt(struct pfm_smpl_fmt *fmt)
 		return 0;
 
 	fmt->kobj.ktype = &pfm_fmt_ktype;
-	kobject_init(&fmt->kobj);
+	kobject_init(&fmt->kobj, &pfm_fmt_ktype);
 
+#if 0
 	kobject_set_name(&fmt->kobj, fmt->fmt_name);
 	//kobj_set_kset_s(fmt, pfm_fmt_subsys);
 	fmt->kobj.parent = &pfm_kernel_fmt_kobj;
+#endif
 
-	ret = kobject_add(&fmt->kobj);
+	ret = kobject_add(&fmt->kobj, &pfm_kernel_fmt_kobj, "%s", fmt->fmt_name);
 	if (ret)
 		return ret;
 
@@ -534,14 +538,14 @@ static int pfm_sysfs_add_pmu_regs(struct pfm_pmu_config *pmu)
 			continue;
 
 		reg->kobj.ktype = &pfm_regs_ktype;
-		kobject_init(&reg->kobj);
+		kobject_init(&reg->kobj, &pfm_regs_ktype);
 
-		reg->kobj.parent = &pmu->kobj;
+		//reg->kobj.parent = &pmu->kobj;
 		snprintf(reg_name, sizeof(reg_name), "pmc%u", i);
-		kobject_set_name(&reg->kobj, reg_name);
+		//kobject_set_name(&reg->kobj, reg_name);
 		//kobj_set_kset_s(reg, pfm_regs_subsys);
 
-		ret = kobject_add(&reg->kobj);
+		ret = kobject_add(&reg->kobj, &pmu->kobj, "%s", reg_name);
 		if (ret)
 			goto undo_pmcs;
 
@@ -559,14 +563,14 @@ static int pfm_sysfs_add_pmu_regs(struct pfm_pmu_config *pmu)
 			continue;
 
 		reg->kobj.ktype = &pfm_regs_ktype;
-		kobject_init(&reg->kobj);
+		kobject_init(&reg->kobj, &pfm_regs_ktype);
 
-		reg->kobj.parent = &pmu->kobj;
+		//reg->kobj.parent = &pmu->kobj;
 		snprintf(reg_name, sizeof(reg_name), "pmd%u", i);
-		kobject_set_name(&reg->kobj, reg_name);
+		//kobject_set_name(&reg->kobj, reg_name);
 		//kobj_set_kset_s(reg, pfm_regs_subsys);
 
-		ret = kobject_add(&reg->kobj);
+		ret = kobject_add(&reg->kobj, &pmu->kobj, "%s", reg_name);
 		if (ret)
 			goto undo_pmds;
 
@@ -638,12 +642,12 @@ int pfm_sysfs_add_pmu(struct pfm_pmu_config *pmu)
 		return 0;
 
 	pmu->kobj.ktype = &pfm_pmu_ktype;
-	kobject_init(&pmu->kobj);
-	kobject_set_name(&pmu->kobj, "pmu_desc");
+	kobject_init(&pmu->kobj, &pfm_pmu_ktype);
+	//kobject_set_name(&pmu->kobj, "pmu_desc");
 	//kobj_set_kset_s(pmu, pfm_pmu_subsys);
-	pmu->kobj.parent = &pfm_kernel_kobj;
+	//pmu->kobj.parent = &pfm_kernel_kobj;
 
-	ret = kobject_add(&pmu->kobj);
+	ret = kobject_add(&pmu->kobj, &pfm_kernel_kobj, "%s", "pmu_desc");
 	if (ret)
 		return ret;
 

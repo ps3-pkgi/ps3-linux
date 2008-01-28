@@ -28,6 +28,7 @@
 #include <linux/delay.h>
 #include <linux/kdebug.h>
 #include <linux/utsname.h>
+#include <linux/perfmon.h>
 
 #include <asm/cpu.h>
 #include <asm/delay.h>
@@ -42,7 +43,6 @@
 #include <asm/uaccess.h>
 #include <asm/unwind.h>
 #include <asm/user.h>
-#include <linux/perfmon.h>
 
 #include "entry.h"
 
