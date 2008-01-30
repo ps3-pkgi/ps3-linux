@@ -19,16 +19,6 @@
 #define APIC_VERBOSE 1
 #define APIC_DEBUG   2
 
-extern int apic_verbosity;
-extern int timer_over_8254;
-extern int local_apic_timer_c2_ok;
-extern int local_apic_timer_disabled;
-
-extern int apic_runs_main_timer;
-extern int ioapic_force;
-extern int disable_apic_timer;
-extern unsigned boot_cpu_id;
-
 /*
  * Define the default level of output to be very little
  * This can be turned up by using apic=verbose for more
@@ -45,6 +35,17 @@ extern void generic_apic_probe(void);
 
 #ifdef CONFIG_X86_LOCAL_APIC
 
+extern int apic_verbosity;
+extern int timer_over_8254;
+extern int local_apic_timer_c2_ok;
+extern int local_apic_timer_disabled;
+
+extern int apic_runs_main_timer;
+extern int ioapic_force;
+extern int disable_apic;
+extern int disable_apic_timer;
+extern unsigned boot_cpu_id;
+
 /*
  * Basic functions accessing APICs.
  */
@@ -58,18 +59,17 @@ extern void generic_apic_probe(void);
 #define setup_secondary_clock setup_secondary_APIC_clock
 #endif
 
-static inline fastcall void native_apic_write(unsigned long reg, u32 v)
+static inline void native_apic_write(unsigned long reg, u32 v)
 {
 	*((volatile u32 *)(APIC_BASE + reg)) = v;
 }
 
-static inline fastcall void native_apic_write_atomic(unsigned long reg,
-						     unsigned long v)
+static inline void native_apic_write_atomic(unsigned long reg, u32 v)
 {
-	xchg((volatile unsigned long*)(APIC_BASE + reg), v);
+	(void) xchg((u32*)(APIC_BASE + reg), v);
 }
 
-static inline fastcall u32 native_apic_read(unsigned long reg)
+static inline u32 native_apic_read(unsigned long reg)
 {
 	return *((volatile u32 *)(APIC_BASE + reg));
 }
@@ -112,11 +112,12 @@ extern void cache_APIC_registers(void);
 extern void sync_Arb_IDs(void);
 extern void init_bsp_APIC(void);
 extern void setup_local_APIC(void);
+extern void end_local_APIC_setup(void);
 extern void init_apic_mappings(void);
 extern void setup_boot_APIC_clock(void);
 extern void setup_secondary_APIC_clock(void);
 extern int APIC_init_uniprocessor(void);
-extern void enable_NMI_through_LVT0(void *dummy);
+extern void enable_NMI_through_LVT0(void);
 
 /*
  * On 32bit this is mach-xxx local
@@ -132,6 +133,7 @@ extern int apic_is_clustered_box(void);
 
 #else /* !CONFIG_X86_LOCAL_APIC */
 static inline void lapic_shutdown(void) { }
+#define local_apic_timer_c2_ok		1
 
 #endif /* !CONFIG_X86_LOCAL_APIC */
 

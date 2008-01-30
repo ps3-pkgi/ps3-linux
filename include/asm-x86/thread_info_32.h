@@ -85,7 +85,7 @@ struct thread_info {
 
 
 /* how to get the current stack pointer from C */
-register unsigned long current_stack_pointer asm("esp") __attribute_used__;
+register unsigned long current_stack_pointer asm("esp") __used;
 
 /* how to get the thread information struct from C */
 static inline struct thread_info *current_thread_info(void)
@@ -132,17 +132,16 @@ static inline struct thread_info *current_thread_info(void)
 #define TIF_SYSCALL_AUDIT	6	/* syscall auditing active */
 #define TIF_SECCOMP		7	/* secure computing */
 #define TIF_RESTORE_SIGMASK	8	/* restore signal mask in do_signal() */
-<<<<<<< HEAD:include/asm-x86/thread_info_32.h
 #define TIF_HRTICK_RESCHED	9	/* reprogram hrtick timer */
-=======
-#define TIF_PERFMON_WORK	9	/* work for pfm_handle_work() */
->>>>>>> bdeffca7d749d0ee681d20eec4d3d7d3ccb2d57e:include/asm-x86/thread_info_32.h
 #define TIF_MEMDIE		16
 #define TIF_DEBUG		17	/* uses debug registers */
 #define TIF_IO_BITMAP		18	/* uses I/O bitmap */
 #define TIF_FREEZE		19	/* is freezing for suspend */
 #define TIF_NOTSC		20	/* TSC is not accessible in userland */
-#define TIF_PERFMON_CTXSW	21	/* perfmon needs ctxsw calls */
+#define TIF_FORCED_TF		21	/* true if TF in eflags artificially */
+#define TIF_DEBUGCTLMSR		22	/* uses thread_struct.debugctlmsr */
+#define TIF_DS_AREA_MSR 	23      /* uses thread_struct.ds_area_msr */
+#define TIF_BTS_TRACE_TS        24      /* record scheduling event timestamps */
 
 #define _TIF_SYSCALL_TRACE	(1<<TIF_SYSCALL_TRACE)
 #define _TIF_SIGPENDING		(1<<TIF_SIGPENDING)
@@ -158,8 +157,10 @@ static inline struct thread_info *current_thread_info(void)
 #define _TIF_IO_BITMAP		(1<<TIF_IO_BITMAP)
 #define _TIF_FREEZE		(1<<TIF_FREEZE)
 #define _TIF_NOTSC		(1<<TIF_NOTSC)
-#define _TIF_PERFMON_WORK	(1<<TIF_PERFMON_WORK)
-#define _TIF_PERFMON_CTXSW	(1<<TIF_PERFMON_CTXSW)
+#define _TIF_FORCED_TF		(1<<TIF_FORCED_TF)
+#define _TIF_DEBUGCTLMSR	(1<<TIF_DEBUGCTLMSR)
+#define _TIF_DS_AREA_MSR	(1<<TIF_DS_AREA_MSR)
+#define _TIF_BTS_TRACE_TS	(1<<TIF_BTS_TRACE_TS)
 
 /* work to do on interrupt/exception return */
 #define _TIF_WORK_MASK \
@@ -169,8 +170,12 @@ static inline struct thread_info *current_thread_info(void)
 #define _TIF_ALLWORK_MASK	(0x0000FFFF & ~_TIF_SECCOMP)
 
 /* flags to check in __switch_to() */
-#define _TIF_WORK_CTXSW_NEXT (_TIF_IO_BITMAP | _TIF_NOTSC | _TIF_DEBUG | _TIF_PERFMON_CTXSW)
-#define _TIF_WORK_CTXSW_PREV (_TIF_IO_BITMAP | _TIF_NOTSC | _TIF_PERFMON_CTXSW)
+#define _TIF_WORK_CTXSW \
+    (_TIF_IO_BITMAP | _TIF_NOTSC | _TIF_DEBUGCTLMSR | \
+     _TIF_DS_AREA_MSR | _TIF_BTS_TRACE_TS)
+#define _TIF_WORK_CTXSW_PREV _TIF_WORK_CTXSW
+#define _TIF_WORK_CTXSW_NEXT (_TIF_WORK_CTXSW | _TIF_DEBUG)
+
 
 /*
  * Thread-synchronous status.

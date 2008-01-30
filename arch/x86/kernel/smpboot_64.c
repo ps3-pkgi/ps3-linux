@@ -66,7 +66,7 @@ int smp_num_siblings = 1;
 EXPORT_SYMBOL(smp_num_siblings);
 
 /* Last level cache ID of each logical CPU */
-DEFINE_PER_CPU(u8, cpu_llc_id) = BAD_APICID;
+DEFINE_PER_CPU(u16, cpu_llc_id) = BAD_APICID;
 
 /* Bitmask of currently online CPUs */
 cpumask_t cpu_online_map __read_mostly;
@@ -79,8 +79,6 @@ EXPORT_SYMBOL(cpu_online_map);
  */
 cpumask_t cpu_callin_map;
 cpumask_t cpu_callout_map;
-EXPORT_SYMBOL(cpu_callout_map);
-
 cpumask_t cpu_possible_map;
 EXPORT_SYMBOL(cpu_possible_map);
 
@@ -114,10 +112,20 @@ DEFINE_PER_CPU(int, cpu_state) = { 0 };
  * a new thread. Also avoids complicated thread destroy functionality
  * for idle threads.
  */
+#ifdef CONFIG_HOTPLUG_CPU
+/*
+ * Needed only for CONFIG_HOTPLUG_CPU because __cpuinitdata is
+ * removed after init for !CONFIG_HOTPLUG_CPU.
+ */
+static DEFINE_PER_CPU(struct task_struct *, idle_thread_array);
+#define get_idle_for_cpu(x)     (per_cpu(idle_thread_array, x))
+#define set_idle_for_cpu(x,p)   (per_cpu(idle_thread_array, x) = (p))
+#else
 struct task_struct *idle_thread_array[NR_CPUS] __cpuinitdata ;
-
 #define get_idle_for_cpu(x)     (idle_thread_array[(x)])
 #define set_idle_for_cpu(x,p)   (idle_thread_array[(x)] = (p))
+#endif
+
 
 /*
  * Currently trivial. Write the real->protected mode
@@ -213,6 +221,7 @@ void __cpuinit smp_callin(void)
 
 	Dprintk("CALLIN, before setup_local_APIC().\n");
 	setup_local_APIC();
+	end_local_APIC_setup();
 
 	/*
 	 * Get our bogomips.
@@ -339,7 +348,7 @@ void __cpuinit start_secondary(void)
 
 	if (nmi_watchdog == NMI_IO_APIC) {
 		disable_8259A_irq(0);
-		enable_NMI_through_LVT0(NULL);
+		enable_NMI_through_LVT0();
 		enable_8259A_irq(0);
 	}
 
@@ -371,7 +380,7 @@ void __cpuinit start_secondary(void)
 
 	unlock_ipi_call_lock();
 
-	setup_secondary_APIC_clock();
+	setup_secondary_clock();
 
 	cpu_idle();
 }
@@ -385,19 +394,20 @@ static void inquire_remote_apic(int apicid)
 	unsigned i, regs[] = { APIC_ID >> 4, APIC_LVR >> 4, APIC_SPIV >> 4 };
 	char *names[] = { "ID", "VERSION", "SPIV" };
 	int timeout;
-	unsigned int status;
+	u32 status;
 
 	printk(KERN_INFO "Inquiring remote APIC #%d...\n", apicid);
 
-	for (i = 0; i < sizeof(regs) / sizeof(*regs); i++) {
-		printk("... APIC #%d %s: ", apicid, names[i]);
+	for (i = 0; i < ARRAY_SIZE(regs); i++) {
+		printk(KERN_INFO "... APIC #%d %s: ", apicid, names[i]);
 
 		/*
 		 * Wait for idle.
 		 */
 		status = safe_apic_wait_icr_idle();
 		if (status)
-			printk("a previous APIC delivery may have failed\n");
+			printk(KERN_CONT
+			       "a previous APIC delivery may have failed\n");
 
 		apic_write(APIC_ICR2, SET_APIC_DEST_FIELD(apicid));
 		apic_write(APIC_ICR, APIC_DM_REMRD | regs[i]);
@@ -411,10 +421,10 @@ static void inquire_remote_apic(int apicid)
 		switch (status) {
 		case APIC_ICR_RR_VALID:
 			status = apic_read(APIC_RRR);
-			printk("%08x\n", status);
+			printk(KERN_CONT "%08x\n", status);
 			break;
 		default:
-			printk("failed\n");
+			printk(KERN_CONT "failed\n");
 		}
 	}
 }
@@ -578,7 +588,7 @@ static int __cpuinit do_boot_cpu(int cpu, int apicid)
 	c_idle.idle = get_idle_for_cpu(cpu);
 
 	if (c_idle.idle) {
-		c_idle.idle->thread.rsp = (unsigned long) (((struct pt_regs *)
+		c_idle.idle->thread.sp = (unsigned long) (((struct pt_regs *)
 			(THREAD_SIZE +  task_stack_page(c_idle.idle))) - 1);
 		init_idle(c_idle.idle, cpu);
 		goto do_rest;
@@ -614,8 +624,8 @@ do_rest:
 
 	start_rip = setup_trampoline();
 
-	init_rsp = c_idle.idle->thread.rsp;
-	per_cpu(init_tss,cpu).rsp0 = init_rsp;
+	init_rsp = c_idle.idle->thread.sp;
+	load_sp0(&per_cpu(init_tss, cpu), &c_idle.idle->thread);
 	initial_code = start_secondary;
 	clear_tsk_thread_flag(c_idle.idle, TIF_FORK);
 
@@ -692,7 +702,7 @@ do_rest:
 	}
 	if (boot_error) {
 		cpu_clear(cpu, cpu_callout_map); /* was set here (do_boot_cpu()) */
-		clear_bit(cpu, &cpu_initialized); /* was set by cpu_init() */
+		clear_bit(cpu, (unsigned long *)&cpu_initialized); /* was set by cpu_init() */
 		clear_node_cpumask(cpu); /* was set by numa_add_cpu */
 		cpu_clear(cpu, cpu_present_map);
 		cpu_clear(cpu, cpu_possible_map);
@@ -842,24 +852,16 @@ static int __init smp_sanity_check(unsigned max_cpus)
 	return 0;
 }
 
-/*
- * Copy apicid's found by MP_processor_info from initial array to the per cpu
- * data area.  The x86_cpu_to_apicid_init array is then expendable and the
- * x86_cpu_to_apicid_ptr is zeroed indicating that the static array is no
- * longer available.
- */
-void __init smp_set_apicids(void)
+static void __init smp_cpu_index_default(void)
 {
-	int cpu;
+	int i;
+	struct cpuinfo_x86 *c;
 
-	for_each_cpu_mask(cpu, cpu_possible_map) {
-		if (per_cpu_offset(cpu))
-			per_cpu(x86_cpu_to_apicid, cpu) =
-						x86_cpu_to_apicid_init[cpu];
+	for_each_cpu_mask(i, cpu_possible_map) {
+		c = &cpu_data(i);
+		/* mark all to hotplug */
+		c->cpu_index = NR_CPUS;
 	}
-
-	/* indicate the static array will be going away soon */
-	x86_cpu_to_apicid_ptr = NULL;
 }
 
 /*
@@ -869,9 +871,9 @@ void __init smp_set_apicids(void)
 void __init smp_prepare_cpus(unsigned int max_cpus)
 {
 	nmi_watchdog_default();
+	smp_cpu_index_default();
 	current_cpu_data = boot_cpu_data;
 	current_thread_info()->cpu = 0;  /* needed? */
-	smp_set_apicids();
 	set_cpu_sibling_map(0);
 
 	if (smp_sanity_check(max_cpus) < 0) {
@@ -885,6 +887,13 @@ void __init smp_prepare_cpus(unsigned int max_cpus)
 	 * Switch from PIC to APIC mode.
 	 */
 	setup_local_APIC();
+
+	/*
+	 * Enable IO APIC before setting up error vector
+	 */
+	if (!skip_ioapic_setup && nr_ioapics)
+		enable_IO_APIC();
+	end_local_APIC_setup();
 
 	if (GET_APIC_ID(apic_read(APIC_ID)) != boot_cpu_id) {
 		panic("Boot APIC ID in local APIC unexpected (%d vs %d)",
@@ -904,7 +913,7 @@ void __init smp_prepare_cpus(unsigned int max_cpus)
 	 * Set up local APIC timer on boot CPU.
 	 */
 
-	setup_boot_APIC_clock();
+	setup_boot_clock();
 }
 
 /*
@@ -913,7 +922,7 @@ void __init smp_prepare_cpus(unsigned int max_cpus)
 void __init smp_prepare_boot_cpu(void)
 {
 	int me = smp_processor_id();
-	cpu_set(me, cpu_online_map);
+	/* already set me in cpu_online_map in boot_cpu_init() */
 	cpu_set(me, cpu_callout_map);
 	per_cpu(cpu_state, me) = CPU_ONLINE;
 }
@@ -1017,7 +1026,7 @@ void remove_cpu_from_maps(void)
 
 	cpu_clear(cpu, cpu_callout_map);
 	cpu_clear(cpu, cpu_callin_map);
-	clear_bit(cpu, &cpu_initialized); /* was set by cpu_init() */
+	clear_bit(cpu, (unsigned long *)&cpu_initialized); /* was set by cpu_init() */
 	clear_node_cpumask(cpu);
 }
 

@@ -42,6 +42,11 @@ config MMU
 config SWIOTLB
        bool
 
+config GENERIC_LOCKBREAK
+	bool
+	default y
+	depends on SMP && PREEMPT
+
 config RWSEM_XCHGADD_ALGORITHM
 	bool
 	default y
@@ -74,6 +79,9 @@ config GENERIC_TIME
 config GENERIC_TIME_VSYSCALL
 	bool
 	default y
+
+config HAVE_SETUP_PER_CPU_AREA
+	def_bool y
 
 config DMI
 	bool
@@ -343,7 +351,8 @@ config ARCH_SELECT_MEMORY_MODEL
 	def_bool y
 
 config ARCH_DISCONTIGMEM_ENABLE
-	def_bool y
+	def_bool n
+	depends on NUMA
 	help
 	  Say Y to support efficient handling of discontiguous physical memory,
 	  for architectures which are either NUMA (Non-Uniform Memory Access)
@@ -364,7 +373,7 @@ config ARCH_DISCONTIGMEM_DEFAULT
 
 config NUMA
 	bool "NUMA support"
-	depends on !IA64_HP_SIM && !FLATMEM
+	depends on !IA64_HP_SIM
 	default y if IA64_SGI_SN2
 	select ACPI_NUMA if ACPI
 	help
