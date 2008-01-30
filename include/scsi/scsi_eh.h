@@ -75,6 +75,7 @@ struct scsi_eh_save {
 
 	void *buffer;
 	unsigned bufflen;
+	struct sg_table sg_table;
 	unsigned short use_sg;
 	int resid;
 

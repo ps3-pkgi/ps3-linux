@@ -622,13 +622,15 @@ void scsi_eh_prep_cmnd(struct scsi_cmnd *scmd, struct scsi_eh_save *ses,
 	ses->use_sg = scmd->use_sg;
 	ses->resid = scmd->resid;
 	ses->result = scmd->result;
+	memcpy(&ses->sense_sgl, &scmd->sg_table, sizeof(ses->sense_sgl));
 
 	if (sense_bytes) {
 		scmd->request_bufflen = min_t(unsigned,
 		                       SCSI_SENSE_BUFFERSIZE, sense_bytes);
 		sg_init_one(&ses->sense_sgl, scmd->sense_buffer,
 		                                       scmd->request_bufflen);
-		scmd->request_buffer = &ses->sense_sgl;
+		scmd->sg_table.sgl = &ses->sense_sgl;
+		scmd->sg_table.nents = scmd->sg_table.orig_nents = 1;
 		scmd->sc_data_direction = DMA_FROM_DEVICE;
 		scmd->use_sg = 1;
 		memset(scmd->cmnd, 0, sizeof(scmd->cmnd));
@@ -679,6 +681,7 @@ void scsi_eh_restore_cmnd(struct scsi_cmnd* scmd, struct scsi_eh_save *ses)
 	scmd->request_bufflen = ses->bufflen;
 	scmd->request_buffer = ses->buffer;
 	scmd->use_sg = ses->use_sg;
+	memcpy(&scmd->sg_table, &ses->sg_table, sizeof(scmd->sg_table));
 	scmd->resid = ses->resid;
 	scmd->result = ses->result;
 }
