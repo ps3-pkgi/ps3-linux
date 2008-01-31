@@ -29,7 +29,7 @@
  */
 #define NR_VECTORS 256
 
-#define FIRST_SYSTEM_VECTOR	0xee   /* duplicated in hw_irq.h */
+#define FIRST_SYSTEM_VECTOR	0xef   /* duplicated in hw_irq.h */
 
 #define NR_IRQS (NR_VECTORS + (32 *NR_CPUS))
 #define NR_IRQ_VECTORS NR_IRQS

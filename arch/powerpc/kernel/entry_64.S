@@ -608,10 +608,6 @@ user_work:
 	b	.ret_from_except_lite
 
 1:	bl	.save_nvgprs
-#ifdef CONFIG_PERFMON
-	addi	r3,r1,STACK_FRAME_OVERHEAD
-	bl	.pfm_handle_work
-#endif /* CONFIG_PERFMON */
 	li	r3,0
 	addi	r4,r1,STACK_FRAME_OVERHEAD
 	bl	.do_signal

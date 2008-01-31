@@ -36,7 +36,6 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
-#include <linux/perfmon.h>
 
 #include <linux/mm.h>
 #include <linux/sched.h>
@@ -1202,7 +1201,6 @@ int __cpu_disable(void)
 	fixup_irqs(map);
 	/* It's now safe to remove this processor from the online map */
 	cpu_clear(cpu, cpu_online_map);
-	pfm_cpu_disable();
 	return 0;
 }
 

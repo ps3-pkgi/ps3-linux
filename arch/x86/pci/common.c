@@ -55,7 +55,6 @@ int pcibios_scanned;
  * configuration space.
  */
 DEFINE_SPINLOCK(pci_config_lock);
-EXPORT_SYMBOL(pci_config_lock);
 
 /*
  * Several buggy motherboards address only 16 devices and mirror

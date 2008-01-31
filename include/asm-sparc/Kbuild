@@ -11,4 +11,5 @@ header-y += traps.h
 header-y += vfc_ioctls.h
 
 unifdef-y += fbio.h
+unifdef-y += perfctr.h
 unifdef-y += psr.h

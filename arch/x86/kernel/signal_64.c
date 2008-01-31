@@ -19,7 +19,6 @@
 #include <linux/stddef.h>
 #include <linux/personality.h>
 #include <linux/compiler.h>
-#include <linux/perfmon.h>
 #include <asm/ucontext.h>
 #include <asm/uaccess.h>
 #include <asm/i387.h>
@@ -467,10 +466,6 @@ do_notify_resume(struct pt_regs *regs, void *unused, __u32 thread_info_flags)
 		regs->flags |= X86_EFLAGS_TF;
 		clear_thread_flag(TIF_SINGLESTEP);
 	}
-
-	/* process perfmon asynchronous work (e.g. block thread or reset) */
-	if (thread_info_flags & _TIF_PERFMON_WORK)
-		pfm_handle_work(regs);
 
 #ifdef CONFIG_X86_MCE
 	/* notify userspace of pending MCEs */

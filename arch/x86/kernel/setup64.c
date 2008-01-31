@@ -11,7 +11,6 @@
 #include <linux/bootmem.h>
 #include <linux/bitops.h>
 #include <linux/module.h>
-#include <linux/perfmon.h>
 #include <asm/pda.h>
 #include <asm/pgtable.h>
 #include <asm/processor.h>
@@ -340,6 +339,4 @@ void __cpuinit cpu_init (void)
 	fpu_init(); 
 
 	raw_local_save_flags(kernel_eflags);
-
-	pfm_init_percpu();
 }

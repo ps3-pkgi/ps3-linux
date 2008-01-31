@@ -20,7 +20,6 @@
 #include <linux/unistd.h>
 #include <linux/compiler.h>
 #include <linux/uaccess.h>
-#include <linux/perfmon.h>
 
 #include <asm/abi.h>
 #include <asm/asm.h>
@@ -697,9 +696,6 @@ static void do_signal(struct pt_regs *regs)
 asmlinkage void do_notify_resume(struct pt_regs *regs, void *unused,
 	__u32 thread_info_flags)
 {
-        if (thread_info_flags & _TIF_PERFMON_WORK)
-		pfm_handle_work(regs);
-
 	/* deal with pending signal delivery */
 	if (thread_info_flags & (_TIF_SIGPENDING | _TIF_RESTORE_SIGMASK))
 		do_signal(regs);

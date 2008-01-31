@@ -1588,17 +1588,5 @@ sys_call_table:
 	data8 sys_signalfd
 	data8 sys_timerfd
 	data8 sys_eventfd
-	data8 sys_pfm_create_context		// 1310
-	data8 sys_pfm_write_pmcs
-	data8 sys_pfm_write_pmds
-	data8 sys_pfm_read_pmds
-	data8 sys_pfm_load_context
-	data8 sys_pfm_start			// 1315
-	data8 sys_pfm_stop
-	data8 sys_pfm_restart
-	data8 sys_pfm_create_evtsets
-	data8 sys_pfm_getinfo_evtsets
-	data8 sys_pfm_delete_evtsets		// 1320
-	data8 sys_pfm_unload_context
 
 	.org sys_call_table + 8*NR_syscalls	// guard against failures to increase NR_syscalls

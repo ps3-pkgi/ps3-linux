@@ -19,7 +19,6 @@
 #include <linux/ptrace.h>
 #include <linux/elf.h>
 #include <linux/binfmts.h>
-#include <linux/perfmon.h>
 #include <asm/processor.h>
 #include <asm/ucontext.h>
 #include <asm/uaccess.h>
@@ -664,10 +663,6 @@ void do_notify_resume(struct pt_regs *regs, void *_unused,
 		regs->flags |= TF_MASK;
 		clear_thread_flag(TIF_SINGLESTEP);
 	}
-
-	/* process perfmon asynchronous work (e.g. block thread or reset) */
-	if (thread_info_flags & _TIF_PERFMON_WORK)
-		pfm_handle_work(regs);
 
 	/* deal with pending signal delivery */
 	if (thread_info_flags & (_TIF_SIGPENDING | _TIF_RESTORE_SIGMASK))

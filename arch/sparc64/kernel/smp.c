@@ -860,28 +860,6 @@ int smp_call_function(void (*func)(void *info), void *info,
 				      cpu_online_map);
 }
 
-int smp_call_function_single(int cpu, void (*func) (void *info), void *info,
-			     int nonatomic, int wait)
-{
-	/* prevent preemption and reschedule on another processor */
-	int ret;
-	int me = get_cpu();
-	if (cpu == me) {
-		local_irq_disable();
-		func(info);
-		local_irq_enable();
-		put_cpu();
-		return 0;
-	}
-
-	ret = smp_call_function_mask(func, info, nonatomic, wait,
-				     cpumask_of_cpu(cpu));
-
-	put_cpu();
-	return ret;
-}
-EXPORT_SYMBOL(smp_call_function_single);
-
 void smp_call_function_client(int irq, struct pt_regs *regs)
 {
 	void (*func) (void *info) = call_data->func;

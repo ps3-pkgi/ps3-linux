@@ -33,7 +33,6 @@
 #include <linux/mqueue.h>
 #include <linux/hardirq.h>
 #include <linux/utsname.h>
-#include <linux/perfmon.h>
 
 #include <asm/pgtable.h>
 #include <asm/uaccess.h>
@@ -347,9 +346,6 @@ struct task_struct *__switch_to(struct task_struct *prev,
 		new_thread->start_tb = current_tb;
 	}
 #endif
-	if (test_tsk_thread_flag(new, TIF_PERFMON_CTXSW)
-	    || test_tsk_thread_flag(prev, TIF_PERFMON_CTXSW))
-		pfm_ctxsw(prev, new);
 
 	local_irq_save(flags);
 
@@ -495,7 +491,6 @@ void show_regs(struct pt_regs * regs)
 void exit_thread(void)
 {
 	discard_lazy_cpu_state();
-	pfm_exit_thread(current);
 }
 
 void flush_thread(void)
@@ -614,7 +609,6 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 #else
 	kregs->nip = (unsigned long)ret_from_fork;
 #endif
-	pfm_copy_thread(p);
 
 	return 0;
 }

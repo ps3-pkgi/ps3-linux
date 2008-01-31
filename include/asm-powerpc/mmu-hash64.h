@@ -180,6 +180,7 @@ extern int mmu_vmalloc_psize;
 extern int mmu_io_psize;
 extern int mmu_kernel_ssize;
 extern int mmu_highuser_ssize;
+extern u16 mmu_slb_size;
 
 /*
  * If the processor supports 64k normal pages but not 64k cache
@@ -264,7 +265,7 @@ static inline unsigned long hpt_hash(unsigned long va, unsigned int shift,
 
 extern int __hash_page_4K(unsigned long ea, unsigned long access,
 			  unsigned long vsid, pte_t *ptep, unsigned long trap,
-			  unsigned int local, int ssize);
+			  unsigned int local, int ssize, int subpage_prot);
 extern int __hash_page_64K(unsigned long ea, unsigned long access,
 			   unsigned long vsid, pte_t *ptep, unsigned long trap,
 			   unsigned int local, int ssize);
@@ -277,6 +278,8 @@ extern int hash_huge_page(struct mm_struct *mm, unsigned long access,
 extern int htab_bolt_mapping(unsigned long vstart, unsigned long vend,
 			     unsigned long pstart, unsigned long mode,
 			     int psize, int ssize);
+extern void set_huge_psize(int psize);
+extern void demote_segment_4k(struct mm_struct *mm, unsigned long addr);
 
 extern void htab_initialize(void);
 extern void htab_initialize_secondary(void);

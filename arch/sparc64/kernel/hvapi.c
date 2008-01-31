@@ -36,7 +36,6 @@ static struct api_info api_table[] = {
 	{ .group = HV_GRP_NCS,		.flags = FLAG_PRE_API	},
 	{ .group = HV_GRP_NIAG_PERF,	.flags = FLAG_PRE_API	},
 	{ .group = HV_GRP_FIRE_PERF,				},
-	{ .group = HV_GRP_NIAG2_PERF,				},
 	{ .group = HV_GRP_DIAG,		.flags = FLAG_PRE_API	},
 };
 

@@ -67,9 +67,6 @@ do {									\
 	__mips_mt_fpaff_switch_to(prev);				\
 	if (cpu_has_dsp)						\
 		__save_dsp(prev);					\
-	if (test_tsk_thread_flag(prev, TIF_PERFMON_CTXSW)		\
-	    || test_tsk_thread_flag(next, TIF_PERFMON_CTXSW))		\
-		pfm_ctxsw(prev, next);					\
 	(last) = resume(prev, next, task_thread_info(next));		\
 } while (0)
 

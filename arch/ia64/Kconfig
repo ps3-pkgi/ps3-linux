@@ -351,8 +351,7 @@ config ARCH_SELECT_MEMORY_MODEL
 	def_bool y
 
 config ARCH_DISCONTIGMEM_ENABLE
-	def_bool n
-	depends on NUMA
+	def_bool y
 	help
 	  Say Y to support efficient handling of discontiguous physical memory,
 	  for architectures which are either NUMA (Non-Uniform Memory Access)
@@ -373,7 +372,7 @@ config ARCH_DISCONTIGMEM_DEFAULT
 
 config NUMA
 	bool "NUMA support"
-	depends on !IA64_HP_SIM
+	depends on !IA64_HP_SIM && !FLATMEM
 	default y if IA64_SGI_SN2
 	select ACPI_NUMA if ACPI
 	help
@@ -438,6 +437,14 @@ config COMPAT_FOR_U64_ALIGNMENT
 
 config IA64_MCA_RECOVERY
 	tristate "MCA recovery from errors other than TLB."
+
+config PERFMON
+	bool "Performance monitor support"
+	help
+	  Selects whether support for the IA-64 performance monitor hardware
+	  is included in the kernel.  This makes some kernel data-structures a
+	  little bigger and slows down execution a bit, but it is generally
+	  a good idea to turn this on.  If you're unsure, say Y.
 
 config IA64_PALINFO
 	tristate "/proc/pal support"
@@ -509,8 +516,6 @@ config CRASH_DUMP
 source "drivers/firmware/Kconfig"
 
 source "fs/Kconfig.binfmt"
-
-source "arch/ia64/perfmon/Kconfig"
 
 endmenu
 

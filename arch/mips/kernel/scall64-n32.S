@@ -400,21 +400,8 @@ EXPORT(sysn32_call_table)
 	PTR	sys_ioprio_set
 	PTR	sys_ioprio_get
 	PTR	compat_sys_utimensat
-	PTR	compat_sys_signalfd		/* 6280 */
+	PTR	compat_sys_signalfd		/* 5280 */
 	PTR	compat_sys_timerfd
 	PTR	sys_eventfd
 	PTR	sys_fallocate
-	PTR	sys_pfm_create_context
-	PTR	sys_pfm_write_pmcs		/* 6285 */
-	PTR	sys_pfm_write_pmds
-	PTR	sys_pfm_read_pmds
-	PTR	sys_pfm_load_context
-	PTR	sys_pfm_start
-	PTR	sys_pfm_stop			/* 6290 */
-	PTR	sys_pfm_restart
-	PTR	sys_pfm_create_evtsets
-	PTR	sys_pfm_getinfo_evtsets
-	PTR	sys_pfm_delete_evtsets
-	PTR	sys_pfm_unload_context
-
 	.size	sysn32_call_table,.-sysn32_call_table

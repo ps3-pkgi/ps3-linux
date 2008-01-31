@@ -685,19 +685,12 @@
 #define PV_POWER5	0x003A
 #define PV_POWER5p	0x003B
 #define PV_970FX	0x003C
-#define PV_POWER6	0x003E
 #define PV_630		0x0040
 #define PV_630p	0x0041
 #define PV_970MP	0x0044
 #define PV_970GX	0x0045
 #define PV_BE		0x0070
 #define PV_PA6T		0x0090
-
-/*
- * Number of entries in the SLB. If this ever changes we should handle
- * it with a use a cpu feature fixup.
- */
-#define SLB_NUM_ENTRIES 64
 
 /* Macros for setting and retrieving special purpose registers */
 #ifndef __ASSEMBLY__

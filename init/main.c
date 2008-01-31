@@ -380,8 +380,6 @@ static void __init setup_per_cpu_areas(void)
 
 	/* Copy section for each CPU (we discard the original) */
 	size = ALIGN(PERCPU_ENOUGH_ROOM, PAGE_SIZE);
-	printk(KERN_INFO
-	    "PERCPU: Allocating %lu bytes of per cpu data (main)\n", size);
 	ptr = alloc_bootmem_pages(size * nr_possible_cpus);
 
 	for_each_possible_cpu(i) {

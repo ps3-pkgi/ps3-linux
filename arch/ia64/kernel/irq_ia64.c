@@ -40,6 +40,10 @@
 #include <asm/system.h>
 #include <asm/tlbflush.h>
 
+#ifdef CONFIG_PERFMON
+# include <asm/perfmon.h>
+#endif
+
 #define IRQ_DEBUG	0
 
 #define IRQ_VECTOR_UNASSIGNED	(0)
@@ -574,6 +578,9 @@ init_IRQ (void)
 	register_percpu_irq(IA64_IPI_VECTOR, &ipi_irqaction);
 	register_percpu_irq(IA64_IPI_RESCHEDULE, &resched_irqaction);
 	register_percpu_irq(IA64_IPI_LOCAL_TLB_FLUSH, &tlb_irqaction);
+#endif
+#ifdef CONFIG_PERFMON
+	pfm_init_percpu();
 #endif
 	platform_irq_init();
 }

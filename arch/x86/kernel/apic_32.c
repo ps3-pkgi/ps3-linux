@@ -28,7 +28,6 @@
 #include <linux/acpi_pmtmr.h>
 #include <linux/module.h>
 #include <linux/dmi.h>
-#include <linux/perfmon.h>
 
 #include <asm/atomic.h>
 #include <asm/smp.h>
@@ -620,37 +619,6 @@ int setup_profiling_timer(unsigned int multiplier)
 {
 	return -EINVAL;
 }
-
-/*
- * Setup extended LVT, AMD specific (K8, family 10h)
- *
- * Vector mappings are hard coded. On K8 only offset 0 (APIC500) and
- * MCE interrupts are supported. Thus MCE offset must be set to 0.
- */
-
-#define APIC_EILVT_LVTOFF_MCE 0
-#define APIC_EILVT_LVTOFF_IBS 1
-
-static void setup_APIC_eilvt(u8 lvt_off, u8 vector, u8 msg_type, u8 mask)
-{
-	unsigned long reg = (lvt_off << 4) + APIC_EILVT0;
-	unsigned int  v   = (mask << 16) | (msg_type << 8) | vector;
-	apic_write(reg, v);
-}
-
-u8 setup_APIC_eilvt_mce(u8 vector, u8 msg_type, u8 mask)
-{
-	setup_APIC_eilvt(APIC_EILVT_LVTOFF_MCE, vector, msg_type, mask);
-	return APIC_EILVT_LVTOFF_MCE;
-}
-EXPORT_SYMBOL(setup_APIC_eilvt_mce);
-
-u8 setup_APIC_eilvt_ibs(u8 vector, u8 msg_type, u8 mask)
-{
-	setup_APIC_eilvt(APIC_EILVT_LVTOFF_IBS, vector, msg_type, mask);
-	return APIC_EILVT_LVTOFF_IBS;
-}
-EXPORT_SYMBOL(setup_APIC_eilvt_ibs);
 
 /*
  * Local APIC start and shutdown
@@ -1338,9 +1306,6 @@ void __init apic_intr_init(void)
 	/* thermal monitor LVT interrupt */
 #ifdef CONFIG_X86_MCE_P4THERMAL
 	set_intr_gate(THERMAL_APIC_VECTOR, thermal_interrupt);
-#endif
-#ifdef CONFIG_PERFMON
-	set_intr_gate(LOCAL_PERFMON_VECTOR, pmu_interrupt);
 #endif
 }
 

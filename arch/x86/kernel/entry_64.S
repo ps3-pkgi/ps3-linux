@@ -390,7 +390,7 @@ int_very_careful:
 	jmp int_restore_rest
 	
 int_signal:
-	testl $(_TIF_DO_NOTIFY_MASK|_TIF_SIGPENDING|_TIF_SINGLESTEP|_TIF_MCE_NOTIFY|_TIF_PERFMON_WORK),%edx
+	testl $_TIF_DO_NOTIFY_MASK,%edx
 	jz 1f
 	movq %rsp,%rdi		# &ptregs -> arg1
 	xorl %esi,%esi		# oldset -> arg2
@@ -620,7 +620,7 @@ retint_careful:
 	jmp retint_check
 	
 retint_signal:
-	testl $(_TIF_DO_NOTIFY_MASK|_TIF_SIGPENDING|_TIF_SINGLESTEP|_TIF_MCE_NOTIFY|_TIF_PERFMON_WORK),%edx
+	testl $_TIF_DO_NOTIFY_MASK,%edx
 	jz    retint_swapgs
 	TRACE_IRQS_ON
 	ENABLE_INTERRUPTS(CLBR_NONE)
@@ -712,13 +712,7 @@ END(error_interrupt)
 ENTRY(spurious_interrupt)
 	apicinterrupt SPURIOUS_APIC_VECTOR,smp_spurious_interrupt
 END(spurious_interrupt)
-
-#ifdef CONFIG_PERFMON
-ENTRY(pmu_interrupt)
-	apicinterrupt LOCAL_PERFMON_VECTOR,smp_pmu_interrupt
-END(pmu_interrupt)
-#endif
-
+				
 /*
  * Exception entry points.
  */ 		

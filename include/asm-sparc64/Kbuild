@@ -21,3 +21,4 @@ header-y += utrap.h
 header-y += watchdog.h
 
 unifdef-y += fbio.h
+unifdef-y += perfctr.h
