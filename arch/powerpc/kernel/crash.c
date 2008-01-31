@@ -381,7 +381,6 @@ void default_machine_crash_shutdown(struct pt_regs *regs)
 			desc->chip->disable(i);
 	}
 
-#ifdef CONFIG_DEBUGGER
 	/*
 	 * Call registered shutdown routines savely.  Swap out
 	 * __debugger_fault_handler, and replace on exit.
@@ -402,7 +401,6 @@ void default_machine_crash_shutdown(struct pt_regs *regs)
 		}
 	}
 	__debugger_fault_handler = old_handler;
-#endif
 
 	/*
 	 * Make a note of crashing cpu. Will be used in machine_kexec
