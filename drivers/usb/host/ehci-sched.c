@@ -119,7 +119,8 @@ periodic_usecs (struct ehci_hcd *ehci, unsigned frame, unsigned uframe)
 			q = &q->fstn->fstn_next;
 			break;
 		case Q_TYPE_ITD:
-			usecs += q->itd->usecs [uframe];
+			if (q->itd->hw_transaction[uframe])
+				usecs += q->itd->stream->usecs;
 			hw_p = &q->itd->hw_next;
 			q = &q->itd->itd_next;
 			break;
@@ -211,7 +212,7 @@ static inline void carryover_tt_bandwidth(unsigned short tt_usecs[8])
  * low/fullspeed transfer can "carry over" from one uframe to the next,
  * since the TT just performs downstream transfers in sequence.
  *
- * For example two seperate 100 usec transfers can start in the same uframe,
+ * For example two separate 100 usec transfers can start in the same uframe,
  * and the second one would "carry over" 75 usecs into the next uframe.
  */
 static void
@@ -1536,7 +1537,6 @@ itd_link_urb (
 		uframe = next_uframe & 0x07;
 		frame = next_uframe >> 3;
 
-		itd->usecs [uframe] = stream->usecs;
 		itd_patch(ehci, itd, iso_sched, packet, uframe);
 
 		next_uframe += stream->interval;
@@ -1630,16 +1630,12 @@ itd_complete (
 		BUG_ON (itd->urb == urb);
 	 */
 
-	/* give urb back to the driver ... can be out-of-order */
+	/* give urb back to the driver; completion often (re)submits */
 	dev = urb->dev;
 	ehci_urb_done(ehci, urb, 0);
 	retval = true;
 	urb = NULL;
-
-	/* defer stopping schedule; completion can submit */
 	ehci->periodic_sched--;
-	if (unlikely (!ehci->periodic_sched))
-		(void) disable_periodic (ehci);
 	ehci_to_hcd(ehci)->self.bandwidth_isoc_reqs--;
 
 	if (unlikely (list_empty (&stream->td_list))) {
@@ -1724,8 +1720,6 @@ done:
 		iso_stream_put (ehci, stream);
 	return status;
 }
-
-#ifdef CONFIG_USB_EHCI_SPLIT_ISO
 
 /*-------------------------------------------------------------------------*/
 
@@ -2016,16 +2010,12 @@ sitd_complete (
 		BUG_ON (sitd->urb == urb);
 	 */
 
-	/* give urb back to the driver */
+	/* give urb back to the driver; completion often (re)submits */
 	dev = urb->dev;
 	ehci_urb_done(ehci, urb, 0);
 	retval = true;
 	urb = NULL;
-
-	/* defer stopping schedule; completion can submit */
 	ehci->periodic_sched--;
-	if (!ehci->periodic_sched)
-		(void) disable_periodic (ehci);
 	ehci_to_hcd(ehci)->self.bandwidth_isoc_reqs--;
 
 	if (list_empty (&stream->td_list)) {
@@ -2108,26 +2098,6 @@ done:
 	return status;
 }
 
-#else
-
-static inline int
-sitd_submit (struct ehci_hcd *ehci, struct urb *urb, gfp_t mem_flags)
-{
-	ehci_dbg (ehci, "split iso support is disabled\n");
-	return -ENOSYS;
-}
-
-static inline unsigned
-sitd_complete (
-	struct ehci_hcd		*ehci,
-	struct ehci_sitd	*sitd
-) {
-	ehci_err (ehci, "sitd_complete %p?\n", sitd);
-	return 0;
-}
-
-#endif /* USB_EHCI_SPLIT_ISO */
-
 /*-------------------------------------------------------------------------*/
 
 static void
@@ -2153,17 +2123,9 @@ scan_periodic (struct ehci_hcd *ehci)
 	for (;;) {
 		union ehci_shadow	q, *q_p;
 		__hc32			type, *hw_p;
-		unsigned		uframes;
+		unsigned		incomplete = false;
 
-		/* don't scan past the live uframe */
 		frame = now_uframe >> 3;
-		if (frame == (clock >> 3))
-			uframes = now_uframe & 0x07;
-		else {
-			/* safe to scan the whole frame at once */
-			now_uframe |= 0x07;
-			uframes = 8;
-		}
 
 restart:
 		/* scan each element in frame's queue for completions */
@@ -2201,12 +2163,15 @@ restart:
 				q = q.fstn->fstn_next;
 				break;
 			case Q_TYPE_ITD:
-				/* skip itds for later in the frame */
+				/* If this ITD is still active, leave it for
+				 * later processing ... check the next entry.
+				 */
 				rmb ();
-				for (uf = live ? uframes : 8; uf < 8; uf++) {
+				for (uf = 0; uf < 8 && live; uf++) {
 					if (0 == (q.itd->hw_transaction [uf]
 							& ITD_ACTIVE(ehci)))
 						continue;
+					incomplete = true;
 					q_p = &q.itd->itd_next;
 					hw_p = &q.itd->hw_next;
 					type = Q_NEXT_TYPE(ehci,
@@ -2214,10 +2179,12 @@ restart:
 					q = *q_p;
 					break;
 				}
-				if (uf != 8)
+				if (uf < 8 && live)
 					break;
 
-				/* this one's ready ... HC won't cache the
+				/* Take finished ITDs out of the schedule
+				 * and process them:  recycle, maybe report
+				 * URB completion.  HC won't cache the
 				 * pointer for much longer, if at all.
 				 */
 				*q_p = q.itd->itd_next;
@@ -2228,8 +2195,12 @@ restart:
 				q = *q_p;
 				break;
 			case Q_TYPE_SITD:
+				/* If this SITD is still active, leave it for
+				 * later processing ... check the next entry.
+				 */
 				if ((q.sitd->hw_results & SITD_ACTIVE(ehci))
 						&& live) {
+					incomplete = true;
 					q_p = &q.sitd->sitd_next;
 					hw_p = &q.sitd->hw_next;
 					type = Q_NEXT_TYPE(ehci,
@@ -2237,6 +2208,11 @@ restart:
 					q = *q_p;
 					break;
 				}
+
+				/* Take finished SITDs out of the schedule
+				 * and process them:  recycle, maybe report
+				 * URB completion.
+				 */
 				*q_p = q.sitd->sitd_next;
 				*hw_p = q.sitd->hw_next;
 				type = Q_NEXT_TYPE(ehci, q.sitd->hw_next);
@@ -2252,11 +2228,24 @@ restart:
 			}
 
 			/* assume completion callbacks modify the queue */
-			if (unlikely (modified))
-				goto restart;
+			if (unlikely (modified)) {
+				if (likely(ehci->periodic_sched > 0))
+					goto restart;
+				/* maybe we can short-circuit this scan! */
+				disable_periodic(ehci);
+				now_uframe = clock;
+				break;
+			}
 		}
 
-		/* stop when we catch up to the HC */
+		/* If we can tell we caught up to the hardware, stop now.
+		 * We can't advance our scan without collecting the ISO
+		 * transfers that are still pending in this frame.
+		 */
+		if (incomplete && HC_IS_RUNNING(ehci_to_hcd(ehci)->state)) {
+			ehci->next_uframe = now_uframe;
+			break;
+		}
 
 		// FIXME:  this assumes we won't get lapped when
 		// latencies climb; that should be rare, but...
@@ -2269,7 +2258,8 @@ restart:
 		if (now_uframe == clock) {
 			unsigned	now;
 
-			if (!HC_IS_RUNNING (ehci_to_hcd(ehci)->state))
+			if (!HC_IS_RUNNING (ehci_to_hcd(ehci)->state)
+					|| ehci->periodic_sched == 0)
 				break;
 			ehci->next_uframe = now_uframe;
 			now = ehci_readl(ehci, &ehci->regs->frame_index) % mod;
