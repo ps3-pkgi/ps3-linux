@@ -27,10 +27,10 @@
 #include "page.h"
 #include "ops.h"
 
-extern s64 lv1_panic(u64 in_1);
-extern s64 lv1_get_logical_partition_id(u64 *out_1);
-extern s64 lv1_get_logical_ppe_id(u64 *out_1);
-extern s64 lv1_get_repository_node_value(u64 in_1, u64 in_2, u64 in_3,
+extern int lv1_panic(u64 in_1);
+extern int lv1_get_logical_partition_id(u64 *out_1);
+extern int lv1_get_logical_ppe_id(u64 *out_1);
+extern int lv1_get_repository_node_value(u64 in_1, u64 in_2, u64 in_3,
 	u64 in_4, u64 in_5, u64 *out_1, u64 *out_2);
 
 #ifdef DEBUG
@@ -75,7 +75,7 @@ static void ps3_exit(void)
 
 static int ps3_repository_read_rm_size(u64 *rm_size)
 {
-	s64 result;
+	int result;
 	u64 lpar_id;
 	u64 ppe_id;
 	u64 v2;
@@ -97,9 +97,11 @@ static int ps3_repository_read_rm_size(u64 *rm_size)
 	 * n4: 726d5f73697a6500 : rm_size.
 	*/
 
-	result = lv1_get_repository_node_value(lpar_id, 0x0000000062690000ULL,
-		0x7075000000000000ULL, ppe_id, 0x726d5f73697a6500ULL, rm_size,
-		&v2);
+//	result = lv1_get_repository_node_value(lpar_id, 0x0000000062690000ULL,
+//		0x7075000000000000ULL, ppe_id, 0x726d5f73697a6500ULL, rm_size,
+//		&v2);
+
+	*rm_size = 0x8000000;
 
 	printf("%s:%d: ppe_id  %lu \n", __func__, __LINE__,
 		(unsigned long)ppe_id);
@@ -118,7 +120,7 @@ void ps3_copy_vectors(void)
 	flush_cache((void *)0x100, 0x100);
 }
 
-void platform_init(void)
+void platform_init(u64 null_check)
 {
 	const u32 heapsize = 0x1000000 - (u32)_end; /* 16MiB */
 	void *chosen;
@@ -150,6 +152,10 @@ void platform_init(void)
 	ps3_copy_vectors();
 
 	printf(" flat tree at 0x%lx\n\r", ft_addr);
+
+	if (*(u64 *)0 != null_check)
+		printf(" null check failed: %lx != %lx\n\r", *(u64 *)0,
+			null_check);
 
 	((kernel_entry_t)0)(ft_addr, 0, NULL);
 
