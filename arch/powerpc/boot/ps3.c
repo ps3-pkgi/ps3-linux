@@ -97,11 +97,9 @@ static int ps3_repository_read_rm_size(u64 *rm_size)
 	 * n4: 726d5f73697a6500 : rm_size.
 	*/
 
-//	result = lv1_get_repository_node_value(lpar_id, 0x0000000062690000ULL,
-//		0x7075000000000000ULL, ppe_id, 0x726d5f73697a6500ULL, rm_size,
-//		&v2);
-
-	*rm_size = 0x8000000;
+	result = lv1_get_repository_node_value(lpar_id, 0x0000000062690000ULL,
+		0x7075000000000000ULL, ppe_id, 0x726d5f73697a6500ULL, rm_size,
+		&v2);
 
 	printf("%s:%d: ppe_id  %lu \n", __func__, __LINE__,
 		(unsigned long)ppe_id);
@@ -153,10 +151,16 @@ void platform_init(unsigned long null_check)
 
 	printf(" flat tree at 0x%lx\n\r", ft_addr);
 
-	if (*(unsigned long *)0 != null_check)
-		printf(" null check failed: %lx != %lx\n\r",
+	if (*(unsigned long *)0 != null_check) {
+		char *p;
+
+		printf("null check failed: %lx != %lx\n\r",
 			*(unsigned long *)0,
 			(unsigned long)null_check);
+		for (p = 0; p < 16; p++)
+			printf("%02.2x ", (unsigned int)*p);
+		printf("\n\r");
+	}
 
 	((kernel_entry_t)0)(ft_addr, 0, NULL);
 
