@@ -116,11 +116,11 @@ void ps3_copy_vectors(void)
 {
 	extern char __system_reset_kernel[];
 
-	memcpy((void *)0x100, __system_reset_kernel, 0x100);
-	flush_cache((void *)0x100, 0x100);
+	memcpy((void *)0x100, __system_reset_kernel, 512);
+	flush_cache((void *)0x100, 512);
 }
 
-void platform_init(u64 null_check)
+void platform_init(unsigned long null_check)
 {
 	const u32 heapsize = 0x1000000 - (u32)_end; /* 16MiB */
 	void *chosen;
@@ -153,9 +153,10 @@ void platform_init(u64 null_check)
 
 	printf(" flat tree at 0x%lx\n\r", ft_addr);
 
-	if (*(u64 *)0 != null_check)
-		printf(" null check failed: %lx != %lx\n\r", *(u64 *)0,
-			null_check);
+	if (*(unsigned long *)0 != null_check)
+		printf(" null check failed: %lx != %lx\n\r",
+			*(unsigned long *)0,
+			(unsigned long)null_check);
 
 	((kernel_entry_t)0)(ft_addr, 0, NULL);
 

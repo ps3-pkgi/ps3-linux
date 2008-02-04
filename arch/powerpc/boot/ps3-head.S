@@ -57,12 +57,10 @@ __system_reset_overlay:
 	bctr
 
 1:
-	/*
-	 * Load the dword at address zero into r3 for later comparison to
-	 * check for null pointer writes.
-	 */
+	/* Load r3 for null pointer write check later. */
 
-	ld r3,	0(0)
+	li	r4, 0
+	lwz	r3, 0(r4)
 
 	/* Primary delays then goes to _zimage_start in wrapper. */
 
