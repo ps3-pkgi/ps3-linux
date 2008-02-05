@@ -158,7 +158,7 @@ void platform_init(unsigned long null_check)
 			*(unsigned long *)0,
 			(unsigned long)null_check);
 		for (p = 0; p < 16; p++)
-			printf("%02.2x ", (unsigned int)*p);
+			printf("%2.2x ", (unsigned int)*p);
 		printf("\n\r");
 	}
 

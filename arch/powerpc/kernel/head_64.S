@@ -90,6 +90,7 @@ __secondary_hold_spinloop:
 
 	/* Secondary processors write this value with their cpu # */
 	/* after they enter the spin loop immediately below.	  */
+	. = 0x58
 	.globl	__secondary_hold_acknowledge
 __secondary_hold_acknowledge:
 	.llong	0x0

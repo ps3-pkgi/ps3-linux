@@ -62,10 +62,22 @@ __system_reset_overlay:
 	li	r4, 0
 	lwz	r3, 0(r4)
 
+#if (0)
+	/*
+	 * Primary spins waiting for __secondary_hold_acknowledge,
+	 * then goes to _zimage_start in wrapper.
+	 */
+
+1:	li	r4, 0x58
+	ld	r5, 0(r4)
+	cmpdi	r5, 0
+	beq	1b
+#else
 	/* Primary delays then goes to _zimage_start in wrapper. */
 
 	or	31, 31, 31 /* db16cyc */
 	or	31, 31, 31 /* db16cyc */
+#endif
 
 	lis	r4, _zimage_start@ha
 	addi	r4, r4, _zimage_start@l
