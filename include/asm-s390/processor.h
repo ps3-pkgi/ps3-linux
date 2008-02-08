@@ -78,6 +78,13 @@ extern int get_cpu_capability(unsigned int *);
 
 #endif /* __s390x__ */
 
+#ifdef __KERNEL__
+
+#define STACK_TOP		TASK_SIZE
+#define STACK_TOP_MAX		DEFAULT_TASK_SIZE
+
+#endif
+
 #define HAVE_ARCH_PICK_MMAP_LAYOUT
 
 typedef struct {
@@ -161,6 +168,7 @@ struct stack_frame {
 /* Forward declaration, a strange C thing */
 struct task_struct;
 struct mm_struct;
+struct seq_file;
 
 /* Free all resources held by a thread. */
 extern void release_thread(struct task_struct *);
@@ -177,7 +185,7 @@ extern unsigned long thread_saved_pc(struct task_struct *t);
 /*
  * Print register of task into buffer. Used in fs/proc/array.c.
  */
-extern char *task_show_regs(struct task_struct *task, char *buffer);
+extern void task_show_regs(struct seq_file *m, struct task_struct *task);
 
 extern void show_registers(struct pt_regs *regs);
 extern void show_code(struct pt_regs *regs);

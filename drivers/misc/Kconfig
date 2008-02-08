@@ -13,6 +13,15 @@ menuconfig MISC_DEVICES
 
 if MISC_DEVICES
 
+config ATMEL_PWM
+	tristate "Atmel AT32/AT91 PWM support"
+	depends on AVR32 || ARCH_AT91
+	help
+	  This option enables device driver support for the PWM channels
+	  on certain Atmel prcoessors.  Pulse Width Modulation is used for
+	  purposes including software controlled power-efficent backlights
+	  on LCD displays, motor control, and waveform generation.
+
 config IBM_ASM
 	tristate "Device driver for IBM RSA service processor"
 	depends on X86 && PCI && INPUT && EXPERIMENTAL
@@ -97,9 +106,9 @@ config ACER_WMI
 	depends on X86
 	depends on EXPERIMENTAL
 	depends on ACPI
-	depends on ACPI_WMI
 	depends on LEDS_CLASS
 	depends on BACKLIGHT_CLASS_DEVICE
+	select ACPI_WMI
 	---help---
 	  This is a driver for newer Acer (and Wistron) laptops. It adds
 	  wireless radio and bluetooth control, and on some laptops,
@@ -146,7 +155,7 @@ config TC1100_WMI
 	tristate "HP Compaq TC1100 Tablet WMI Extras"
 	depends on X86 && !X86_64
 	depends on ACPI
-	depends on ACPI_WMI
+	select ACPI_WMI
 	---help---
 	  This is a driver for the WMI extensions (wireless and bluetooth power
 	  control) of the HP Compaq TC1100 tablet.
@@ -279,6 +288,7 @@ config ATMEL_SSC
 config INTEL_MENLOW
 	tristate "Thermal Management driver for Intel menlow platform"
 	depends on ACPI_THERMAL
+	depends on X86
 	---help---
 	  ACPI thermal management enhancement driver on
 	  Intel Menlow platform.
