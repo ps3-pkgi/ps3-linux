@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
-# Linux kernel version: 2.6.24
-# Fri Feb  8 15:11:47 2008
+# Linux kernel version: 2.6.25-rc1
+# Mon Feb 11 12:51:42 2008
 #
 CONFIG_PPC64=y
 
@@ -457,6 +457,7 @@ CONFIG_BLK_DEV_RAM_SIZE=65535
 CONFIG_MISC_DEVICES=y
 # CONFIG_EEPROM_93CX6 is not set
 # CONFIG_ENCLOSURE_SERVICES is not set
+CONFIG_HAVE_IDE=y
 # CONFIG_IDE is not set
 
 #
@@ -920,6 +921,7 @@ CONFIG_USB_MON=y
 # CONFIG_USB_TEST is not set
 # CONFIG_USB_GADGET is not set
 # CONFIG_MMC is not set
+# CONFIG_MEMSTICK is not set
 # CONFIG_NEW_LEDS is not set
 # CONFIG_EDAC is not set
 # CONFIG_RTC_CLASS is not set
@@ -1130,7 +1132,6 @@ CONFIG_DEBUG_INFO=y
 # CONFIG_DEBUG_VM is not set
 CONFIG_DEBUG_LIST=y
 # CONFIG_DEBUG_SG is not set
-CONFIG_FORCED_INLINING=y
 # CONFIG_BOOT_PRINTK_DELAY is not set
 # CONFIG_RCU_TORTURE_TEST is not set
 # CONFIG_BACKTRACE_SELF_TEST is not set
