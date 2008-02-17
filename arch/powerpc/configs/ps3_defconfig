@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
-# Linux kernel version: 2.6.25-rc1
-# Mon Feb 11 12:51:42 2008
+# Linux kernel version: 2.6.25-rc2
+# Sun Feb 17 11:41:08 2008
 #
 CONFIG_PPC64=y
 
@@ -72,9 +72,11 @@ CONFIG_POSIX_MQUEUE=y
 # CONFIG_IKCONFIG is not set
 CONFIG_LOG_BUF_SHIFT=17
 # CONFIG_CGROUPS is not set
+CONFIG_GROUP_SCHED=y
 CONFIG_FAIR_GROUP_SCHED=y
-CONFIG_FAIR_USER_SCHED=y
-# CONFIG_FAIR_CGROUP_SCHED is not set
+# CONFIG_RT_GROUP_SCHED is not set
+CONFIG_USER_SCHED=y
+# CONFIG_CGROUP_SCHED is not set
 CONFIG_SYSFS_DEPRECATED=y
 # CONFIG_RELAY is not set
 CONFIG_NAMESPACES=y
@@ -261,7 +263,6 @@ CONFIG_PROC_DEVICETREE=y
 # CONFIG_CMDLINE_BOOL is not set
 # CONFIG_PM is not set
 # CONFIG_SECCOMP is not set
-# CONFIG_WANT_DEVICE_TREE is not set
 CONFIG_ISA_DMA_API=y
 
 #
