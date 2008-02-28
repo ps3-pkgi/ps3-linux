@@ -703,7 +703,7 @@ static unsigned int ps3_get_irq(void)
 
 	/* check for ipi break first to stop this cpu ASAP */
 
-	if (unlikely(x & pd->bmp.ipi_debug_brk_mask))
+	if (x & pd->bmp.ipi_debug_brk_mask)
 		x &= pd->bmp.ipi_debug_brk_mask;
 
 	asm volatile("cntlzd %0,%1" : "=r" (plug) : "r" (x));
