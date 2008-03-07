@@ -31,6 +31,7 @@
 #include <linux/init.h>
 #include <linux/cpu.h>
 #include <linux/elfcore.h>
+#include <linux/perfmon.h>
 
 #include <asm/oplib.h>
 #include <asm/uaccess.h>
@@ -330,11 +331,7 @@ void exit_thread(void)
 			t->utraps[0]--;
 	}
 
-	if (test_and_clear_thread_flag(TIF_PERFCTR)) {
-		t->user_cntd0 = t->user_cntd1 = NULL;
-		t->pcr_reg = 0;
-		write_pcr(0);
-	}
+	pfm_exit_thread(current);
 }
 
 void flush_thread(void)
@@ -355,13 +352,6 @@ void flush_thread(void)
 		tsb_context_switch(mm);
 
 	set_thread_wsaved(0);
-
-	/* Turn off performance counters if on. */
-	if (test_and_clear_thread_flag(TIF_PERFCTR)) {
-		t->user_cntd0 = t->user_cntd1 = NULL;
-		t->pcr_reg = 0;
-		write_pcr(0);
-	}
 
 	/* Clear FPU register state. */
 	t->fpsaved[0] = 0;
@@ -548,16 +538,6 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 	t->fpsaved[0] = 0;
 
 	if (regs->tstate & TSTATE_PRIV) {
-		/* Special case, if we are spawning a kernel thread from
-		 * a userspace task (via KMOD, NFS, or similar) we must
-		 * disable performance counters in the child because the
-		 * address space and protection realm are changing.
-		 */
-		if (t->flags & _TIF_PERFCTR) {
-			t->user_cntd0 = t->user_cntd1 = NULL;
-			t->pcr_reg = 0;
-			t->flags &= ~_TIF_PERFCTR;
-		}
 		t->kregs->u_regs[UREG_FP] = t->ksp;
 		t->flags |= ((long)ASI_P << TI_FLAG_CURRENT_DS_SHIFT);
 		flush_register_windows();
@@ -594,6 +574,8 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 
 	if (clone_flags & CLONE_SETTLS)
 		t->kregs->u_regs[UREG_G7] = regs->u_regs[UREG_I3];
+
+	pfm_copy_thread(p);
 
 	return 0;
 }

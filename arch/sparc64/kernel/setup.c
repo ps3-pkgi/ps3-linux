@@ -335,9 +335,6 @@ void __init setup_arch(char **cmdline_p)
 
 /* BUFFER is PAGE_SIZE bytes long. */
 
-extern char *sparc_cpu_type;
-extern char *sparc_fpu_type;
-
 extern void smp_info(struct seq_file *);
 extern void smp_bogo(struct seq_file *);
 extern void mmu_info(struct seq_file *);
@@ -352,6 +349,7 @@ static int show_cpuinfo(struct seq_file *m, void *__unused)
 	seq_printf(m, 
 		   "cpu\t\t: %s\n"
 		   "fpu\t\t: %s\n"
+		   "pmu\t\t: %s\n"
 		   "prom\t\t: %s\n"
 		   "type\t\t: %s\n"
 		   "ncpus probed\t: %d\n"
@@ -364,6 +362,7 @@ static int show_cpuinfo(struct seq_file *m, void *__unused)
 		   ,
 		   sparc_cpu_type,
 		   sparc_fpu_type,
+		   sparc_pmu_type,
 		   prom_version,
 		   ((tlb_type == hypervisor) ?
 		    "sun4v" :

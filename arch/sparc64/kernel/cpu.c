@@ -18,16 +18,17 @@
 DEFINE_PER_CPU(cpuinfo_sparc, __cpu_data) = { 0 };
 
 struct cpu_iu_info {
-  short manuf;
-  short impl;
-  char* cpu_name;   /* should be enough I hope... */
+	short manuf;
+	short impl;
+	char *cpu_name;
+	char *pmu_name;
 };
 
 struct cpu_fp_info {
-  short manuf;
-  short impl;
-  char fpu_vers;
-  char* fp_name;
+	short manuf;
+	short impl;
+	char fpu_vers;
+	char* fp_name;
 };
 
 static struct cpu_fp_info linux_sparc_fpu[] = {
@@ -64,6 +65,7 @@ static struct cpu_iu_info linux_sparc_chips[] = {
 
 char *sparc_cpu_type;
 char *sparc_fpu_type;
+char *sparc_pmu_type;
 
 unsigned int fsr_storage;
 
@@ -73,11 +75,13 @@ static void __init sun4v_cpu_probe(void)
 	case SUN4V_CHIP_NIAGARA1:
 		sparc_cpu_type = "UltraSparc T1 (Niagara)";
 		sparc_fpu_type = "UltraSparc T1 integrated FPU";
+		sparc_pmu_type = "niagara";
 		break;
 
 	case SUN4V_CHIP_NIAGARA2:
 		sparc_cpu_type = "UltraSparc T2 (Niagara2)";
 		sparc_fpu_type = "UltraSparc T2 integrated FPU";
+		sparc_pmu_type = "niagara2";
 		break;
 
 	default:
@@ -85,6 +89,7 @@ static void __init sun4v_cpu_probe(void)
 		       prom_cpu_compatible);
 		sparc_cpu_type = "Unknown SUN4V CPU";
 		sparc_fpu_type = "Unknown SUN4V FPU";
+		sparc_pmu_type = "Unknown SUN4V PMU";
 		break;
 	}
 }
@@ -115,6 +120,8 @@ retry:
 			if (linux_sparc_chips[i].impl == impl) {
 				sparc_cpu_type =
 					linux_sparc_chips[i].cpu_name;
+				sparc_pmu_type =
+					linux_sparc_chips[i].pmu_name;
 				break;
 			}
 		}

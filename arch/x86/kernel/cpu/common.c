@@ -5,6 +5,7 @@
 #include <linux/module.h>
 #include <linux/percpu.h>
 #include <linux/bootmem.h>
+#include <linux/perfmon.h>
 #include <asm/semaphore.h>
 #include <asm/processor.h>
 #include <asm/i387.h>
@@ -718,6 +719,8 @@ void __cpuinit cpu_init(void)
 	current_thread_info()->status = 0;
 	clear_used_math();
 	mxcsr_feature_mask_init();
+
+	pfm_init_percpu();
 }
 
 #ifdef CONFIG_HOTPLUG_CPU

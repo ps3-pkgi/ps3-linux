@@ -727,4 +727,16 @@ ia32_sys_call_table:
 	.quad sys32_fallocate
 	.quad compat_sys_timerfd_settime	/* 325 */
 	.quad compat_sys_timerfd_gettime
+	.quad sys_pfm_create_context
+	.quad sys_pfm_write_pmcs
+	.quad sys_pfm_write_pmds
+	.quad sys_pfm_read_pmds		/* 330 */
+	.quad sys_pfm_load_context
+	.quad sys_pfm_start
+	.quad sys_pfm_stop
+	.quad sys_pfm_restart
+	.quad sys_pfm_create_evtsets	/* 335 */
+	.quad sys_pfm_getinfo_evtsets
+	.quad sys_pfm_delete_evtsets
+	.quad sys_pfm_unload_context
 ia32_syscall_end:

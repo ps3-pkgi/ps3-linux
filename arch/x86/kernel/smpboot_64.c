@@ -49,6 +49,7 @@
 #include <linux/mc146818rtc.h>
 #include <linux/smp.h>
 #include <linux/kdebug.h>
+#include <linux/perfmon.h>
 
 #include <asm/mtrr.h>
 #include <asm/pgalloc.h>
@@ -1066,6 +1067,7 @@ int __cpu_disable(void)
 	spin_unlock(&vector_lock);
 	remove_cpu_from_maps();
 	fixup_irqs(cpu_online_map);
+	pfm_cpu_disable();
 	return 0;
 }
 

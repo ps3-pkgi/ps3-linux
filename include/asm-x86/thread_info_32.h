@@ -133,6 +133,7 @@ static inline struct thread_info *current_thread_info(void)
 #define TIF_SECCOMP		7	/* secure computing */
 #define TIF_RESTORE_SIGMASK	8	/* restore signal mask in do_signal() */
 #define TIF_HRTICK_RESCHED	9	/* reprogram hrtick timer */
+#define TIF_PERFMON_WORK	10	/* work for pfm_handle_work() */
 #define TIF_MEMDIE		16
 #define TIF_DEBUG		17	/* uses debug registers */
 #define TIF_IO_BITMAP		18	/* uses I/O bitmap */
@@ -142,6 +143,7 @@ static inline struct thread_info *current_thread_info(void)
 #define TIF_DEBUGCTLMSR		22	/* uses thread_struct.debugctlmsr */
 #define TIF_DS_AREA_MSR 	23      /* uses thread_struct.ds_area_msr */
 #define TIF_BTS_TRACE_TS        24      /* record scheduling event timestamps */
+#define TIF_PERFMON_CTXSW	25	/* perfmon needs ctxsw calls */
 
 #define _TIF_SYSCALL_TRACE	(1<<TIF_SYSCALL_TRACE)
 #define _TIF_SIGPENDING		(1<<TIF_SIGPENDING)
@@ -161,6 +163,8 @@ static inline struct thread_info *current_thread_info(void)
 #define _TIF_DEBUGCTLMSR	(1<<TIF_DEBUGCTLMSR)
 #define _TIF_DS_AREA_MSR	(1<<TIF_DS_AREA_MSR)
 #define _TIF_BTS_TRACE_TS	(1<<TIF_BTS_TRACE_TS)
+#define _TIF_PERFMON_WORK	(1<<TIF_PERFMON_WORK)
+#define _TIF_PERFMON_CTXSW	(1<<TIF_PERFMON_CTXSW)
 
 /* work to do on interrupt/exception return */
 #define _TIF_WORK_MASK \
@@ -172,10 +176,9 @@ static inline struct thread_info *current_thread_info(void)
 /* flags to check in __switch_to() */
 #define _TIF_WORK_CTXSW \
     (_TIF_IO_BITMAP | _TIF_NOTSC | _TIF_DEBUGCTLMSR | \
-     _TIF_DS_AREA_MSR | _TIF_BTS_TRACE_TS)
+     _TIF_DS_AREA_MSR | _TIF_BTS_TRACE_TS | _TIF_PERFMON_CTXSW)
 #define _TIF_WORK_CTXSW_PREV _TIF_WORK_CTXSW
 #define _TIF_WORK_CTXSW_NEXT (_TIF_WORK_CTXSW | _TIF_DEBUG)
-
 
 /*
  * Thread-synchronous status.

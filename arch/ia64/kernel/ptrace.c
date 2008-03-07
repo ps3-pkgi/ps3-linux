@@ -17,6 +17,7 @@
 #include <linux/security.h>
 #include <linux/audit.h>
 #include <linux/signal.h>
+#include <linux/perfmon.h>
 
 #include <asm/pgtable.h>
 #include <asm/processor.h>
@@ -25,9 +26,6 @@
 #include <asm/system.h>
 #include <asm/uaccess.h>
 #include <asm/unwind.h>
-#ifdef CONFIG_PERFMON
-#include <asm/perfmon.h>
-#endif
 
 #include "entry.h"
 
@@ -1120,7 +1118,6 @@ access_uarea (struct task_struct *child, unsigned long addr,
 				"address 0x%lx\n", addr);
 			return -1;
 		}
-#ifdef CONFIG_PERFMON
 		/*
 		 * Check if debug registers are used by perfmon. This
 		 * test must be done once we know that we can do the
@@ -1138,8 +1135,8 @@ access_uarea (struct task_struct *child, unsigned long addr,
 		 * IA64_THREAD_DBG_VALID. The registers are restored
 		 * by the PMU context switch code.
 		 */
-		if (pfm_use_debug_registers(child)) return -1;
-#endif
+		if (pfm_use_dbregs(child))
+			return -1;
 
 		if (!(child->thread.flags & IA64_THREAD_DBG_VALID)) {
 			child->thread.flags |= IA64_THREAD_DBG_VALID;

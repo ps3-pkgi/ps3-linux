@@ -529,4 +529,16 @@ sys_call_table:
 	PTR	sys_timerfd_create
 	PTR	sys_timerfd_gettime
 	PTR	sys_timerfd_settime
+	PTR	sys_pfm_create_context
+	PTR	sys_pfm_write_pmcs		/* 4325 */
+	PTR	sys_pfm_write_pmds
+	PTR	sys_pfm_read_pmds
+	PTR	sys_pfm_load_context
+	PTR	sys_pfm_start
+	PTR	sys_pfm_stop			/* 4330 */
+	PTR	sys_pfm_restart
+	PTR	sys_pfm_create_evtsets
+	PTR	sys_pfm_getinfo_evtsets
+	PTR	sys_pfm_delete_evtsets
+	PTR	sys_pfm_unload_context		/* 4335 */
 	.size	sys_call_table,.-sys_call_table

@@ -334,8 +334,20 @@
 #define __NR_fallocate		314
 #define __NR_timerfd_settime	315
 #define __NR_timerfd_gettime	316
+#define __NR_pfm_create_context 317
+#define __NR_pfm_write_pmcs	318
+#define __NR_pfm_write_pmds	319
+#define __NR_pfm_read_pmds	310
+#define __NR_pfm_load_context	311
+#define __NR_pfm_start		322
+#define __NR_pfm_stop		323
+#define __NR_pfm_restart	324
+#define __NR_pfm_create_evtsets	325
+#define __NR_pfm_getinfo_evtsets 326
+#define __NR_pfm_delete_evtsets	327
+#define __NR_pfm_unload_context	328
 
-#define NR_SYSCALLS		317
+#define NR_SYSCALLS		329
 
 #ifdef __KERNEL__
 /* sysconf options, for SunOS compatibility */

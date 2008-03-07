@@ -27,6 +27,7 @@
 #include <linux/completion.h>
 #include <linux/kallsyms.h>
 #include <linux/random.h>
+#include <linux/perfmon.h>
 
 #include <asm/asm.h>
 #include <asm/bootinfo.h>
@@ -94,6 +95,7 @@ void start_thread(struct pt_regs * regs, unsigned long pc, unsigned long sp)
 
 void exit_thread(void)
 {
+  pfm_exit_thread(current);
 }
 
 void flush_thread(void)
@@ -167,6 +169,8 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 
 	if (clone_flags & CLONE_SETTLS)
 		ti->tp_value = regs->regs[7];
+
+	pfm_copy_thread(p);
 
 	return 0;
 }

@@ -79,8 +79,10 @@ sys_call_table:
 /*295*/	.long sys_fchmodat, sys_faccessat, sys_pselect6, sys_ppoll, sys_unshare
 /*300*/	.long sys_set_robust_list, sys_get_robust_list, sys_migrate_pages, sys_mbind, sys_get_mempolicy
 /*305*/	.long sys_set_mempolicy, sys_kexec_load, sys_move_pages, sys_getcpu, sys_epoll_pwait
-/*310*/	.long sys_utimensat, sys_signalfd, sys_timerfd_create, sys_eventfd, sys_fallocate
-/*315*/	.long sys_timerfd_settime, sys_timerfd_gettime
+/*310*/	.long sys_utimensat, sys_signalfd, sys_timerfd, sys_eventfd, sys_fallocate
+/*315*/	.long sys_timerfd_settime, sys_timerfd_gettime, sys_pfm_create_context, sys_pfm_write_pmcs, sys_pfm_write_pmds
+/*320*/ .long sys_pfm_read_pmds, sys_pfm_load_context, sys_pfm_start, sys_pfm_stop, sys_pfm_restart
+/*325*/	.long sys_pfm_create_evtsets, sys_pfm_getinfo_evtsets, sys_pfm_delete_evtsets, sys_pfm_unload_context
 
 #ifdef CONFIG_SUNOS_EMUL
 	/* Now the SunOS syscall table. */
@@ -199,6 +201,9 @@ sunos_sys_table:
 	.long sunos_nosys
 /*310*/	.long sunos_nosys, sunos_nosys, sunos_nosys
 	.long sunos_nosys, sunos_nosys, sunos_nosys
+	.long sunos_nosys, sunos_nosys, sunos_nosys
 	.long sunos_nosys
-
+/*320*/	.long sunos_nosys, sunos_nosys, sunos_nosys
+	.long sunos_nosys, sunos_nosys, sunos_nosys
+	.long sunos_nosys, sunos_nosys
 #endif
