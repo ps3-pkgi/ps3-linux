@@ -48,7 +48,7 @@ config PERFMON_PPC32
 
 config PERFMON_CELL
 	tristate "Support for Cell hardware performance counters"
-	depends on PERFMON && PPC_CELL
+	depends on PERFMON && PPC_CELL && (PPC_PS3 = n || PS3_LPM)
 	default n
 	help
 	Enables support for the Cell hardware performance counters.
