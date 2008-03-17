@@ -224,33 +224,27 @@ void pfm_arch_restore_pmcs(struct pfm_context *ctx, struct pfm_event_set *set)
 	}
 }
 
-int pfm_arch_ctxsw(struct notifier_block *block,
-                   unsigned long object_id, void *arg)
+struct task_struct *pfm_get_task_by_pid(int pid)
 {
-	struct pfm_arch_pmu_info *arch_info = pfm_pmu_conf->arch_info;
 	struct task_struct *p;
-
-	if (!arch_info->get_pid || !arch_info->ctxsw) {
-		return 0;
-	}
 
 	read_lock(&tasklist_lock);
 
-	p = find_task_by_pid(arch_info->get_pid(arg));
+	p = find_task_by_pid(pid);
 	if (p)
 		get_task_struct(p);
 
 	read_unlock(&tasklist_lock);
 
-	if (!p)
-		return 0;
-
-	arch_info->ctxsw(block, object_id, p, arg);
-
-	put_task_struct(p);
-	return 0;
+	return p;
 }
-EXPORT_SYMBOL_GPL(pfm_arch_ctxsw);
+EXPORT_SYMBOL_GPL(pfm_get_task_by_pid);
+
+void pfm_put_task(struct task_struct *p)
+{
+	put_task_struct(p);
+}
+EXPORT_SYMBOL_GPL(pfm_put_task);
 
 char *pfm_arch_get_pmu_module_name(void)
 {

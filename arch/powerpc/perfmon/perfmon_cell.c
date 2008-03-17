@@ -33,6 +33,7 @@
 #include <asm/rtas.h>
 #include <asm/ps3.h>
 #include <asm/spu.h>
+#include "../platforms/cell/spufs/spufs.h"
 
 MODULE_AUTHOR("Kevin Corry <kevcorry@us.ibm.com>, "
 	      "Carl Love <carll@us.ibm.com>");
@@ -1282,32 +1283,37 @@ static void pfm_prepare_ctxswin_thread(struct pfm_context *ctx, u64 spe_id)
 	spin_unlock(&ctx->lock);
 }
 
+/**
+ * pfm_spe_ctxsw_thread
+ *
+ **/
 static int pfm_spe_ctxsw_thread(struct notifier_block *block,
-				unsigned long object_id,
-				struct task_struct *p, void *arg)
+				unsigned long object_id, void *arg)
 {
+	struct task_struct *p;
 	u64 spe_id;
 
-	if (!p->pfm_context)
-		return 0;
+	p = pfm_get_task_by_pid(((struct spu *)arg)->ctx->tid);
+	if (p) {
+		if (!p->pfm_context) {
+			pfm_put_task(p);
+			return 0;
+		}
 
-	spe_id = pfm_get_spe_id(arg);
-	if (object_id) {
-		PFM_DBG("=== PFM SPE CTXSWIN === 0x%lx", spe_id);
-		pfm_prepare_ctxswin_thread(p->pfm_context, spe_id);
-		pfm_ctxsw(NULL, p);
+		spe_id = pfm_get_spe_id(arg);
+		if (object_id) {
+			PFM_DBG("=== PFM SPE CTXSWIN === 0x%lx", spe_id);
+			pfm_prepare_ctxswin_thread(p->pfm_context, spe_id);
+			pfm_ctxsw(NULL, p);
 
-	} else {
-		PFM_DBG("=== PFM SPE CTXSWOUT === 0x%lx", spe_id);
-		pfm_ctxsw(p, NULL);
+		} else {
+			PFM_DBG("=== PFM SPE CTXSWOUT === 0x%lx", spe_id);
+			pfm_ctxsw(p, NULL);
+		}
+
+		pfm_put_task(p);
 	}
-
 	return 0;
-}
-
-static int pfm_spe_get_pid(void *arg)
-{
-	return ((struct spu *)arg)->pid;
 }
 
 /**
@@ -1329,7 +1335,7 @@ static int pfm_cell_create_context(struct pfm_context *ctx, u32 ctx_flags)
 		if (ctx->ctxsw_notifier.notifier_call)
 			return -EBUSY;
 
-		ctx->ctxsw_notifier.notifier_call = pfm_arch_ctxsw;
+		ctx->ctxsw_notifier.notifier_call = pfm_spe_ctxsw_thread;
 		ctx->ctxsw_notifier.next = NULL;
 		ctx->ctxsw_notifier.priority = 0;
 		ret = spu_switch_event_register(&ctx->ctxsw_notifier);
@@ -1546,8 +1552,6 @@ static struct pfm_cell_platform_pmu_info native_platform_pmu_info = {
 
 static struct pfm_arch_pmu_info pfm_cell_pmu_info = {
 	.pmu_style        = PFM_POWERPC_PMU_CELL,
-	.ctxsw            = pfm_spe_ctxsw_thread,
-	.get_pid          = pfm_spe_get_pid,
 	.acquire_pmu      = pfm_cell_acquire_pmu,
 	.release_pmu      = pfm_cell_release_pmu,
 	.create_context   = pfm_cell_create_context,

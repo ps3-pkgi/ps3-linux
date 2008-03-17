@@ -88,9 +88,6 @@ enum powerpc_pmu_type {
 
 struct pfm_arch_pmu_info {
 	enum powerpc_pmu_type pmu_style;
-	int (*get_pid)(void *arg);
-	int (*ctxsw)(struct notifier_block *block,
-		     unsigned long object_id, struct task_struct *p, void *arg);
 
 	void (*write_pmc)(unsigned int cnum, u64 value);
 	void (*write_pmd)(unsigned int cnum, u64 value);
@@ -430,6 +427,9 @@ static inline void pfm_arch_arm_handle_work(struct task_struct *task)
 static inline void pfm_arch_disarm_handle_work(struct task_struct *task)
 {}
 
+struct task_struct *pfm_get_task_by_pid(int pid);
+void pfm_put_task(struct task_struct *p);
+
 struct pfm_arch_context {
 	/* Cell: Most recent value of the pm_status
 	 * register read by the interrupt handler.
@@ -450,8 +450,6 @@ struct pfm_arch_context {
  */
 #define PFM_ARCH_SMPL_ALIGN_SIZE	0
 
-int pfm_arch_ctxsw(struct notifier_block *block,
-		   unsigned long object_id, void *arg);
 
 #endif /* __KERNEL__ */
 #endif /* _ASM_POWERPC_PERFMON_H_ */
