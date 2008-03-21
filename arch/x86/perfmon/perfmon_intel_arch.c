@@ -238,6 +238,7 @@ static int pfm_intel_arch_probe_pmu(void)
 	if (current_cpu_data.x86 == 6) {
 		switch(current_cpu_data.x86_model) {
 			case 15: /* Merom: use perfmon_intel_core  */
+			case 23: /* Penryn: use perfmon_intel_core */
 				return -1;
 			default:
 				break;

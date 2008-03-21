@@ -175,8 +175,10 @@ static int pfm_core_probe_pmu(void)
 	/*
 	 * Intel Core processors implement DS and PEBS, no need to check
 	 */
-	pfm_core_pmu_info.flags |= PFM_X86_FL_PMU_DS|PFM_X86_FL_PMU_PEBS;
-	PFM_INFO("PEBS supported, enabled");
+	if (cpu_has_pebs) {
+		pfm_core_pmu_info.flags |= PFM_X86_FL_PMU_DS|PFM_X86_FL_PMU_PEBS;
+		PFM_INFO("PEBS supported, enabled");
+	}
 
 	/*
 	 * Core 2 have 40-bit counters (generic, fixed)

@@ -469,6 +469,7 @@ enum ps3_lpm_rights {
  * @PS3_LPM_RIGHTS_USE_TB: Use the lv1 internal trace buffer.  Must have
  *  rights @PS3_LPM_RIGHTS_USE_TB.
  */
+
 enum ps3_lpm_tb_type {
 	PS3_LPM_TB_TYPE_NONE = 0,
 	PS3_LPM_TB_TYPE_INTERNAL = 1,

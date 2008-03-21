@@ -82,7 +82,7 @@ sys_call_table32:
 	.word compat_sys_set_mempolicy, compat_sys_kexec_load, compat_sys_move_pages, sys_getcpu, compat_sys_epoll_pwait
 /*310*/	.word compat_sys_utimensat, compat_sys_signalfd, sys_timerfd_create, sys_eventfd, compat_sys_fallocate
 	.word compat_sys_timerfd_settime, compat_sys_timerfd_gettime, sys_pfm_create_context, sys_pfm_write_pmcs, sys_pfm_write_pmds
-/*320*/ .word sys_pfm_read_pmds, sys_pfm_load_context, sys_pfm_start, sys_pfm_stop, sys_pfm_restart,
+/*320*/ .word sys_pfm_read_pmds, sys_pfm_load_context, sys_pfm_start, sys_pfm_stop, sys_pfm_restart
 	.word sys_pfm_create_evtsets, sys_pfm_getinfo_evtsets, sys_pfm_delete_evtsets, sys_pfm_unload_context
 
 #endif /* CONFIG_COMPAT */
@@ -156,11 +156,10 @@ sys_call_table:
 /*300*/	.word sys_set_robust_list, sys_get_robust_list, sys_migrate_pages, sys_mbind, sys_get_mempolicy
 	.word sys_set_mempolicy, sys_kexec_load, sys_move_pages, sys_getcpu, sys_epoll_pwait
 /*310*/	.word sys_utimensat, sys_signalfd, sys_timerfd_create, sys_eventfd, sys_fallocate
-	.word sys_timerfd_settime, sys_timerfd_gettime, sys_utimensat, sys_signalfd,
-/*320*/ .word sys_timerfd, sys_eventfd, sys_fallocate, sys_pfm_create_context, sys_pfm_write_pmcs,
-	.word sys_pfm_write_pmds, sys_pfm_read_pmds, sys_pfm_load_context, sys_pfm_start, sys_pfm_stop
-/*330*/ .word sys_pfm_restart, sys_pfm_create_evtsets, sys_pfm_getinfo_evtsets, sys_pfm_delete_evtsets
-	.word sys_pfm_unload_context
+	.word sys_timerfd_settime, sys_timerfd_gettime, sys_pfm_create_context, sys_pfm_write_pmcs
+/*320*/	.word sys_pfm_write_pmds, sys_pfm_read_pmds, sys_pfm_load_context, sys_pfm_start, sys_pfm_stop
+	.word sys_pfm_restart, sys_pfm_create_evtsets, sys_pfm_getinfo_evtsets, sys_pfm_delete_evtsets
+/*330*/	.word sys_pfm_unload_context
 
 #if defined(CONFIG_SUNOS_EMUL) || defined(CONFIG_SOLARIS_EMUL) || \
     defined(CONFIG_SOLARIS_EMUL_MODULE)

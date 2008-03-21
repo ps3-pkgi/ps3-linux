@@ -30,10 +30,10 @@ enum sparc_cpu {
 #define ARCH_SUN4C_SUN4 0
 #define ARCH_SUN4 0
 
-extern char reboot_command[];
 extern char *sparc_cpu_type;
 extern char *sparc_fpu_type;
 extern char *sparc_pmu_type;
+extern char reboot_command[];
 
 /* These are here in an effort to more fully work around Spitfire Errata
  * #51.  Essentially, if a memory barrier occurs soon after a mispredicted

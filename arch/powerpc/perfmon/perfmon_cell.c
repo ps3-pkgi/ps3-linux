@@ -609,7 +609,7 @@ static void write_pm07_event(int cpu, unsigned int ctr, u64 value)
 	signal.bus_word = 1 << RTAS_BUS_WORD(value);
 	signal.sub_unit = RTAS_SUB_UNIT(value);
 	signal.signal_group = signal_number / 100;
-	signal.bit = signal_number % 100;
+	signal.bit = abs(signal_number) % 100;
 
 	rc = activate_signals(&signal, 1);
 	if (rc) {
