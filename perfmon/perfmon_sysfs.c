@@ -36,8 +36,8 @@
  * 02111-1307 USA
  */
 #include <linux/kernel.h>
-#include <linux/perfmon.h>
 #include <linux/module.h> /* for EXPORT_SYMBOL */
+#include <linux/perfmon_kern.h>
 
 
 extern void pfm_reset_stats(int cpu);
@@ -54,8 +54,6 @@ struct pfm_attribute attr_##_name = __ATTR_RO(_name)
 
 #define PFM_RW_ATTR(_name,_mode,_show,_store) 			\
 struct pfm_attribute attr_##_name = __ATTR(_name,_mode,_show,_store);
-
-static int pfm_sysfs_init_done;	/* true when pfm_sysfs_init() completed */
 
 int pfm_sysfs_add_pmu(struct pfm_pmu_config *pmu);
 
@@ -127,17 +125,17 @@ static ssize_t version_show(void *info, char *buf)
 
 static ssize_t task_sessions_count_show(void *info, char *buf)
 {
-	return pfm_sysfs_session_show(buf, PAGE_SIZE, 0);
+	return pfm_sysfs_res_show(buf, PAGE_SIZE, 0);
 }
 
 static ssize_t sys_sessions_count_show(void *info, char *buf)
 {
-	return pfm_sysfs_session_show(buf, PAGE_SIZE, 1);
+	return pfm_sysfs_res_show(buf, PAGE_SIZE, 1);
 }
 
 static ssize_t smpl_buffer_mem_cur_show(void *info, char *buf)
 {
-	return pfm_sysfs_session_show(buf, PAGE_SIZE, 2);
+	return pfm_sysfs_res_show(buf, PAGE_SIZE, 2);
 }
 
 static ssize_t debug_show(void *info, char *buf)
@@ -278,6 +276,14 @@ static ssize_t arg_size_store(void *info, const char *buf, size_t sz)
 	return strnlen(buf, PAGE_SIZE);
 }
 
+static int __init enable_debug(char *str)
+{
+	pfm_controls.debug = 1;
+	PFM_INFO("debug output enabled\n");
+	return 1;
+}
+__setup("perfmon_debug", enable_debug);
+
 /*
  * /sys/kernel/perfmon attributes
  */
@@ -351,36 +357,29 @@ int __init pfm_init_sysfs(void)
 {
 	int ret;
 
-	//kobject_init(&pfm_kernel_kobj, &pfm_fmt_ktype);
 	kobject_init(&pfm_kernel_fmt_kobj, &pfm_fmt_ktype);
 
 	ret = kobject_init_and_add(&pfm_kernel_kobj, &ktype_kernel,
 				   kobject_get(kernel_kobj), "perfmon");
 	if (ret) {
-		PFM_INFO("cannot add kernel object: %d", ret);
-		goto error;
+		PFM_ERR("cannot add kernel object: %d", ret);
+		return ret;
 	}
 
 	ret = kobject_add(&pfm_kernel_fmt_kobj, &pfm_kernel_kobj, "%s", "formats");
 	if (ret) {
-		PFM_INFO("cannot add fmt object: %d", ret);
+		PFM_ERR("cannot add fmt object: %d", ret);
 		goto error_fmt;
 	}
 	if (pfm_pmu_conf)
 		pfm_sysfs_add_pmu(pfm_pmu_conf);
-	/*
-	 * must be set before builtin_fmt and
-	 * add_pmu() calls
-	 */
-	pfm_sysfs_init_done = 1;
+
 	pfm_sysfs_builtin_fmt_add();
+
 	return 0;
 
-	kobject_del(&pfm_kernel_fmt_kobj);
 error_fmt:
 	kobject_del(&pfm_kernel_kobj);
-error:
-	pfm_sysfs_init_done = 0;
 	return ret;
 }
 
@@ -477,9 +476,6 @@ int pfm_sysfs_add_fmt(struct pfm_smpl_fmt *fmt)
 {
 	int ret;
 
-	if (pfm_sysfs_init_done == 0)
-		return 0;
-
 	kobject_init(&fmt->kobj, &pfm_fmt_ktype);
 
 	ret = kobject_add(&fmt->kobj, &pfm_kernel_fmt_kobj, "%s", fmt->fmt_name);
@@ -497,15 +493,10 @@ int pfm_sysfs_add_fmt(struct pfm_smpl_fmt *fmt)
  * when a sampling format module is removed, its information
  * must also be removed from sysfs
  */
-int pfm_sysfs_remove_fmt(struct pfm_smpl_fmt *fmt)
+void pfm_sysfs_remove_fmt(struct pfm_smpl_fmt *fmt)
 {
-	if (pfm_sysfs_init_done == 0)
-		return 0;
-
 	sysfs_remove_group(&fmt->kobj, &pfm_fmt_attr_group);
 	kobject_del(&fmt->kobj);
-
-	return 0;
 }
 
 static struct attribute *pfm_reg_attrs[] = {
@@ -638,9 +629,6 @@ int pfm_sysfs_add_pmu(struct pfm_pmu_config *pmu)
 {
 	int ret;
 
-	if (pfm_sysfs_init_done == 0)
-		return 0;
-
 	kobject_init(&pmu->kobj, &pfm_pmu_ktype);
 
 	ret = kobject_add(&pmu->kobj, &pfm_kernel_kobj, "%s", "pmu_desc");
@@ -666,9 +654,6 @@ int pfm_sysfs_add_pmu(struct pfm_pmu_config *pmu)
  */
 int pfm_sysfs_remove_pmu(struct pfm_pmu_config *pmu)
 {
-	if (pfm_sysfs_init_done == 0)
-		return 0;
-
 	pfm_sysfs_del_pmu_regs(pmu);
 	sysfs_remove_group(&pmu->kobj, &pfm_pmu_desc_attr_group);
 	kobject_del(&pmu->kobj);

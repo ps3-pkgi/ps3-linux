@@ -45,7 +45,7 @@
 #include <linux/cpufreq.h>
 #include <linux/kexec.h>
 #include <linux/crash_dump.h>
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 
 #include <asm/ia32.h>
 #include <asm/machvec.h>

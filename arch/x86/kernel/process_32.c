@@ -36,7 +36,7 @@
 #include <linux/personality.h>
 #include <linux/tick.h>
 #include <linux/percpu.h>
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>

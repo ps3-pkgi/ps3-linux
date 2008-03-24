@@ -24,7 +24,7 @@
   */
 #include <linux/interrupt.h>
 #include <linux/module.h>
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 
 /*
  * collect pending overflowed PMDs. Called from pfm_ctxsw()

@@ -36,9 +36,9 @@
  * 02111-1307 USA
  */
 #include <linux/kernel.h>
-#include <linux/perfmon.h>
 #include <linux/fs.h>
 #include <linux/ptrace.h>
+#include <linux/perfmon_kern.h>
 #include <asm/uaccess.h>
 
 /*
@@ -888,7 +888,7 @@ asmlinkage long sys_pfm_unload_context(int fd)
 	}
 
 	if (release_info & 0x1)
-		pfm_release_session(is_system, cpu);
+		pfm_session_release(is_system, cpu);
 error:
 	fput_light(filp, fput_needed);
 	return ret;

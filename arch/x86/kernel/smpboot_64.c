@@ -49,7 +49,7 @@
 #include <linux/mc146818rtc.h>
 #include <linux/smp.h>
 #include <linux/kdebug.h>
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 
 #include <asm/mtrr.h>
 #include <asm/pgalloc.h>

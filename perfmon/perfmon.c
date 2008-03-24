@@ -41,7 +41,7 @@
 #include <linux/vmalloc.h>
 #include <linux/poll.h>
 #include <linux/ptrace.h>
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 #include <linux/cpu.h>
 #include <linux/random.h>
 
@@ -63,39 +63,6 @@ DEFINE_PER_CPU(struct hrtimer, pfm_hrtimer);
 
 int perfmon_disabled;	/* >0 if perfmon is disabled */
 
-/*
- * Reset PMD register flags
- */
-#define PFM_PMD_RESET_NONE	0	/* do not reset (pfm_switch_set) */
-#define PFM_PMD_RESET_SHORT	1	/* use short reset value */
-#define PFM_PMD_RESET_LONG	2	/* use long reset value  */
-
-/*
- * get a new message slot from the queue. If the queue is full NULL
- * is returned and monitoring stops.
- */
-static union pfarg_msg *pfm_get_new_msg(struct pfm_context *ctx)
-{
-	int next;
-
-	next = ctx->msgq_head & PFM_MSGQ_MASK;
-
-	if ((ctx->msgq_head - ctx->msgq_tail) == PFM_MSGS_COUNT)
-		return NULL;
-
-	/*
-	 * move to next possible slot
-	 */
-	ctx->msgq_head++;
-
-	PFM_DBG_ovfl("head=%d tail=%d msg=%d",
-		ctx->msgq_head & PFM_MSGQ_MASK,
-		ctx->msgq_tail & PFM_MSGQ_MASK,
-		next);
-
-	return ctx->msgq+next;
-}
-
 void pfm_context_free(struct pfm_context *ctx)
 {
 	struct pfm_smpl_fmt *fmt;
@@ -108,15 +75,15 @@ void pfm_context_free(struct pfm_context *ctx)
 
 	if (ctx->smpl_addr) {
 		PFM_DBG("freeing sampling buffer @%p size=%zu",
-			ctx->real_smpl_addr,
-			ctx->real_smpl_size);
+			ctx->smpl_real_addr,
+			ctx->smpl_real_size);
 
-		pfm_release_buf_space(ctx, ctx->real_smpl_size);
+		pfm_smpl_buf_space_release(ctx, ctx->smpl_real_size);
 
 		if (fmt->fmt_exit)
 			(*fmt->fmt_exit)(ctx->smpl_addr);
 
-		vfree(ctx->real_smpl_addr);
+		vfree(ctx->smpl_real_addr);
 	}
 
 	PFM_DBG("free ctx @%p", ctx);
@@ -185,11 +152,11 @@ static int pfm_setup_smpl_fmt(struct pfm_smpl_fmt *fmt, void *fmt_arg,
 	return 0;
 
 error_buffer:
-	pfm_release_buf_space(ctx, ctx->real_smpl_size);
+	pfm_smpl_buf_space_release(ctx, ctx->smpl_real_size);
 	/*
 	 * we do not call fmt_exit, if init has failed
 	 */
-	vfree(ctx->real_smpl_addr);
+	vfree(ctx->smpl_real_addr);
 error:
 	return ret;
 }
@@ -285,7 +252,7 @@ int pfm_smpl_buffer_alloc(struct pfm_context *ctx, size_t rsize)
 
 	PFM_DBG("buffer req_size=%zu actual_size=%zu before", rsize, size);
 
-	ret = pfm_reserve_buf_space(real_size);
+	ret = pfm_smpl_buf_space_acquire(ctx, real_size);
 	if (ret)
 		return ret;
 
@@ -321,8 +288,8 @@ int pfm_smpl_buffer_alloc(struct pfm_context *ctx, size_t rsize)
 	/*
 	 * what needs to be freed
 	 */
-	ctx->real_smpl_addr = real_addr;
-	ctx->real_smpl_size = real_size;
+	ctx->smpl_real_addr = real_addr;
+	ctx->smpl_real_size = real_size;
 
 	/*
 	 * what is actually available to user
@@ -335,7 +302,7 @@ int pfm_smpl_buffer_alloc(struct pfm_context *ctx, size_t rsize)
 	return 0;
 unres:
 	PFM_DBG("buffer req_size=%zu actual_size=%zu error", rsize, size);
-	pfm_release_buf_space(ctx, real_size);
+	pfm_smpl_buf_space_release(ctx, real_size);
 	return -ENOMEM;
 }
 
@@ -722,117 +689,7 @@ do_zombie:
 
 	/* always true */
 	if (info & 0x1)
-		pfm_release_session(0, 0);
-}
-
-static int pfm_notify_user(struct pfm_context *ctx)
-{
-	if (ctx->state == PFM_CTX_ZOMBIE) {
-		PFM_DBG("ignoring overflow notification, owner is zombie");
-		return 0;
-	}
-	PFM_DBG_ovfl("waking up somebody");
-
-	wake_up_interruptible(&ctx->msgq_wait);
-
-	/*
-	 * it is safe to call kill_fasync() from an interrupt
-	 * handler. kill_fasync()  grabs two RW locks (fasync_lock,
-	 * tasklist_lock) in read mode. There is conflict only in
-	 * case the PMU interrupt occurs during a write mode critical
-	 * section. This cannot happen because for both locks, the
-	 * write mode is always using interrupt masking (write_lock_irq).
-	 */
-	kill_fasync (&ctx->async_queue, SIGIO, POLL_IN);
-
-	return 0;
-}
-
-/*
- * send a counter overflow notification message to
- * user. First appends the message to the queue, then
- * wake up ay waiter on the file descriptor
- *
- * context is locked and interrupts are disabled (no preemption).
- */
-int pfm_ovfl_notify_user(struct pfm_context *ctx,
-			struct pfm_event_set *set,
-			unsigned long ip)
-{
-	union pfarg_msg *msg = NULL;
-	u64 *ovfl_pmds;
-
-	if (!ctx->flags.no_msg) {
-		msg = pfm_get_new_msg(ctx);
-		if (msg == NULL) {
-			/*
-			 * when message queue fills up it is because the user
-			 * did not extract the message, yet issued
-			 * pfm_restart(). At this point, we stop sending
-			 * notification, thus the user will not be able to get
-			 * new samples when using the default format.
-			 */
-			PFM_DBG_ovfl("no more notification msgs");
-			return -1;
-		}
-
-		msg->pfm_ovfl_msg.msg_type = PFM_MSG_OVFL;
-		msg->pfm_ovfl_msg.msg_ovfl_pid = current->pid;
-		msg->pfm_ovfl_msg.msg_active_set = set->id;
-
-		ovfl_pmds = msg->pfm_ovfl_msg.msg_ovfl_pmds;
-
-		/*
-		 * copy bitmask of all pmd that interrupted last
-		 */
-		bitmap_copy(cast_ulp(ovfl_pmds), cast_ulp(set->ovfl_pmds),
-			    pfm_pmu_conf->regs.max_intr_pmd);
-
-		msg->pfm_ovfl_msg.msg_ovfl_cpu = smp_processor_id();
-		msg->pfm_ovfl_msg.msg_ovfl_tid = current->tgid;
-		msg->pfm_ovfl_msg.msg_ovfl_ip = ip;
-
-		pfm_stats_inc(ovfl_notify_count);
-	}
-
-	PFM_DBG_ovfl("ip=0x%lx o_pmds=0x%llx",
-		     ip,
-		     (unsigned long long)set->ovfl_pmds[0]);
-
-	return pfm_notify_user(ctx);
-}
-
-/*
- * In per-thread mode, when not self-monitoring, perfmon
- * sends a 'end' notification message when the monitored
- * thread where the context is attached is exiting.
- *
- * This helper message alleviate the need to track the activity
- * of the thread/process when it is not directly related, i.e.,
- * was attached vs was forked/execd. In other words, no need
- * to keep the thread ptraced.
- *
- * the context must be locked and interrupts disabled.
- */
-static int pfm_end_notify_user(struct pfm_context *ctx)
-{
-	union pfarg_msg *msg;
-
-	msg = pfm_get_new_msg(ctx);
-	if (msg == NULL) {
-		PFM_ERR("%s no more msgs", __FUNCTION__);
-		return -1;
-	}
-	/* no leak */
-	memset(msg, 0, sizeof(*msg));
-
-	msg->type = PFM_MSG_END;
-
-	PFM_DBG("end msg: msg=%p no_msg=%d",
-		msg,
-		ctx->flags.no_msg);
-
-	return pfm_notify_user(ctx);
+		pfm_session_release(0, 0);
 }
 
 /*
@@ -869,7 +726,7 @@ void __pfm_exit_thread(struct task_struct *task)
 		need_end = ctx->flags.is_self == 0;
 		__pfm_unload_context(ctx, &release_info);
 		if (need_end)
-			pfm_end_notify_user(ctx);
+			pfm_end_notify(ctx);
 		break;
 	case PFM_CTX_ZOMBIE:
 		__pfm_unload_context(ctx, &release_info);
@@ -890,7 +747,7 @@ void __pfm_exit_thread(struct task_struct *task)
 	}
 
 	if (release_info & 0x1)
-		pfm_release_session(0, 0);
+		pfm_session_release(0, 0);
 
 	/*
 	 * All memory free operations (especially for vmalloc'ed memory)
@@ -899,53 +756,6 @@ void __pfm_exit_thread(struct task_struct *task)
 	if (free_ok)
 		pfm_context_free(ctx);
 }
-
-/*
- * CPU hotplug event nofication callback
- *
- * We use the callback to do manage the sysfs interface.
- * Note that the actual shutdown of monitoring on the CPU
- * is done in pfm_cpu_disable(), see comments there for more
- * information.
- */
-static int pfm_cpu_notify(struct notifier_block *nfb,
-			  unsigned long action, void *hcpu)
-{
-	unsigned int cpu = (unsigned long)hcpu;
-	int ret = NOTIFY_OK;
-
-	pfm_pmu_conf_get(0);
-
-	switch (action) {
-	case CPU_ONLINE:
-		pfm_debugfs_add_cpu(cpu);
-		PFM_INFO("CPU%d is online", cpu);
-		break;
-	case CPU_UP_PREPARE:
-		PFM_INFO("CPU%d prepare online", cpu);
-		break;
-	case CPU_UP_CANCELED:
-		pfm_debugfs_del_cpu(cpu);
-		PFM_INFO("CPU%d is up canceled", cpu);
-		break;
-	case CPU_DOWN_PREPARE:
-		PFM_INFO("CPU%d prepare offline", cpu);
-		break;
-	case CPU_DOWN_FAILED:
-		PFM_INFO("CPU%d is down failed", cpu);
-		break;
-	case CPU_DEAD:
-		pfm_debugfs_del_cpu(cpu);
-		PFM_INFO("CPU%d is offline", cpu);
-		break;
-	}
-	pfm_pmu_conf_put();
-	return ret;
-}
-
-static struct notifier_block pfm_cpu_notifier ={
-	.notifier_call = pfm_cpu_notify
-};
 
 /*
  * called from cpu_init() and pfm_pmu_register()
@@ -984,21 +794,17 @@ void __pfm_init_percpu(void *dummy)
  */
 int __init pfm_init(void)
 {
-	int ret;
-
-	PFM_LOG("version %u.%u, compiled: " __DATE__ ", " __TIME__,
-		PFM_VERSION_MAJ, PFM_VERSION_MIN);
+	PFM_LOG("version %u.%u", PFM_VERSION_MAJ, PFM_VERSION_MIN);
 
 	pfm_ctx_cachep = kmem_cache_create("pfm_context",
 				   sizeof(struct pfm_context)+PFM_ARCH_CTX_SIZE,
 				   SLAB_HWCACHE_ALIGN, 0, NULL);
-	if (pfm_ctx_cachep == NULL) {
+	if (!pfm_ctx_cachep) {
 		PFM_ERR("cannot initialize context slab");
 		goto error_disable;
 	}
 
-	ret = pfm_sets_init();
-	if (ret)
+	if (pfm_init_sets())
 		goto error_disable;
 
 	if (pfm_init_fs())
@@ -1016,15 +822,12 @@ int __init pfm_init(void)
 	if (pfm_arch_init())
 		goto error_disable;
 
-	/*
-	 * register CPU hotplug event notifier
-	 */
-	ret = register_cpu_notifier(&pfm_cpu_notifier);
-	if (!ret)
-		return 0;
+	if (pfm_init_hotplug())
+		goto error_disable;
+	return 0;
 
 error_disable:
-	PFM_INFO("perfmon is disabled due to initialization error");
+	PFM_ERR("perfmon is disabled due to initialization error");
 	perfmon_disabled = 1;
 	return -1;
 }
@@ -1454,7 +1257,7 @@ int __pfm_load_context(struct pfm_context *ctx, struct pfarg_load *req,
 	 * now reserve the session, before we can proceed with
 	 * actually accessing the PMU hardware
 	 */
-	ret = pfm_reserve_session(ctx->flags.system, ctx->cpu);
+	ret = pfm_session_acquire(ctx->flags.system, ctx->cpu);
 	if (ret)
 		goto error;
 
@@ -1483,14 +1286,14 @@ int __pfm_load_context(struct pfm_context *ctx, struct pfarg_load *req,
 	} else if (ctx->task != current) {
 		/* force a full reload */
 		ctx->last_act = PFM_INVALID_ACTIVATION;
-		pfm_set_last_cpu(ctx, -1);
+		ctx->last_cpu = -1;
 		set->priv_flags |= PFM_SETFL_PRIV_MOD_BOTH;
 
 		/*
 		 * If cell_spe_follow is true, the task is not marked by
 		 * TIF_PERFMON_CTXSW and pfm_ctxsw() is not called
 		 * from the task scheduler.
-		 * pfm_ctxsw() is called from pfm_spe_ctxsw() in perfmon_cell.c
+		 * pfm_ctxsw() is called from SPU notifier in perfmon_cell.c
 		 *
 		 */
 		if (!ctx->flags.cell_spe_follow) {
@@ -1512,9 +1315,9 @@ int __pfm_load_context(struct pfm_context *ctx, struct pfarg_load *req,
 		if (ctxp)
 			pfm_save_prev_context(ctxp);
 #endif
-		pfm_set_last_cpu(ctx, mycpu);
-		pfm_inc_activation();
-		pfm_set_activation(ctx);
+		ctx->last_cpu = mycpu;
+		__get_cpu_var(pmu_activation_number)++;
+		ctx->last_act = __get_cpu_var(pmu_activation_number);
 
 		ctx->flags.is_self = 1;
 
@@ -1522,7 +1325,7 @@ int __pfm_load_context(struct pfm_context *ctx, struct pfarg_load *req,
 		 * If cell_spe_follow is true, the task is not marked by
 		 * TIF_PERFMON_CTXSW and pfm_ctxsw() is not called
 		 * from the task scheduler.
-		 * pfm_ctxsw() is called from pfm_spe_ctxsw() in perfmon_cell.c
+		 * pfm_ctxsw() is called from SPU notifier in perfmon_cell.c
 		 *
 		 */
 		if (!ctx->flags.cell_spe_follow) {
@@ -1804,7 +1607,7 @@ int __pfm_create_context(struct pfarg_ctx *req,
 	filp->private_data = ctx;
 
 	ctx->last_act = PFM_INVALID_ACTIVATION;
-	pfm_set_last_cpu(ctx, -1);
+	ctx->last_cpu = -1;
 
 	/*
 	 * initialize notification message queue
@@ -1847,49 +1650,4 @@ error_alloc:
 error_conf:
 	pfm_smpl_fmt_put(fmt);
 	return ret;
-}
-
-/*
- * called from cpu_disable() to detach the perfmon context
- * from the CPU going down.
- *
- * We cannot use the cpu hotplug notifier because we MUST run
- * on the CPU that is going down to save the PMU state
- */
-void pfm_cpu_disable(void)
-{
-	struct pfm_context *ctx;
-	unsigned long flags;
-	int is_system, release_info = 0;
-	u32 cpu;
-	int r;
-
-	ctx = __get_cpu_var(pmu_ctx);
-	if (ctx == NULL)
-		return;
-
-	is_system = ctx->flags.system;
-	cpu = ctx->cpu;
-
-	/*
-	 * context is LOADED or MASKED
-	 *
-	 * we unload from CPU. That stops monitoring and does
-	 * all the bookeeping of saving values and updating duration
-	 */
-	pfm_spin_lock_irqsave(&ctx->lock, flags);
-	if (is_system)
-		__pfm_unload_context(ctx, &release_info);
-	pfm_spin_unlock_irqrestore(&ctx->lock, flags);
-
-	/*
-	 * cancel timer
-	 */
-	if (release_info & 0x2) {
-		r = hrtimer_cancel(&__get_cpu_var(pfm_hrtimer));
-		PFM_DBG("timeout cancel=%d", r);
-	}
-
-	if (release_info & 0x1)
-		pfm_release_session(is_system, cpu);
 }

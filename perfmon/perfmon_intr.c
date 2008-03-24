@@ -36,8 +36,8 @@
  * 02111-1307 USA
  */
 #include <linux/kernel.h>
-#include <linux/perfmon.h>
 #include <linux/module.h>
+#include <linux/perfmon_kern.h>
 
 static inline void pfm_mask_monitoring(struct pfm_context *ctx,
 				       struct pfm_event_set *set)
@@ -455,7 +455,7 @@ static void pfm_overflow_handler(struct pfm_context *ctx, struct pfm_event_set *
 		 * Should never happen because queue must be sized
 		 * appropriatly for format
 		 */
-		ret = pfm_ovfl_notify_user(ctx, set_orig, ip);
+		ret = pfm_ovfl_notify(ctx, set_orig, ip);
 		if (unlikely(ret)) {
 			if (ctx->state == PFM_CTX_LOADED)
 				pfm_mask_monitoring(ctx, set);

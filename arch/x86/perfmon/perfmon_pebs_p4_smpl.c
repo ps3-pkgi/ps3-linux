@@ -26,9 +26,9 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/smp.h>
-#include <asm/msr.h>
+#include <linux/perfmon_kern.h>
 
-#include <linux/perfmon.h>
+#include <asm/msr.h>
 #include <asm/perfmon_pebs_p4_smpl.h>
 
 MODULE_AUTHOR("Stephane Eranian <eranian@hpl.hp.com>");

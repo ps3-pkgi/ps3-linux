@@ -28,7 +28,7 @@
 #include <linux/delay.h>
 #include <linux/kdebug.h>
 #include <linux/utsname.h>
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 
 #include <asm/cpu.h>
 #include <asm/delay.h>

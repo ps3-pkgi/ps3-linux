@@ -35,60 +35,65 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
  * 02111-1307 USA
  */
-#include <linux/spinlock.h>
-#include <linux/perfmon.h>
+#include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/perfmon_kern.h>
 
 /*
  * global information about all sessions
  * mostly used to synchronize between system wide and per-process
  */
-struct pfm_sessions {
-	u32		pfs_task_sessions;/* #num loaded per-thread sessions */
-	size_t		pfs_smpl_buffer_mem_cur; /* current smpl buf mem usage */
-	cpumask_t	pfs_sys_cpumask;  /* bitmask of used cpus (system-wide) */
+struct pfm_resources {
+	size_t		smpl_buf_mem_cur;/* current smpl buf mem usage */
+	cpumask_t	sys_cpumask;     /* bitmask of used cpus */
+	u32		thread_sessions; /* #num loaded per-thread sessions */
 };
 
-static struct pfm_sessions pfm_sessions;
+static struct pfm_resources pfm_res;
 
-static __cacheline_aligned_in_smp DEFINE_SPINLOCK(pfm_sessions_lock);
+static __cacheline_aligned_in_smp DEFINE_SPINLOCK(pfm_res_lock);
 
-/*
+/**
+ * pfm_smpl_buf_space_acquire - check memory resource usage for sampling buffer
+ * @ctx: context of interest
+ * @size: size fo requested buffer
+ *
  * sampling buffer allocated by perfmon must be
- * checked against max usage thresholds for security
- * reasons.
+ * checked against max locked memory usage thresholds
+ * for security reasons.
  *
  * The first level check is against the system wide limit
- * as indicated by the system administrator in /proc/sys/kernel/perfmon
+ * as indicated by the system administrator in /sys/kernel/perfmon
  *
  * The second level check is on a per-process basis using
  * RLIMIT_MEMLOCK limit.
  *
  * Operating on the current task only.
  */
-int pfm_reserve_buf_space(size_t size)
+int pfm_smpl_buf_space_acquire(struct pfm_context *ctx, size_t size)
 {
 	struct mm_struct *mm;
 	unsigned long locked;
 	unsigned long buf_mem, buf_mem_max;
 	unsigned long flags;
 
-	pfm_spin_lock_irqsave(&pfm_sessions_lock, flags);
+	pfm_spin_lock_irqsave(&pfm_res_lock, flags);
 
 	/*
 	 * check against global buffer limit
 	 */
 	buf_mem_max = pfm_controls.smpl_buffer_mem_max;
-	buf_mem = pfm_sessions.pfs_smpl_buffer_mem_cur + size;
+	buf_mem = pfm_res.smpl_buf_mem_cur + size;
 
 	if (buf_mem <= buf_mem_max) {
-		pfm_sessions.pfs_smpl_buffer_mem_cur = buf_mem;
+		pfm_res.smpl_buf_mem_cur = buf_mem;
 
 		PFM_DBG("buf_mem_max=%lu current_buf_mem=%lu",
 			buf_mem_max,
 			buf_mem);
 	}
-	pfm_spin_unlock_irqrestore(&pfm_sessions_lock, flags);
+
+	pfm_spin_unlock_irqrestore(&pfm_res_lock, flags);
 
 	if (buf_mem > buf_mem_max) {
 		PFM_DBG("smpl buffer memory threshold reached");
@@ -96,7 +101,7 @@ int pfm_reserve_buf_space(size_t size)
 	}
 
 	/*
-	 * check against RLIMIT_MEMLOCK
+	 * check against per-process RLIMIT_MEMLOCK
 	 */
 	mm = get_task_mm(current);
 
@@ -128,16 +133,19 @@ unres:
 	/*
 	 * remove global buffer memory allocation
 	 */
-	pfm_spin_lock_irqsave(&pfm_sessions_lock, flags);
+	pfm_spin_lock_irqsave(&pfm_res_lock, flags);
 
-	pfm_sessions.pfs_smpl_buffer_mem_cur -= size;
+	pfm_res.smpl_buf_mem_cur -= size;
 
-	pfm_spin_unlock_irqrestore(&pfm_sessions_lock, flags);
+	pfm_spin_unlock_irqrestore(&pfm_res_lock, flags);
 
 	return -ENOMEM;
 }
-/*
- *There exist multiple paths leading to this function. We need to
+/**
+ * pfm_smpl_buf_space_release - release resource usage for sampling buffer
+ * @ctx: perfmon context of interest
+ * 
+ * There exist multiple paths leading to this function. We need to
  * be very careful withlokcing on the mmap_sem as it may already be
  * held by the time we come here.
  * The following paths exist:
@@ -184,7 +192,7 @@ unres:
  * the fact that, there may not have been any mmap() of the sampling buffer
  * (i.e. create_context() followed by close() or exit()).
  *
- * We use a set flag ctx->flags.mmap_nlock which is toggle in the vm_ops
+ * We use a set flag ctx->flags.mmap_nlock which is toggled in the vm_ops
  * callback in remove_vma() which is called systematically for the call, so
  * on all but the pure close() path. The exit path does not already hold
  * the lock but this is exit so there is no task->mm by the time we come here.
@@ -192,7 +200,7 @@ unres:
  * The mmap_nlock is set only when unmapping and this is the LAST reference
  * to the file (i.e., close() followed by munmap()).
  */
-void pfm_release_buf_space(struct pfm_context *ctx, size_t size)
+void pfm_smpl_buf_space_release(struct pfm_context *ctx, size_t size)
 {
 	unsigned long flags;
 	struct mm_struct *mm;
@@ -214,14 +222,23 @@ void pfm_release_buf_space(struct pfm_context *ctx, size_t size)
 		mmput(mm);
 	}
 
-	pfm_spin_lock_irqsave(&pfm_sessions_lock, flags);
+	pfm_spin_lock_irqsave(&pfm_res_lock, flags);
 
-	pfm_sessions.pfs_smpl_buffer_mem_cur -= size;
+	pfm_res.smpl_buf_mem_cur -= size;
 
-	pfm_spin_unlock_irqrestore(&pfm_sessions_lock, flags);
+	pfm_spin_unlock_irqrestore(&pfm_res_lock, flags);
 }
 
-int pfm_reserve_session(int is_system, u32 cpu)
+/**
+ * pfm_session_acquire - reserve a per-thread or per-cpu session
+ * @is_system: true if per-cpu session
+ * @cpu: cpu number for per-cpu session
+ *
+ * return:
+ * 	 0    : success
+ * 	-EBUSY: if conflicting session exist
+ */
+int pfm_session_acquire(int is_system, u32 cpu)
 {
 	unsigned long flags;
 	u32 nsys_cpus;
@@ -230,13 +247,13 @@ int pfm_reserve_session(int is_system, u32 cpu)
 	/*
 	 * validy checks on cpu_mask have been done upstream
 	 */
-	pfm_spin_lock_irqsave(&pfm_sessions_lock, flags);
+	pfm_spin_lock_irqsave(&pfm_res_lock, flags);
 
-	nsys_cpus = cpus_weight(pfm_sessions.pfs_sys_cpumask);
+	nsys_cpus = cpus_weight(pfm_res.sys_cpumask);
 
 	PFM_DBG("in  sys=%u task=%u is_sys=%d cpu=%u",
 		nsys_cpus,
-		pfm_sessions.pfs_task_sessions,
+		pfm_res.thread_sessions,
 		is_system,
 		cpu);
 
@@ -244,14 +261,14 @@ int pfm_reserve_session(int is_system, u32 cpu)
 		/*
 		 * cannot mix system wide and per-task sessions
 		 */
-		if (pfm_sessions.pfs_task_sessions > 0) {
-			PFM_DBG("%u conflicting task_sessions",
-				pfm_sessions.pfs_task_sessions);
+		if (pfm_res.thread_sessions > 0) {
+			PFM_DBG("%u conflicting thread_sessions",
+				pfm_res.thread_sessions);
 			ret = -EBUSY;
 			goto abort;
 		}
 
-		if (cpu_isset(cpu, pfm_sessions.pfs_sys_cpumask)) {
+		if (cpu_isset(cpu, pfm_res.sys_cpumask)) {
 			PFM_DBG("conflicting session on CPU%u", cpu);
 			ret = -EBUSY;
 			goto abort;
@@ -259,68 +276,77 @@ int pfm_reserve_session(int is_system, u32 cpu)
 
 		PFM_DBG("reserved session on CPU%u", cpu);
 
-		cpu_set(cpu, pfm_sessions.pfs_sys_cpumask);
+		cpu_set(cpu, pfm_res.sys_cpumask);
 		nsys_cpus++;
 	} else {
 		if (nsys_cpus) {
 			ret = -EBUSY;
 			goto abort;
 		}
-		pfm_sessions.pfs_task_sessions++;
+		pfm_res.thread_sessions++;
 	}
 
 	PFM_DBG("out sys=%u task=%u is_sys=%d cpu=%u",
 		nsys_cpus,
-		pfm_sessions.pfs_task_sessions,
+		pfm_res.thread_sessions,
 		is_system,
 		cpu);
 
 abort:
-	pfm_spin_unlock_irqrestore(&pfm_sessions_lock, flags);
+	pfm_spin_unlock_irqrestore(&pfm_res_lock, flags);
 
 	return ret;
 }
 
-/*
+/**
+ * pfm_session_release - release a per-cpu or per-thread session
+ * @is_system: true if per-cpu session
+ * @cpu: cpu number for per-cpu session
+ *
  * called from __pfm_unload_context()
  */
-int pfm_release_session(int is_system, u32 cpu)
+void pfm_session_release(int is_system, u32 cpu)
 {
 	unsigned long flags;
 
-	pfm_spin_lock_irqsave(&pfm_sessions_lock, flags);
+	pfm_spin_lock_irqsave(&pfm_res_lock, flags);
 
-	PFM_DBG("in sys_sessions=%u task_sessions=%u syswide=%d cpu=%u",
-		cpus_weight(pfm_sessions.pfs_sys_cpumask),
-		pfm_sessions.pfs_task_sessions,
+	PFM_DBG("in sys_sessions=%u thread_sessions=%u syswide=%d cpu=%u",
+		cpus_weight(pfm_res.sys_cpumask),
+		pfm_res.thread_sessions,
 		is_system, cpu);
 
 	if (is_system)
-		cpu_clear(cpu, pfm_sessions.pfs_sys_cpumask);
+		cpu_clear(cpu, pfm_res.sys_cpumask);
 	else
-		pfm_sessions.pfs_task_sessions--;
+		pfm_res.thread_sessions--;
 
-	PFM_DBG("out sys_sessions=%u task_sessions=%u syswide=%d cpu=%u",
-		cpus_weight(pfm_sessions.pfs_sys_cpumask),
-		pfm_sessions.pfs_task_sessions,
+	PFM_DBG("out sys_sessions=%u thread_sessions=%u syswide=%d cpu=%u",
+		cpus_weight(pfm_res.sys_cpumask),
+		pfm_res.thread_sessions,
 		is_system, cpu);
 
-	pfm_spin_unlock_irqrestore(&pfm_sessions_lock, flags);
-	return 0;
+	pfm_spin_unlock_irqrestore(&pfm_res_lock, flags);
 }
 
-int pfm_reserve_allcpus(void)
+/**
+ * pfm_session_allcpus_acquire - acquire per-cpu sessions on all available cpus
+ *
+ * currently used by Oprofile on X86
+ */
+int pfm_session_allcpus_acquire(void)
 {
 	unsigned long flags;
 	u32 nsys_cpus, cpu;
+	int ret = -EBUSY;
 
-	pfm_spin_lock_irqsave(&pfm_sessions_lock, flags);
+	pfm_spin_lock_irqsave(&pfm_res_lock, flags);
 
-	nsys_cpus = cpus_weight(pfm_sessions.pfs_sys_cpumask);
+	nsys_cpus = cpus_weight(pfm_res.sys_cpumask);
 
 	PFM_DBG("in  sys=%u task=%u",
 		nsys_cpus,
-		pfm_sessions.pfs_task_sessions);
+		pfm_res.thread_sessions);
 
 	if (nsys_cpus) {
 		PFM_DBG("already some system-wide sessions");
@@ -330,90 +356,94 @@ int pfm_reserve_allcpus(void)
 	/*
 	 * cannot mix system wide and per-task sessions
 	 */
-	if (pfm_sessions.pfs_task_sessions) {
-		PFM_DBG("%u conflicting task_sessions",
-		  	pfm_sessions.pfs_task_sessions);
+	if (pfm_res.thread_sessions) {
+		PFM_DBG("%u conflicting thread_sessions",
+			pfm_res.thread_sessions);
 		goto abort;
 	}
 
 	for_each_online_cpu(cpu) {
-		cpu_set(cpu, pfm_sessions.pfs_sys_cpumask);
+		cpu_set(cpu, pfm_res.sys_cpumask);
 		nsys_cpus++;
 	}
 
 	PFM_DBG("out sys=%u task=%u",
 		nsys_cpus,
-		pfm_sessions.pfs_task_sessions);
+		pfm_res.thread_sessions);
 
-	pfm_spin_unlock_irqrestore(&pfm_sessions_lock, flags);
-
-	return 0;
-
+	ret = 0;
 abort:
-	pfm_spin_unlock_irqrestore(&pfm_sessions_lock, flags);
+	pfm_spin_unlock_irqrestore(&pfm_res_lock, flags);
 
-	return -EBUSY;
+	return ret;
 }
-EXPORT_SYMBOL(pfm_reserve_allcpus);
+EXPORT_SYMBOL(pfm_session_allcpus_acquire);
 
-int pfm_release_allcpus(void)
+/**
+ * pfm_session_allcpus_release - relase per-cpu sessions on all cpus
+ *
+ * currently used by Oprofile code
+ */
+void pfm_session_allcpus_release(void)
 {
 	unsigned long flags;
 	u32 nsys_cpus, cpu;
 
-	pfm_spin_lock_irqsave(&pfm_sessions_lock, flags);
+	pfm_spin_lock_irqsave(&pfm_res_lock, flags);
 
-	nsys_cpus = cpus_weight(pfm_sessions.pfs_sys_cpumask);
+	nsys_cpus = cpus_weight(pfm_res.sys_cpumask);
 
 	PFM_DBG("in  sys=%u task=%u",
 		nsys_cpus,
-		pfm_sessions.pfs_task_sessions);
+		pfm_res.thread_sessions);
 
 	/*
 	 * XXX: could use __cpus_clear() with nbits
 	 */
 	for_each_online_cpu(cpu) {
-		cpu_clear(cpu, pfm_sessions.pfs_sys_cpumask);
+		cpu_clear(cpu, pfm_res.sys_cpumask);
 		nsys_cpus--;
 	}
 
 	PFM_DBG("out sys=%u task=%u",
 		nsys_cpus,
-		pfm_sessions.pfs_task_sessions);
+		pfm_res.thread_sessions);
 
-	pfm_spin_unlock_irqrestore(&pfm_sessions_lock, flags);
-
-	return 0;
+	pfm_spin_unlock_irqrestore(&pfm_res_lock, flags);
 }
-EXPORT_SYMBOL(pfm_release_allcpus);
+EXPORT_SYMBOL(pfm_session_allcpus_release);
 
-/*
- * called from perfmon_sysfs.c:
- *  what=0 : pfs_task_sessions
- *  what=1 : cpus_weight(pfs_sys_cpumask)
- *  what=2 : smpl_buffer_mem_cur
- *  what=3 : pmu model name
+/**
+ * pfm_sysfs_res_show - return currnt resourcde usage for sysfs
+ * @buf: buffer to hold string in return
+ * @sz: size of buf
+ * @what: what to produce
+ *        what=0 : thread_sessions
+ *        what=1 : cpus_weight(sys_cpumask)
+ *        what=2 : smpl_buf_mem_cur
+ *        what=3 : pmu model name
  *
+ * called from perfmon_sysfs.c
  * return number of bytes written into buf (up to sz)
  */
-ssize_t pfm_sysfs_session_show(char *buf, size_t sz, int what)
+ssize_t pfm_sysfs_res_show(char *buf, size_t sz, int what)
 {
 	unsigned long flags;
 
-	pfm_spin_lock_irqsave(&pfm_sessions_lock, flags);
+	pfm_spin_lock_irqsave(&pfm_res_lock, flags);
 
 	switch (what) {
-	case 0: snprintf(buf, sz, "%u\n", pfm_sessions.pfs_task_sessions);
+	case 0: snprintf(buf, sz, "%u\n", pfm_res.thread_sessions);
 		break;
-	case 1: snprintf(buf, sz, "%d\n", cpus_weight(pfm_sessions.pfs_sys_cpumask));
+	case 1: snprintf(buf, sz, "%d\n", cpus_weight(pfm_res.sys_cpumask));
 		break;
-	case 2: snprintf(buf, sz, "%zu\n", pfm_sessions.pfs_smpl_buffer_mem_cur);
+	case 2: snprintf(buf, sz, "%zu\n", pfm_res.smpl_buf_mem_cur);
 		break;
 	case 3:
 		snprintf(buf, sz, "%s\n",
 			pfm_pmu_conf ?	pfm_pmu_conf->pmu_name
 				     :	"unknown\n");
 	}
-	pfm_spin_unlock_irqrestore(&pfm_sessions_lock, flags);
+	pfm_spin_unlock_irqrestore(&pfm_res_lock, flags);
 	return strlen(buf);
 }

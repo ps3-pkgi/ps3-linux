@@ -20,7 +20,7 @@
  * 02111-1307 USA
   */
 #include <linux/module.h>
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 
 struct pfm_arch_session {
 	u32	pfs_sys_use_dbr;    /* syswide session uses dbr */

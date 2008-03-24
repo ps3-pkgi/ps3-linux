@@ -34,7 +34,7 @@
 #define FMT_FLAGS	PFM_FMTFL_IS_BUILTIN
 #endif
 
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 #include <asm-ia64/perfmon_default_smpl.h>
 
 MODULE_AUTHOR("Stephane Eranian <eranian@hpl.hp.com>");

@@ -6,7 +6,7 @@
  * Contributed by Stephane Eranian <eranian@hpl.hp.com>
  */
 #include <linux/module.h>
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 #include <asm/nmi.h>
 
 MODULE_AUTHOR("Stephane Eranian <eranian@hpl.hp.com>");

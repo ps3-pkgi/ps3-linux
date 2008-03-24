@@ -24,8 +24,7 @@
 #include <linux/file.h>
 #include <linux/vmalloc.h>
 #include <linux/proc_fs.h>
-#include <linux/perfmon.h>
-#include <asm/perfmon_compat.h>
+#include <linux/perfmon_kern.h>
 #include <asm/uaccess.h>
 
 asmlinkage long sys_pfm_stop(int fd);
@@ -704,7 +703,7 @@ int pfm_smpl_buffer_alloc_compat(struct pfm_context *ctx, size_t rsize,
 error:
 	kmem_cache_free(vm_area_cachep, vma);
 error_kmem:
-	pfm_release_buf_space(ctx, ctx->smpl_size);
+	pfm_smpl_buf_space_release(ctx, ctx->smpl_size);
 	vfree(ctx->smpl_addr);
 	return -ENOMEM;
 }
@@ -1195,7 +1194,7 @@ static void pfm_proc_show_header(struct seq_file *m)
 {
 	char buf[128];
 
-	pfm_sysfs_session_show(buf, sizeof(buf), 3);
+	pfm_sysfs_res_show(buf, sizeof(buf), 3);
 
 	seq_printf(m, "perfmon version            : %u.%u\n",
 		PFM_VERSION_MAJ, PFM_VERSION_MIN);

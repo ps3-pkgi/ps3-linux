@@ -37,7 +37,7 @@
  */
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 
 /*
  * used only in UP mode
@@ -169,9 +169,9 @@ static void __pfm_ctxswin_thread(struct task_struct *task,
 	/*
 	 * record current activation for this context
 	 */
-	pfm_inc_activation();
-	pfm_set_last_cpu(ctx, mycpu);
-	pfm_set_activation(ctx);
+	__get_cpu_var(pmu_activation_number)++;
+	ctx->last_cpu = mycpu;
+	ctx->last_act = __get_cpu_var(pmu_activation_number);
 
 	/*
 	 * establish new ownership.

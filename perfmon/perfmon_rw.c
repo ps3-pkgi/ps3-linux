@@ -37,7 +37,7 @@
  */
 #include <linux/module.h>
 #include <linux/kernel.h>
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 
 #define PFM_REGFL_PMC_ALL	(PFM_REGFL_NO_EMUL64)
 #define PFM_REGFL_PMD_ALL	(PFM_REGFL_RANDOM|PFM_REGFL_OVFL_NOTIFY)
@@ -498,8 +498,19 @@ int __pfm_read_pmds(struct pfm_context *ctx, struct pfarg_pmd *req, int count)
 
 	if (likely(ctx->state == PFM_CTX_LOADED)) {
 		can_access_pmu = __get_cpu_var(pmu_owner) == ctx->task
-			|| ctx->flags.system
-			|| ctx->flags.cell_spe_follow;
+			|| ctx->flags.system;
+
+#ifdef CONFIG_PPC
+		/*
+		 * In the cell_spe_follow mode,
+		 * The target SPU program may run on the other CPU's SPU,
+		 * So pfm_cell_can_access_pmu_in_cell_spe_follow(ctx)
+		 * is used here.
+		 */
+		if (ctx->flags.cell_spe_follow && !ctx->flags.system)
+			can_access_pmu =
+				pfm_cell_can_access_pmu_in_cell_spe_follow(ctx);
+#endif
 
 		if (can_access_pmu)
 			pfm_arch_serialize();

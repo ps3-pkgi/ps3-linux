@@ -36,7 +36,7 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 
 #include <linux/mm.h>
 #include <linux/sched.h>

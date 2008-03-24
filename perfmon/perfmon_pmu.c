@@ -36,7 +36,7 @@
  * 02111-1307 USA
  */
 #include <linux/module.h>
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 
 #ifndef CONFIG_MODULE_UNLOAD
 #define module_refcount(n)	1

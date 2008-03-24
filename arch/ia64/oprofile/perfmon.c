@@ -11,7 +11,7 @@
 #include <linux/oprofile.h>
 #include <linux/sched.h>
 #include <linux/module.h>
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 #include <asm/ptrace.h>
 #include <asm/errno.h>
 

@@ -23,7 +23,7 @@
  * 02111-1307 USA
  */
 #include <linux/module.h>
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 #include <asm/msr.h>
 #include <asm/apic.h>
 #include <asm/nmi.h>

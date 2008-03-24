@@ -22,7 +22,7 @@
 #include <linux/tty.h>
 #include <linux/binfmts.h>
 #include <linux/bitops.h>
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 
 #include <asm/uaccess.h>
 #include <asm/ptrace.h>

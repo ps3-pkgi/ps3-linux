@@ -35,8 +35,8 @@
  * 02111-1307 USA
  */
 #include <linux/kernel.h>
-#include <linux/perfmon.h>
 #include <linux/debugfs.h>
+#include <linux/perfmon_kern.h>
 
 /*
  * to make the statistics visible to user space:

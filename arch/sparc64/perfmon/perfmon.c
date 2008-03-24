@@ -5,8 +5,8 @@
 
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/perfmon.h>
 #include <linux/irq.h>
+#include <linux/perfmon_kern.h>
 
 #include <asm/system.h>
 #include <asm/spitfire.h>

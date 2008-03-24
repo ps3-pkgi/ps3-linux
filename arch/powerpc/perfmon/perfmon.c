@@ -26,8 +26,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/interrupt.h>
-#include <linux/perfmon.h>
-#include <asm/perfmon.h>
+#include <linux/perfmon_kern.h>
 
 static void pfm_stop_active(struct task_struct *task,
 			    struct pfm_context *ctx, struct pfm_event_set *set)
@@ -59,6 +58,7 @@ int pfm_arch_ctxswout_thread(struct task_struct *task,
 			     struct pfm_context *ctx, struct pfm_event_set *set)
 {
 	struct pfm_arch_pmu_info *arch_info = pfm_pmu_conf->arch_info;
+	int need_save_pmds = 1;
 
 	/*
 	 * disable lazy restore of PMC registers.
@@ -68,9 +68,9 @@ int pfm_arch_ctxswout_thread(struct task_struct *task,
 	pfm_stop_active(task, ctx, set);
 
 	if (arch_info->ctxswout_thread)
-		arch_info->ctxswout_thread(task, ctx, set);
+		need_save_pmds = arch_info->ctxswout_thread(task, ctx, set);
 
-	return pfm_arch_is_active(ctx);
+	return (pfm_arch_is_active(ctx) && need_save_pmds);
 }
 
 /*
@@ -168,7 +168,7 @@ void pfm_arch_restore_pmds(struct pfm_context *ctx, struct pfm_event_set *set)
 	 * restore-PMD method.
 	 */
 	if (arch_info->restore_pmds)
-		return arch_info->restore_pmds(set);
+		return arch_info->restore_pmds(ctx, set);
 
 	num = set->nused_pmds;
 	used_pmds = set->used_pmds;
@@ -200,7 +200,7 @@ void pfm_arch_restore_pmcs(struct pfm_context *ctx, struct pfm_event_set *set)
 	 */
 	arch_info = pfm_pmu_conf->arch_info;
 	if (arch_info->restore_pmcs)
-		return arch_info->restore_pmcs(set);
+		return arch_info->restore_pmcs(ctx, set);
 
 	/* The "common" powerpc model's enable the counters simply by writing
 	 * all the control registers. Therefore, if we're masked or stopped we

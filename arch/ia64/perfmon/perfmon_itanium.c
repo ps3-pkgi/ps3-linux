@@ -20,7 +20,7 @@
  * 02111-1307 USA
   */
 #include <linux/module.h>
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 
 MODULE_AUTHOR("Stephane Eranian <eranian@hpl.hp.com>");
 MODULE_DESCRIPTION("Itanium (Merced) PMU description tables");

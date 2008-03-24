@@ -5,7 +5,7 @@
 #include <linux/module.h>
 #include <linux/percpu.h>
 #include <linux/bootmem.h>
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 #include <asm/semaphore.h>
 #include <asm/processor.h>
 #include <asm/i387.h>

@@ -42,14 +42,9 @@
 #include <linux/vfs.h>
 #include <linux/pagemap.h>
 #include <linux/mount.h>
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 
 #define PFMFS_MAGIC 0xa0b4d889	/* perfmon filesystem magic number */
-
-static inline int pfm_msgq_is_empty(struct pfm_context *ctx)
-{
-	return ctx->msgq_head == ctx->msgq_tail;
-}
 
 static int pfmfs_delete_dentry(struct dentry *dentry)
 {
@@ -59,35 +54,6 @@ static int pfmfs_delete_dentry(struct dentry *dentry)
 static struct dentry_operations pfmfs_dentry_operations = {
 	.d_delete = pfmfs_delete_dentry,
 };
-
-static union pfarg_msg *pfm_get_next_msg(struct pfm_context *ctx)
-{
-	union pfarg_msg *msg;
-
-	PFM_DBG_ovfl("in head=%d tail=%d",
-		ctx->msgq_head & PFM_MSGQ_MASK,
-		ctx->msgq_tail & PFM_MSGQ_MASK);
-
-	if (pfm_msgq_is_empty(ctx))
-		return NULL;
-
-	/*
-	 * get oldest message
-	 */
-	msg = ctx->msgq + (ctx->msgq_tail & PFM_MSGQ_MASK);
-
-	/*
-	 * move tail forward
-	 */
-	ctx->msgq_tail++;
-
-	PFM_DBG_ovfl("out head=%d tail=%d type=%d",
-		ctx->msgq_head & PFM_MSGQ_MASK,
-		ctx->msgq_tail & PFM_MSGQ_MASK,
-		msg->type);
-
-	return msg;
-}
 
 static struct page *pfm_buf_map_pagefault(struct vm_area_struct *vma,
 					  unsigned long address, int *type)
@@ -242,7 +208,6 @@ done:
  */
 ssize_t __pfm_read(struct pfm_context *ctx, union pfarg_msg *msg_buf, int non_block)
 {
-	union pfarg_msg *msg;
 	ssize_t ret = 0;
 	unsigned long flags;
 	DECLARE_WAITQUEUE(wait, current);
@@ -298,21 +263,17 @@ ssize_t __pfm_read(struct pfm_context *ctx, union pfarg_msg *msg_buf, int non_bl
 	 * extract message
 	 */
 	if (ret == 0) {
-		msg = pfm_get_next_msg(ctx);
-		BUG_ON(msg == NULL);
-
 		/*
-		 * we must make a local copy before we unlock
-		 * to ensure that the message queue cannot fill
-		 * (overwriting our message) up before
-		 * we do copy_to_user() which cannot be done
-		 * with interrupts masked.
+		 * copy the oldest message into msg_buf.
+		 * We cannot directly call copy_to_user()
+		 * because interrupts masked. This is done
+		 * in the caller
 		 */
-		*msg_buf = *msg;
+		pfm_get_next_msg(ctx, msg_buf);
 
-		ret = sizeof(*msg);
+		ret = sizeof(*msg_buf);
 
-		PFM_DBG("extracted type=%d", msg->type);
+		PFM_DBG("extracted type=%d", msg_buf->type);
 	}
 
 	pfm_spin_unlock_irqrestore(&ctx->lock, flags);
@@ -601,8 +562,10 @@ int __pfm_close(struct pfm_context *ctx, struct file *filp)
 		can_unload = can_free = 0;
 
 		/*
-		 * In the cell spe follow mode, the monitored task will not be
-		 * ZOMBIE. So unload and free the context here.
+		 * In the cell spe follow mode, the monitored task does not notice
+		 * ZOMBIE state because TIF_PERFMON_CTXSW is not set to the task and
+		 * pfm_ctxsw() is not called from the task scheduler.
+		 * So The context is unloaded and freed here.
 		 */
 		if (ctx->flags.cell_spe_follow)
 			can_unload = can_free = 1;
@@ -617,7 +580,7 @@ doit:
 free_it:
 #endif
 	if (can_release)
-		pfm_release_session(is_system, cpu);
+		pfm_session_release(is_system, cpu);
 
 	if (can_free)
 		pfm_context_free(ctx);

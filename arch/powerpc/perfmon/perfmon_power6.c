@@ -23,7 +23,7 @@
  * 02111-1307 USA
  */
 #include <linux/module.h>
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 
 MODULE_AUTHOR("Corey Ashford <cjashfor@us.ibm.com>");
 MODULE_DESCRIPTION("POWER6 PMU description table");
@@ -136,7 +136,8 @@ static int pfm_power6_probe_pmu(void)
 	}
 }
 
-static void pfm_power6_write_pmc(unsigned int cnum, u64 value)
+static void pfm_power6_write_pmc(struct pfm_context *ctx,
+				 unsigned int cnum, u64 value)
 {
 	switch (pfm_pmu_conf->pmc_desc[cnum].hw_addr) {
 	case SPRN_MMCR0:
@@ -153,7 +154,8 @@ static void pfm_power6_write_pmc(unsigned int cnum, u64 value)
 	}
 }
 
-static void pfm_power6_write_pmd(unsigned int cnum, u64 value)
+static void pfm_power6_write_pmd(struct pfm_context *ctx,
+				 unsigned int cnum, u64 value)
 {
 	/* On POWER 6 PMC5 and PMC6 are implemented as 
 	 * virtual counters.  See comment in pfm_power6_pmd_desc 
@@ -249,7 +251,8 @@ void pfm_power6_swrite(struct pfm_context *ctx, unsigned int cnum,
 	}
 }
 
-static u64 pfm_power6_read_pmd(unsigned int cnum)
+static u64 pfm_power6_read_pmd(struct pfm_context *ctx,
+			       unsigned int cnum)
 {
 	switch (pfm_pmu_conf->pmd_desc[cnum].hw_addr) {
 	case SPRN_PMC1:
@@ -302,7 +305,7 @@ static void pfm_power6_enable_counters(struct pfm_context *ctx,
 	   the registers in the reverse order */
 	for (i = max_pmc; i != 0; i--)
 		if (test_bit(i - 1, set->used_pmcs))
-			pfm_power6_write_pmc(i - 1, set->pmcs[i - 1]);
+			pfm_power6_write_pmc(ctx, i - 1, set->pmcs[i - 1]);
 
 	/* save current free running HW event count */
 	pmc5_start_save[cpu_num] = mfspr(SPRN_PMC5);
@@ -389,7 +392,7 @@ static void pfm_power6_get_ovfl_pmds(struct pfm_context *ctx,
 	/* max_intr_pmd is actually the last interrupting pmd register + 1 */
 	for (i = first_intr_pmd; i < max_intr_pmd; i++) {
 		if (test_bit(i, mask)) {
-			new_val = pfm_power6_read_pmd(i);
+			new_val = pfm_power6_read_pmd(ctx, i);
 			if (new_val & width_mask) {
 				set_bit(i, set->povfl_pmds);
 				set->npend_ovfls++;

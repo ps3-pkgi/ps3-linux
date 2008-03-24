@@ -175,4 +175,7 @@ struct pfm_pmu_config {
 int pfm_pmu_register(struct pfm_pmu_config *cfg);
 void pfm_pmu_unregister(struct pfm_pmu_config *cfg);
 
+int pfm_sysfs_remove_pmu(struct pfm_pmu_config *pmu);
+int pfm_sysfs_add_pmu(struct pfm_pmu_config *pmu);
+
 #endif /* __PERFMON_PMU_H__ */

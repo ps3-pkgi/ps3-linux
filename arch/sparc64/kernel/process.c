@@ -31,7 +31,7 @@
 #include <linux/init.h>
 #include <linux/cpu.h>
 #include <linux/elfcore.h>
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 
 #include <asm/oplib.h>
 #include <asm/uaccess.h>

@@ -26,7 +26,7 @@
  * 02111-1307 USA
  */
 #include <linux/module.h>
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 #include <asm/reg.h>
 
 MODULE_AUTHOR("Philip Mucci <mucci@cs.utk.edu>");
@@ -177,7 +177,8 @@ static int pfm_ppc32_probe_pmu(void)
 	return reserve_pmc_hardware(perfmon_perf_irq);
 }
 
-static void pfm_ppc32_write_pmc(unsigned int cnum, u64 value)
+static void pfm_ppc32_write_pmc(struct pfm_context *ctx,
+				unsigned int cnum, u64 value)
 {
 	switch (pfm_pmu_conf->pmc_desc[cnum].hw_addr) {
 	case SPRN_MMCR0:
@@ -194,7 +195,8 @@ static void pfm_ppc32_write_pmc(unsigned int cnum, u64 value)
 	}
 }
 
-static void pfm_ppc32_write_pmd(unsigned int cnum, u64 value)
+static void pfm_ppc32_write_pmd(struct pfm_context *ctx,
+				unsigned int cnum, u64 value)
 {
 	switch (pfm_pmu_conf->pmd_desc[cnum].hw_addr) {
 	case SPRN_PMC1:
@@ -220,7 +222,8 @@ static void pfm_ppc32_write_pmd(unsigned int cnum, u64 value)
 	}
 }
 
-static u64 pfm_ppc32_read_pmd(unsigned int cnum)
+static u64 pfm_ppc32_read_pmd(struct pfm_context *ctx,
+			      unsigned int cnum)
 {
 	switch (pfm_pmu_conf->pmd_desc[cnum].hw_addr) {
 	case SPRN_PMC1:
@@ -254,7 +257,7 @@ static void pfm_ppc32_enable_counters(struct pfm_context *ctx,
 
 	for (i = 0; i < max_pmc; i++)
 		if (test_bit(i, set->used_pmcs))
-			pfm_ppc32_write_pmc(i, set->pmcs[i]);
+			pfm_ppc32_write_pmc(ctx, i, set->pmcs[i]);
 }
 
 /**
@@ -271,7 +274,7 @@ static void pfm_ppc32_disable_counters(struct pfm_context *ctx,
 
 	for (i = 0; i < max; i++)
 		if (test_bit(i, set->used_pmcs))
-			pfm_ppc32_write_pmc(ctx, 0);
+			pfm_ppc32_write_pmc(ctx, i, 0);
 }
 
 /**
@@ -295,7 +298,7 @@ static void pfm_ppc32_get_ovfl_pmds(struct pfm_context *ctx,
 
 	for (i = 0; i < max_pmd; i++) {
 		if (test_bit(i, mask)) {
-			new_val = pfm_ppc32_read_pmd(i);
+			new_val = pfm_ppc32_read_pmd(ctx, i);
 			if (new_val & width_mask) {
 				set_bit(i, set->povfl_pmds);
 				set->npend_ovfls++;

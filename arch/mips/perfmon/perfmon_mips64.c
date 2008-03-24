@@ -23,7 +23,7 @@
  * 02111-1307 USA
  */
 #include <linux/module.h>
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 
 MODULE_AUTHOR("Philip Mucci <mucci@cs.utk.edu>");
 MODULE_DESCRIPTION("MIPS64 PMU description tables");

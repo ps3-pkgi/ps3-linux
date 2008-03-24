@@ -36,7 +36,7 @@
  * 02111-1307 USA
  */
 #include <linux/kernel.h>
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 
 static struct kmem_cache	*pfm_set_cachep;
 
@@ -791,13 +791,12 @@ void pfm_free_sets(struct pfm_context *ctx)
 	}
 }
 
-int pfm_sets_init(void)
+int __init pfm_init_sets(void)
 {
-
 	pfm_set_cachep = kmem_cache_create("pfm_event_set",
 					   sizeof(struct pfm_event_set),
 					   SLAB_HWCACHE_ALIGN, 0, NULL);
-	if (pfm_set_cachep == NULL) {
+	if (!pfm_set_cachep) {
 		PFM_ERR("cannot initialize event set slab");
 		return -ENOMEM;
 	}

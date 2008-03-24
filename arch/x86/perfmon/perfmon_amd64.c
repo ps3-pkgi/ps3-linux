@@ -23,10 +23,11 @@
  * 02111-1307 USA
   */
 #include <linux/module.h>
-#include <linux/perfmon.h>
 #include <linux/vmalloc.h>
 #include <linux/topology.h>
 #include <linux/pci.h>
+#include <linux/perfmon_kern.h>
+
 #include <asm/apic.h>
 
 MODULE_AUTHOR("Stephane Eranian <eranian@hpl.hp.com>");

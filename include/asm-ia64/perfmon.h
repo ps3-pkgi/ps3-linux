@@ -25,319 +25,38 @@
 #ifdef __KERNEL__
 
 /*
- * compatibility for version v2.0 of the interface
+ * arch-specific user visible interface definitions
  */
-#include <asm/perfmon_compat.h>
-#include <asm/delay.h>
+
+#define PFM_ARCH_MAX_PMCS	(256+64)
+#define PFM_ARCH_MAX_PMDS	(256+64)
+
+#define PFM_ARCH_PMD_STK_ARG	8
+#define PFM_ARCH_PMC_STK_ARG	8
 
 /*
- * describe the content of the pfm_syst_info field
- * layout:
+ * Itanium specific context flags
+ *
+ * bits[00-15]: generic flags (see asm/perfmon.h)
+ * bits[16-31]: arch-specific flags
+ */
+#define PFM_ITA_FL_INSECURE 0x10000 /* clear psr.sp on non system, non self-monitoring */
+
+/*
+ * Itanium specific public event set flags (set_flags)
+ *
+ * event set flags layout:
  * bits[00-15] : generic flags
  * bits[16-31] : arch-specific flags
  */
-#define PFM_ITA_CPUINFO_IDLE_EXCL 0x10000 /* stop monitoring in idle loop */
+#define PFM_ITA_SETFL_EXCL_INTR	0x10000	 /* exclude interrupt execution */
+#define PFM_ITA_SETFL_INTR_ONLY	0x20000	 /* include only interrupt execution */
+#define PFM_ITA_SETFL_IDLE_EXCL 0x40000  /* stop monitoring in idle loop */
 
 /*
- * For some CPUs, the upper bits of a counter must be set in order for the
- * overflow interrupt to happen. On overflow, the counter has wrapped around,
- * and the upper bits are cleared. This function may be used to set them back.
+ * compatibility for version v2.0 of the interface
  */
-static inline void pfm_arch_ovfl_reset_pmd(struct pfm_context *ctx, unsigned int cnum)
-{}
+#include <asm/perfmon_compat.h>
 
-static inline int pfm_arch_pmu_config_init(struct pfm_pmu_config *cfg)
-{
-	return 0;
-}
-
-static inline void pfm_arch_pmu_config_remove(void)
-{}
-
-/*
- * called from __pfm_interrupt_handler(). ctx is not NULL.
- * ctx is locked. PMU interrupt is masked.
- *
- * must stop all monitoring to ensure handler has consistent view.
- * must collect overflowed PMDs bitmask  into povfls_pmds and
- * npend_ovfls. If no interrupt detected then npend_ovfls
- * must be set to zero.
- */
-static inline void pfm_arch_intr_freeze_pmu(struct pfm_context *ctx,
-					    struct pfm_event_set *set)
-{
-	u64 tmp;
-
-	/*
-	 * do not overwrite existing value, must
-	 * process those first (coming from context switch replay)
-	 */
-	if (set->npend_ovfls)
-		return;
-
-	ia64_srlz_d();
-
-	tmp =  ia64_get_pmc(0) & ~0xf;
-
-	set->povfl_pmds[0] = tmp;
-
-	set->npend_ovfls = ia64_popcnt(tmp);
-}
-
-static inline int pfm_arch_init_pmu_config(void)
-{
-	return 0;
-}
-
-static inline void pfm_arch_resend_irq(void)
-{
-	ia64_resend_irq(IA64_PERFMON_VECTOR);
-}
-
-static inline void pfm_arch_serialize(void)
-{
-	ia64_srlz_d();
-}
-
-static inline void pfm_arch_intr_unfreeze_pmu(struct pfm_context *ctx)
-{
-	PFM_DBG_ovfl("state=%d", ctx->state);
-	ia64_set_pmc(0, 0);
-	/* no serialization */
-}
-
-static inline void pfm_arch_write_pmc(struct pfm_context *ctx, unsigned int cnum, u64 value)
-{
-	if (cnum < 256) {
-		ia64_set_pmc(pfm_pmu_conf->pmc_desc[cnum].hw_addr, value);
-	} else if (cnum < 264) {
-		ia64_set_ibr(cnum-256, value);
-		ia64_dv_serialize_instruction();
-	} else {
-		ia64_set_dbr(cnum-264, value);
-		ia64_dv_serialize_instruction();
-	}
-}
-
-/*
- * On IA-64, for per-thread context which have the ITA_FL_INSECURE
- * flag, it is possible to start/stop monitoring directly from user evel
- * without calling pfm_start()/pfm_stop. This allows very lightweight
- * control yet the kernel sometimes needs to know if monitoring is actually
- * on or off.
- *
- * Tracking of this information is normally done by pfm_start/pfm_stop
- * in flags.started. Here we need to compensate by checking actual
- * psr bit.
- */
-static inline int pfm_arch_is_active(struct pfm_context *ctx)
-{
-	return ctx->flags.started || ia64_getreg(_IA64_REG_PSR) & (IA64_PSR_UP|IA64_PSR_PP);
-}
-
-static inline void pfm_arch_write_pmd(struct pfm_context *ctx, unsigned int cnum, u64 value)
-{
-	/*
-	 * for a counting PMD, overflow bit must be cleared
-	 */
-	if (pfm_pmu_conf->pmd_desc[cnum].type & PFM_REG_C64)
-		value &= pfm_pmu_conf->ovfl_mask;
-
-	/*
-	 * for counters, write to upper bits are ignored, no need to mask
-	 */
-	ia64_set_pmd(pfm_pmu_conf->pmd_desc[cnum].hw_addr, value);
-}
-
-static inline u64 pfm_arch_read_pmd(struct pfm_context *ctx, unsigned int cnum)
-{
-	return ia64_get_pmd(pfm_pmu_conf->pmd_desc[cnum].hw_addr);
-}
-
-static inline u64 pfm_arch_read_pmc(struct pfm_context *ctx, unsigned int cnum)
-{
-	return ia64_get_pmc(pfm_pmu_conf->pmc_desc[cnum].hw_addr);
-}
-
-static inline void pfm_arch_ctxswout_sys(struct task_struct *task,
-					 struct pfm_context *ctx,
-					 struct pfm_event_set *set)
-{
-	struct pt_regs *regs;
-
-	regs = task_pt_regs(task);
-	ia64_psr(regs)->pp = 0;
-}
-
-static inline void pfm_arch_ctxswin_sys(struct task_struct *task,
-					struct pfm_context *ctx,
-					struct pfm_event_set *set)
-{
-	struct pt_regs *regs;
-
-	if (!(set->flags & PFM_ITA_SETFL_INTR_ONLY)) {
-		regs = task_pt_regs(task);
-		ia64_psr(regs)->pp = 1;
-	}
-}
-
-/*
- * On IA-64, the PMDs are NOT saved by pfm_arch_freeze_pmu()
- * when entering the PMU interrupt handler, thus, we need
- * to save them in pfm_switch_sets_from_intr()
- */
-static inline void pfm_arch_save_pmds_from_intr(struct pfm_context *ctx,
-					   struct pfm_event_set *set)
-{
-	pfm_save_pmds(ctx, set);
-}
-
-int pfm_arch_context_create(struct pfm_context *ctx, u32 ctx_flags);
-
-static inline void pfm_arch_context_free(struct pfm_context *ctx)
-{}
-
-int pfm_arch_ctxswout_thread(struct task_struct *task, struct pfm_context *ctx,
-			     struct pfm_event_set *set);
-void pfm_arch_ctxswin_thread(struct task_struct *task, struct pfm_context *ctx,
-			     struct pfm_event_set *set);
-
-int pfm_arch_unload_context(struct pfm_context *ctx, struct task_struct *task);
-int pfm_arch_load_context(struct pfm_context *ctx, struct pfm_event_set *set,
-			  struct task_struct *task);
-int pfm_arch_setfl_sane(struct pfm_context *ctx, u32 flags);
-
-void pfm_arch_mask_monitoring(struct pfm_context *ctx, struct pfm_event_set *set);
-void pfm_arch_unmask_monitoring(struct pfm_context *ctx, struct pfm_event_set *set);
-
-void pfm_arch_restore_pmds(struct pfm_context *ctx, struct pfm_event_set *set);
-void pfm_arch_restore_pmcs(struct pfm_context *ctx, struct pfm_event_set *set);
-
-void pfm_arch_stop(struct task_struct *task, struct pfm_context *ctx,
-		   struct pfm_event_set *set);
-void pfm_arch_start(struct task_struct *task, struct pfm_context *ctx,
-		    struct pfm_event_set *set);
-
-int  pfm_arch_init(void);
-void pfm_arch_init_percpu(void);
-char *pfm_arch_get_pmu_module_name(void);
-
-int __pfm_use_dbregs(struct task_struct *task);
-int  __pfm_release_dbregs(struct task_struct *task);
-int pfm_ia64_mark_dbregs_used(struct pfm_context *ctx,
-			      struct pfm_event_set *set);
-
-void pfm_arch_show_session(struct seq_file *m);
-
-static inline int pfm_arch_pmu_acquire(void)
-{
-	return 0;
-}
-
-static inline void pfm_arch_pmu_release(void)
-{}
-
-/* not necessary on IA-64 */
-static inline void pfm_cacheflush(void *addr, unsigned int len)
-{}
-
-/*
- * miscellaneous architected definitions
- */
-#define PFM_ITA_FCNTR	4 /* first counting monitor (PMC/PMD) */
-
-/*
- * private event set flags  (set_priv_flags)
- */
-#define PFM_ITA_SETFL_USE_DBR	0x1000000 /* set uses debug registers */
-
-
-/*
- * Itanium-specific data structures
- */
-struct pfm_ia64_context_flags {
-	unsigned int use_dbr:1;	 /* use range restrictions (debug registers) */
-	unsigned int insecure:1; /* insecure monitoring for non-self session */
-	unsigned int reserved:30;/* for future use */
-};
-
-struct pfm_arch_context {
-	struct pfm_ia64_context_flags flags;	/* arch specific ctx flags */
-	u64			 ctx_saved_psr_up;/* storage for ctxsw psr_up */
-#ifdef CONFIG_IA64_PERFMON_COMPAT
-	void			*ctx_smpl_vaddr; /* vaddr of user mapping */
-#endif
-};
-
-#ifdef CONFIG_IA64_PERFMON_COMPAT
-ssize_t pfm_arch_compat_read(struct pfm_context *ctx,
-			     char __user *buf,
-			     int non_block,
-			     size_t size);
-int pfm_ia64_compat_init(void);
-int pfm_smpl_buffer_alloc_compat(struct pfm_context *ctx,
-			         size_t rsize, struct file *filp);
-#else
-static inline ssize_t pfm_arch_compat_read(struct pfm_context *ctx,
-			     char __user *buf,
-			     int non_block,
-			     size_t size)
-{
-	return -EINVAL;
-}
-
-static inline int pfm_smpl_buffer_alloc_compat(struct pfm_context *ctx,
-					       size_t rsize, struct file *filp)
-{
-	return -EINVAL;
-}
-#endif
-
-static inline void pfm_arch_arm_handle_work(struct task_struct *task)
-{
-	/*
-	 * On IA-64, we ran out of bits in the bottom 7 bits of the threadinfo bitmask.
-	 * Thus we used a 2-stage approach by piggybacking on NOTIFY_RESUME and then in
-	 * do_notify_resume() we demultiplex and call pfm_handle_work() if needed
-	 */
-	set_tsk_thread_flag(task, TIF_NOTIFY_RESUME);
-}
-
-static inline void pfm_arch_disarm_handle_work(struct task_struct *task)
-{
-	/*
-	 * we cannot just clear TIF_NOTIFY_RESUME because other TIF flags are piggybacked
-	 * onto it: TIF_PERFMON_WORK, TIF_RESTORE_RSE
-	 *
-	 * The tsk_clear_notify_resume() checks if any of those are set before clearing the
-	 * bit
-	 */
-	tsk_clear_notify_resume(task);
-}
-
-extern struct pfm_ia64_pmu_info *pfm_ia64_pmu_info;
-
-#define PFM_ARCH_CTX_SIZE	(sizeof(struct pfm_arch_context))
-
-/*
- * IA-64 does not need extra alignment requirements for the sampling buffer
- */
-#define PFM_ARCH_SMPL_ALIGN_SIZE	0
-
-
-static inline void pfm_release_dbregs(struct task_struct *task)
-{
-	if (task->thread.flags & IA64_THREAD_DBG_VALID)
-		__pfm_release_dbregs(task);
-}
-
-#define pfm_use_dbregs(_t)     __pfm_use_dbregs(_t)
-
-
-struct pfm_arch_pmu_info {
-	unsigned long mask_pmcs[PFM_PMC_BV]; /* PMC to modify when masking monitoring */
-};
-
-DECLARE_PER_CPU(u32, pfm_syst_info);
 #endif /* __KERNEL__ */
 #endif /* _ASM_IA64_PERFMON_H_ */

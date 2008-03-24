@@ -22,7 +22,7 @@
  * 02111-1307 USA
  */
 #include <linux/interrupt.h>
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 #include <linux/kprobes.h>
 #include <linux/kdebug.h>
 
@@ -1444,7 +1444,7 @@ void pfm_arch_pmu_release(void)
 	on_each_cpu(pfm_arch_pmu_release_percpu, NULL , 0, 1);
 }
 
-int pfm_arch_init(void)
+int __init pfm_arch_init(void)
 {
 	/*
 	 * we need to register our NMI handler when the kernels boots

@@ -25,7 +25,7 @@
 #include <linux/init.h>
 #include <linux/smp.h>
 
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 #include <linux/perfmon_dfl_smpl.h>
 
 MODULE_AUTHOR("Stephane Eranian <eranian@hpl.hp.com>");

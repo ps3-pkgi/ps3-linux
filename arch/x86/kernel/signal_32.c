@@ -19,7 +19,7 @@
 #include <linux/ptrace.h>
 #include <linux/elf.h>
 #include <linux/binfmts.h>
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 #include <asm/processor.h>
 #include <asm/ucontext.h>
 #include <asm/uaccess.h>

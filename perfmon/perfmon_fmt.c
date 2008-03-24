@@ -36,7 +36,7 @@
  * 02111-1307 USA
  */
 #include <linux/module.h>
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 
 static __cacheline_aligned_in_smp DEFINE_SPINLOCK(pfm_smpl_fmt_lock);
 static LIST_HEAD(pfm_smpl_fmt_list);
@@ -202,9 +202,9 @@ EXPORT_SYMBOL(pfm_fmt_unregister);
 /*
  * we defer adding the builtin formats to /sys/kernel/perfmon/formats
  * until after the pfm sysfs subsystem is initialized. This function
- * is called from pfm_sysfs_init()
+ * is called from pfm_init_sysfs()
  */
-void pfm_sysfs_builtin_fmt_add(void)
+void __init pfm_sysfs_builtin_fmt_add(void)
 {
 	struct pfm_smpl_fmt * entry;
 

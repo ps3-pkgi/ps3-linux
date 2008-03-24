@@ -23,16 +23,6 @@
 
 #include <linux/kobject.h>
 
-struct pfm_ovfl_arg {
-	u16 ovfl_pmd;	/* index of overflowed PMD  */
-	u16 active_set;	/* set active at the time of the overflow */
-	u32 ovfl_ctrl;	/* control flags */
-	u64 pmd_last_reset;	/* last reset value of overflowed PMD */
-	u64 smpl_pmds_values[PFM_MAX_PMDS]; 	/* values of other PMDs */
-	u64 pmd_eventid;	/* eventid associated with PMD */
-	u16 num_smpl_pmds;	/* number of PMDS in smpl_pmd_values */
-};
-
 /*
  * ovfl_ctrl bitmask of flags
  */
@@ -84,5 +74,8 @@ struct pfm_smpl_fmt {
 int pfm_fmt_register(struct pfm_smpl_fmt *fmt);
 int pfm_fmt_unregister(struct pfm_smpl_fmt *fmt);
 void pfm_sysfs_builtin_fmt_add(void);
+
+int  pfm_sysfs_add_fmt(struct pfm_smpl_fmt *fmt);
+void pfm_sysfs_remove_fmt(struct pfm_smpl_fmt *fmt);
 
 #endif /* __PERFMON_FMT_H__ */

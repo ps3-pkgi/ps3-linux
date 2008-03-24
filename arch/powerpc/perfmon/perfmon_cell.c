@@ -25,7 +25,7 @@
  */
 
 #include <linux/module.h>
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 #include <asm/cell-pmu.h>
 #include <asm/cell-regs.h>
 #include <asm/io.h>
@@ -55,6 +55,18 @@ struct pfm_cell_platform_pmu_info {
 	struct cbe_mic_tm_regs __iomem *(*get_cpu_mic_tm_regs)(int cpu);
 	int (*rtas_token)(const char *service);
 	int (*rtas_call)(int token, int param1, int param2, int *param3, ...);
+};
+
+/**
+ * pfm_cell_remote_req
+ **/
+struct pfm_cell_remote_req {
+	struct task_struct   *task;
+	struct pfm_context   *ctx;
+	struct pfm_event_set *set;
+	int                  result;
+	unsigned int         cnum;
+	u64                  pmd;
 };
 
 /*
@@ -639,7 +651,8 @@ static int pfm_cell_probe_pmu(void)
 /**
  * pfm_cell_write_pmc
  **/
-static void pfm_cell_write_pmc(unsigned int cnum, u64 value)
+static void pfm_cell_write_pmc(struct pfm_context *ctx,
+			       unsigned int cnum, u64 value)
 {
 	int cpu = smp_processor_id();
 	struct pfm_cell_platform_pmu_info *info =
@@ -667,9 +680,26 @@ static void pfm_cell_write_pmc(unsigned int cnum, u64 value)
 }
 
 /**
+ * get_target_cpu
+ *
+ */
+static int get_target_cpu(struct pfm_context *ctx)
+{
+	struct pfm_arch_context *ctx_arch = pfm_ctx_arch(ctx);
+	struct spu *spu = ctx_arch->arg;
+	int cpu = smp_processor_id();
+
+	if (spu)
+		cpu = ((cpu & 0x1) | (spu->node << 1));
+
+	return cpu;
+}
+
+/**
  * pfm_cell_write_pmd
  **/
-static void pfm_cell_write_pmd(unsigned int cnum, u64 value)
+static void pfm_cell_write_pmd(struct pfm_context *ctx,
+			       unsigned int cnum, u64 value)
 {
 	int cpu = smp_processor_id();
 	struct pfm_cell_platform_pmu_info *info =
@@ -682,20 +712,112 @@ static void pfm_cell_write_pmd(unsigned int cnum, u64 value)
 }
 
 /**
+ * pfm_cell_write_pmd_remote
+ *
+ * This function is the wrapper of pfm_cell_write_pmd to
+ * write pmd on the remote CPU(node).
+ **/
+static void pfm_cell_write_pmd_remote(void *arg)
+{
+	struct pfm_cell_remote_req *req = arg;
+
+	pfm_cell_write_pmd(req->ctx, req->cnum, req->pmd);
+	return ;
+}
+
+/**
+ * pfm_cell_write_pmd_smp
+ **/
+static void pfm_cell_write_pmd_smp(struct pfm_context *ctx,
+				   unsigned int cnum, u64 value)
+{
+	int target_cpu;
+	struct pfm_cell_remote_req req;
+
+	if (ctx->flags.cell_spe_follow && !ctx->flags.system) {
+		target_cpu = get_target_cpu(ctx);
+		if (target_cpu == smp_processor_id()) {
+			pfm_cell_write_pmd(ctx, cnum, value);
+			return ;
+		}
+
+		if (irqs_disabled()) {
+			PFM_DBG("skip write pmd");
+			return;
+		}
+		req.ctx = ctx;
+		req.cnum = cnum;
+		req.pmd = value;
+		smp_call_function_single(target_cpu,
+					 pfm_cell_write_pmd_remote,
+					 &req, 0, 1);
+	} else {
+		pfm_cell_write_pmd(ctx, cnum, value);
+	}
+}
+
+/**
  * pfm_cell_read_pmd
  **/
-static u64 pfm_cell_read_pmd(unsigned int cnum)
+static u64 pfm_cell_read_pmd(struct pfm_context *ctx,
+			     unsigned int cnum)
 {
 	int cpu = smp_processor_id();
 	struct pfm_cell_platform_pmu_info *info =
 		((struct pfm_arch_pmu_info *)
 		 (pfm_pmu_conf->arch_info))->platform_info;
+	u64 ret;
 
 	if (cnum < NR_CTRS) {
-		return info->read_ctr(cpu, cnum);
+		ret = info->read_ctr(cpu, cnum);
+		PFM_DBG("read pmd. cntr:%d data:0x%lx", cnum, ret);
+		return ret;
 	}
 
 	return -EINVAL;
+}
+
+/**
+ * pfm_cell_read_pmd_remote
+ *
+ * This function is the wrapper of pfm_cell_read_pmd to
+ * read pmd on the remote CPU(node).
+ **/
+static void pfm_cell_read_pmd_remote(void *arg)
+{
+	struct pfm_cell_remote_req *req = arg;
+
+	req->pmd = pfm_cell_read_pmd(req->ctx, req->cnum);
+	return ;
+}
+
+/**
+ * pfm_cell_read_pmd_smp
+ **/
+static u64 pfm_cell_read_pmd_smp(struct pfm_context *ctx, unsigned int cnum)
+{
+	int target_cpu;
+	struct pfm_cell_remote_req req;
+
+	if (ctx->flags.cell_spe_follow && !ctx->flags.system) {
+		target_cpu = get_target_cpu(ctx);
+		if (target_cpu == smp_processor_id())
+			return pfm_cell_read_pmd(ctx, cnum);
+
+		if (irqs_disabled()) {
+			PFM_DBG("skip read pmd");
+			return 0;
+		}
+		req.ctx = ctx;
+		req.cnum = cnum;
+		req.pmd = 0;
+		smp_call_function_single(target_cpu,
+					 pfm_cell_read_pmd_remote,
+					 &req, 0, 1);
+		return req.pmd;
+	} else {
+		return pfm_cell_read_pmd(ctx, cnum);
+	}
 }
 
 /**
@@ -717,9 +839,55 @@ static void pfm_cell_enable_counters(struct pfm_context *ctx,
 }
 
 /**
+ * pfm_cell_enable_counters_remote
+ *
+ * This function is the wrapper of pfm_cell_enable_counters
+ * to enable counters on the remote CPU(node).
+ **/
+static void pfm_cell_enable_counters_remote(void *arg)
+{
+	struct pfm_cell_remote_req *req = arg;
+	pfm_cell_enable_counters(req->ctx, req->set);
+}
+
+/**
+ * pfm_cell_enable_counters_smp
+ *
+ **/
+static void pfm_cell_enable_counters_smp(struct pfm_context *ctx,
+					 struct pfm_event_set *set)
+{
+	int target_cpu;
+	struct pfm_cell_remote_req req;
+
+	if (ctx->flags.cell_spe_follow && !ctx->flags.system) {
+		target_cpu = get_target_cpu(ctx);
+		if (target_cpu == smp_processor_id()) {
+			pfm_cell_enable_counters(ctx, set);
+			return ;
+		}
+
+		if (irqs_disabled())
+			return ;
+
+		req.ctx = ctx;
+		req.set = set;
+		smp_call_function_single(target_cpu,
+					 pfm_cell_enable_counters_remote,
+					 &req, 0, 1);
+	} else {
+		pfm_cell_enable_counters(ctx, set);
+	}
+}
+
+/**
  * pfm_cell_disable_counters
  *
  * Just need to turn off the global disable bit in pm_control.
+ *
+ * When a event set is switched out (multi event set),
+ * we need to reset the debug-bus signals so the next event set that
+ * gets switched in can start from a clean set of signals.
  **/
 static void pfm_cell_disable_counters(struct pfm_context *ctx,
 				      struct pfm_event_set *set)
@@ -729,8 +897,49 @@ static void pfm_cell_disable_counters(struct pfm_context *ctx,
 		 (pfm_pmu_conf->arch_info))->platform_info;
 
 	info->disable_pm(smp_processor_id());
-	if (machine_is(ps3))
-		reset_signals(smp_processor_id());
+	reset_signals(smp_processor_id());
+}
+
+/**
+ * pfm_cell_disable_counters_remote
+ *
+ * This function is the wrapper of pfm_cell_disable_counters
+ * to disable counters on the remote CPU(node).
+ **/
+static void pfm_cell_disable_counters_remote(void *arg)
+{
+	struct pfm_cell_remote_req *req = arg;
+	pfm_cell_disable_counters(req->ctx, req->set);
+}
+
+/**
+ * pfm_cell_disable_counters_smp
+ *
+ **/
+static void pfm_cell_disable_counters_smp(struct pfm_context *ctx,
+					  struct pfm_event_set *set)
+{
+	int target_cpu;
+	struct pfm_cell_remote_req req;
+
+	if (ctx->flags.cell_spe_follow && !ctx->flags.system) {
+		target_cpu = get_target_cpu(ctx);
+		if (target_cpu == smp_processor_id()) {
+			pfm_cell_disable_counters(ctx, set);
+			return ;
+		}
+
+		if (irqs_disabled())
+			return ;
+
+		req.ctx = ctx;
+		req.set = set;
+		smp_call_function_single(target_cpu,
+					 pfm_cell_disable_counters_remote,
+					 &req, 0, 1);
+	} else {
+		pfm_cell_disable_counters(ctx, set);
+	}
 }
 
 /*
@@ -812,7 +1021,8 @@ static int get_ppu_signal_groups(struct pfm_event_set *set,
  * The counter enable bit of the pmX_control PMC is enabled while the target
  * task runs on the target HW thread.
  **/
-void pfm_cell_restore_pmcs(struct pfm_event_set *set)
+static void pfm_cell_restore_pmcs(struct pfm_context *ctx,
+				  struct pfm_event_set *set)
 {
 	u64 ctr_ctrl;
 	u64 *used_pmcs = set->used_pmcs;
@@ -865,8 +1075,50 @@ void pfm_cell_restore_pmcs(struct pfm_event_set *set)
 	 * pm_status register.
 	 */
 	for (i *= 2; i < PFM_PM_NUM_PMCS; i++)
-		pfm_cell_write_pmc(i, set->pmcs[i]);
+		pfm_cell_write_pmc(ctx, i, set->pmcs[i]);
 }
+
+/**
+ * pfm_cell_restore_pmcs_remote
+ *
+ * This function is the wrapper of pfm_cell_restore_pmcs
+ * to restore pmcs on the remote CPU(node).
+ **/
+static void pfm_cell_restore_pmcs_remote(void *arg)
+{
+	struct pfm_cell_remote_req *req = arg;
+	pfm_cell_restore_pmcs(req->ctx, req->set);
+}
+
+/**
+ * pfm_cell_restore_pmcs_smp
+ **/
+static void pfm_cell_restore_pmcs_smp(struct pfm_context *ctx,
+				      struct pfm_event_set *set)
+{
+	int target_cpu;
+	struct pfm_cell_remote_req req;
+
+	if (ctx->flags.cell_spe_follow && !ctx->flags.system) {
+		target_cpu = get_target_cpu(ctx);
+		if (target_cpu == smp_processor_id()) {
+			pfm_cell_restore_pmcs(ctx, set);
+			return ;
+		}
+
+		if (irqs_disabled())
+			return ;
+
+		req.ctx = ctx;
+		req.set = set;
+		smp_call_function_single(target_cpu,
+					 pfm_cell_restore_pmcs_remote,
+					 &req, 0, 1);
+	} else {
+		pfm_cell_restore_pmcs(ctx, set);
+	}
+}
+
 
 /**
  * pfm_cell_restore_pmds
@@ -874,7 +1126,8 @@ void pfm_cell_restore_pmcs(struct pfm_event_set *set)
  * Write to pm_control register before writing to counter registers
  * so that we can decide the counter width berfore writing to the couters.
  **/
-void pfm_cell_restore_pmds(struct pfm_event_set *set)
+static void pfm_cell_restore_pmds(struct pfm_context *ctx,
+				  struct pfm_event_set *set)
 {
 	u64 *used_pmds;
 	unsigned int i, max_pmd;
@@ -898,7 +1151,48 @@ void pfm_cell_restore_pmds(struct pfm_event_set *set)
 	for (i = 0; i < max_pmd; i++)
 		if (test_bit(i, used_pmds) &&
 		    !(pfm_pmu_conf->pmd_desc[i].type & PFM_REG_RO))
-			pfm_cell_write_pmd(i, set->pmds[i].value);
+			pfm_cell_write_pmd(ctx, i, set->pmds[i].value);
+}
+
+/**
+ * pfm_cell_restore_pmds_remote
+ *
+ * This function is the wrapper of pfm_cell_restore_pmds
+ * to restore pmds on the remote CPU(node).
+ **/
+static void pfm_cell_restore_pmds_remote(void *arg)
+{
+	struct pfm_cell_remote_req *req = arg;
+	pfm_cell_restore_pmds(req->ctx, req->set);
+}
+
+/**
+ * pfm_cell_restore_pmds_smp
+ *
+ **/
+static void pfm_cell_restore_pmds_smp(struct pfm_context *ctx,
+				      struct pfm_event_set *set)
+{
+	int target_cpu;
+	struct pfm_cell_remote_req req;
+
+	if (ctx->flags.cell_spe_follow && !ctx->flags.system) {
+		target_cpu = get_target_cpu(ctx);
+		if (target_cpu == smp_processor_id()) {
+			pfm_cell_restore_pmds(ctx, set);
+			return ;
+		}
+		if (irqs_disabled())
+			return ;
+
+		req.ctx = ctx;
+		req.set = set;
+		smp_call_function_single(target_cpu,
+					 pfm_cell_restore_pmds_remote,
+					 &req, 0, 1);
+	} else {
+		pfm_cell_restore_pmds(ctx, set);
+	}
 }
 
 /**
@@ -1180,17 +1474,95 @@ static int pfm_cell_unload_context(struct pfm_context *ctx,
 }
 
 /**
+ * pfm_cell_save_pmds
+ **/
+static void pfm_cell_save_pmds(struct pfm_context *ctx,
+			       struct pfm_event_set *set)
+{
+	u64 val, ovfl_mask;
+	u64 *used_pmds, *cnt_pmds;
+	u16 i, num;
+
+	ovfl_mask = pfm_pmu_conf->ovfl_mask;
+	num = set->nused_pmds;
+	cnt_pmds = pfm_pmu_conf->regs.cnt_pmds;
+	used_pmds = set->used_pmds;
+
+	/*
+	 * save HW PMD, for counters, reconstruct 64-bit value
+	 */
+	for (i = 0; num; i++) {
+		if (test_bit(i, cast_ulp(used_pmds))) {
+			val = pfm_cell_read_pmd(ctx, i);
+			if (likely(test_bit(i, cast_ulp(cnt_pmds))))
+				val = (set->pmds[i].value & ~ovfl_mask) |
+					(val & ovfl_mask);
+			set->pmds[i].value = val;
+			num--;
+		}
+	}
+}
+
+
+/**
  * pfm_cell_ctxswout_thread
  *
  * When a monitored thread is switched out (self-monitored or externally
  * monitored) we need to reset the debug-bus signals so the next context that
  * gets switched in can start from a clean set of signals.
  **/
-int pfm_cell_ctxswout_thread(struct task_struct *task,
-			     struct pfm_context *ctx, struct pfm_event_set *set)
+static int pfm_cell_ctxswout_thread(struct task_struct *task,
+				    struct pfm_context *ctx,
+				    struct pfm_event_set *set)
 {
+	if (pfm_arch_is_active(ctx))
+		pfm_cell_save_pmds(ctx, set);
+
 	reset_signals(smp_processor_id());
+
 	return 0;
+}
+
+/**
+ * pfm_cell_ctxswout_thread_remote
+ *
+ * This function is the wrapper of pfm_cell_ctxswout_thread
+ **/
+static void pfm_cell_ctxswout_thread_remote(void *arg)
+{
+	struct pfm_cell_remote_req *req = arg;
+	req->result = pfm_cell_ctxswout_thread(req->task, req->ctx, req->set);
+}
+
+/**
+ * pfm_cell_ctxswout_thread_smp
+ *
+ **/
+static int pfm_cell_ctxswout_thread_smp(struct task_struct *task,
+					struct pfm_context *ctx,
+					struct pfm_event_set *set)
+{
+	int target_cpu;
+	struct pfm_cell_remote_req req;
+
+	if (ctx->flags.cell_spe_follow && !ctx->flags.system) {
+		target_cpu = get_target_cpu(ctx);
+		if (target_cpu == smp_processor_id())
+			return pfm_cell_ctxswout_thread(task, ctx, set);
+
+		if (irqs_disabled())
+			return 1;
+
+		req.task = task;
+		req.ctx = ctx;
+		req.set = set;
+		smp_call_function_single(target_cpu,
+					 pfm_cell_ctxswout_thread_remote,
+					 &req, 0, 1);
+		return req.result;
+	} else {
+		return pfm_cell_ctxswout_thread(task, ctx, set);
+	}
 }
 
 /**
@@ -1244,6 +1616,50 @@ static void pfm_cell_get_ovfl_pmds(struct pfm_context *ctx,
 	set->npend_ovfls = bitmap_weight(set->povfl_pmds, PFM_PM_NUM_PMDS);
 }
 
+/**
+ * pfm_cell_get_ovfl_pmds_remote
+ *
+ * This function is the wrapper of pfm_cell_get_ovfl_pmds
+ **/
+static void pfm_cell_get_ovfl_pmds_remote(void *arg)
+{
+	struct pfm_cell_remote_req *req = arg;
+	pfm_cell_get_ovfl_pmds(req->ctx, req->set);
+}
+
+/**
+ * pfm_cell_get_ovfl_pmds_smp
+ *
+ **/
+static void pfm_cell_get_ovfl_pmds_smp(struct pfm_context *ctx,
+				       struct pfm_event_set *set)
+{
+	int target_cpu;
+	struct pfm_cell_remote_req req;
+
+	if (ctx->flags.cell_spe_follow && !ctx->flags.system) {
+		target_cpu = get_target_cpu(ctx);
+		if (target_cpu == smp_processor_id()) {
+			pfm_cell_get_ovfl_pmds(ctx, set);
+			return ;
+		}
+		if (irqs_disabled())
+			return ;
+
+		req.ctx = ctx;
+		req.set = set;
+		smp_call_function_single(target_cpu,
+					 pfm_cell_get_ovfl_pmds_remote,
+					 &req, 0, 1);
+	} else {
+		pfm_cell_get_ovfl_pmds(ctx, set);
+	}
+}
+
+/**
+ * pfm_prepare_ctxswin_thread
+ *
+ **/
 static void pfm_prepare_ctxswin_thread(struct pfm_context *ctx, u64 spe_id)
 {
 	struct pfm_event_set *set;
@@ -1256,6 +1672,8 @@ static void pfm_prepare_ctxswin_thread(struct pfm_context *ctx, u64 spe_id)
 	last_pmc = NR_CTRS + 8;
 	list_for_each_entry(set, &ctx->set_list, list) {
 
+		set->priv_flags |= PFM_SETFL_PRIV_MOD_PMCS;
+		set->priv_flags |= PFM_SETFL_PRIV_MOD_PMDS;
 		used_pmcs = set->used_pmcs;
 		for (i = NR_CTRS; i < last_pmc; i++) {
 			if (!test_bit(i, used_pmcs))
@@ -1272,7 +1690,6 @@ static void pfm_prepare_ctxswin_thread(struct pfm_context *ctx, u64 spe_id)
 			    signal_group < SIG_GROUP_EIB_BASE) {
 				set->pmcs[i] = update_sub_unit_field(
 					set->pmcs[i], spe_id);
-				set->priv_flags |= PFM_SETFL_PRIV_MOD_PMCS;
 				set->priv_flags &=
 					~PFM_SETFL_PRIV_WAIT_SUB_UNIT_UPDATE;
 				PFM_DBG("pmcs[%d] : 0x%lx", i, set->pmcs[i]);
@@ -1291,6 +1708,8 @@ static int pfm_spe_ctxsw_thread(struct notifier_block *block,
 				unsigned long object_id, void *arg)
 {
 	struct task_struct *p;
+	struct pfm_arch_context *ctx_arch;
+	struct spu *spu;
 	u64 spe_id;
 
 	p = pfm_get_task_by_pid(((struct spu *)arg)->ctx->tid);
@@ -1300,15 +1719,21 @@ static int pfm_spe_ctxsw_thread(struct notifier_block *block,
 			return 0;
 		}
 
+		spu = arg;
+		ctx_arch = pfm_ctx_arch(p->pfm_context);
 		spe_id = pfm_get_spe_id(arg);
 		if (object_id) {
-			PFM_DBG("=== PFM SPE CTXSWIN === 0x%lx", spe_id);
+			PFM_DBG("=== PFM SPE CTXSWIN === 0x%lx node:%d",
+				spe_id, spu->node);
 			pfm_prepare_ctxswin_thread(p->pfm_context, spe_id);
+			ctx_arch->arg = arg;
 			pfm_ctxsw(NULL, p);
 
 		} else {
-			PFM_DBG("=== PFM SPE CTXSWOUT === 0x%lx", spe_id);
+			PFM_DBG("=== PFM SPE CTXSWOUT === 0x%lx node:%d",
+				spe_id, spu->node);
 			pfm_ctxsw(p, NULL);
+			ctx_arch->arg = NULL;
 		}
 
 		pfm_put_task(p);
@@ -1322,28 +1747,27 @@ static int pfm_spe_ctxsw_thread(struct notifier_block *block,
  **/
 static int pfm_cell_create_context(struct pfm_context *ctx, u32 ctx_flags)
 {
+	struct pfm_arch_context *ctx_arch = pfm_ctx_arch(ctx);
 	int ret = 0;
 
 	ctx->flags.cell_spe_follow =
 		(ctx_flags & PFM_FL_CELL_SPE_FOLLOW) ? 1:0;
-
-	if (ctx->flags.cell_spe_follow) {
+  	if (ctx->flags.cell_spe_follow) {
 
 		if (ctx->flags.system)
 			return -EINVAL;
 
-		if (ctx->ctxsw_notifier.notifier_call)
-			return -EBUSY;
-
-		ctx->ctxsw_notifier.notifier_call = pfm_spe_ctxsw_thread;
-		ctx->ctxsw_notifier.next = NULL;
-		ctx->ctxsw_notifier.priority = 0;
-		ret = spu_switch_event_register(&ctx->ctxsw_notifier);
+		ctx_arch->arg = NULL;
+		ctx_arch->ctxsw_notifier.notifier_call = pfm_spe_ctxsw_thread;
+		ctx_arch->ctxsw_notifier.next = NULL;
+		ctx_arch->ctxsw_notifier.priority = 0;
+		ret = spu_switch_event_register(&ctx_arch->ctxsw_notifier);
 		if (ret) {
-			ctx->ctxsw_notifier.notifier_call = NULL;
+			ctx_arch->ctxsw_notifier.notifier_call = NULL;
 			PFM_ERR("Can't register spe_notifier\n");
 		}
 	}
+
 	return ret;
 }
 
@@ -1353,30 +1777,20 @@ static int pfm_cell_create_context(struct pfm_context *ctx, u32 ctx_flags)
  **/
 static void pfm_cell_free_context(struct pfm_context *ctx)
 {
+	struct pfm_arch_context *ctx_arch = pfm_ctx_arch(ctx);
 	int ret;
 
 	if (ctx->flags.cell_spe_follow) {
-
 		if (ctx->flags.system)
 			return;
 
-		if (ctx->task) {
-			clear_tsk_thread_flag(ctx->task, TIF_PERFMON_CTXSW);
-			ctx->task = NULL;
+		if (ctx_arch->ctxsw_notifier.notifier_call) {
+			ret = spu_switch_event_unregister(&ctx_arch->ctxsw_notifier);
+			if (ret)
+				PFM_ERR("Can't unregister spe_notifier\n");
 		}
-
-		if (ctx->ctxsw_notifier.notifier_call == NULL)
-			return;
-
-		ret = spu_switch_event_unregister(&ctx->ctxsw_notifier);
-		if (ret)
-			PFM_ERR("Can't unregister spe_notifier\n");
-		ctx->ctxsw_notifier.notifier_call = NULL;
-		ctx->ctxsw_notifier.next = NULL;
-		ctx->ctxsw_notifier.priority = 0;
 	}
-
-	return ;
+	return;
 }
 
 /**
@@ -1557,15 +1971,15 @@ static struct pfm_arch_pmu_info pfm_cell_pmu_info = {
 	.create_context   = pfm_cell_create_context,
 	.free_context     = pfm_cell_free_context,
 	.write_pmc        = pfm_cell_write_pmc,
-	.write_pmd        = pfm_cell_write_pmd,
-	.read_pmd         = pfm_cell_read_pmd,
-	.enable_counters  = pfm_cell_enable_counters,
-	.disable_counters = pfm_cell_disable_counters,
+	.write_pmd        = pfm_cell_write_pmd_smp,
+	.read_pmd         = pfm_cell_read_pmd_smp,
+	.enable_counters  = pfm_cell_enable_counters_smp,
+	.disable_counters = pfm_cell_disable_counters_smp,
 	.irq_handler      = pfm_cell_irq_handler,
-	.get_ovfl_pmds    = pfm_cell_get_ovfl_pmds,
-	.restore_pmcs     = pfm_cell_restore_pmcs,
-	.restore_pmds     = pfm_cell_restore_pmds,
-	.ctxswout_thread  = pfm_cell_ctxswout_thread,
+	.get_ovfl_pmds    = pfm_cell_get_ovfl_pmds_smp,
+	.restore_pmcs     = pfm_cell_restore_pmcs_smp,
+	.restore_pmds     = pfm_cell_restore_pmds_smp,
+	.ctxswout_thread  = pfm_cell_ctxswout_thread_smp,
 	.load_context     = pfm_cell_load_context,
 	.unload_context   = pfm_cell_unload_context,
 };

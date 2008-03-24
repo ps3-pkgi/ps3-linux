@@ -20,7 +20,7 @@
 #include <linux/unistd.h>
 #include <linux/compiler.h>
 #include <linux/uaccess.h>
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 
 #include <asm/abi.h>
 #include <asm/asm.h>

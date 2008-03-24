@@ -20,8 +20,8 @@
  * 02111-1307 USA
   */
 #include <linux/module.h>
-#include <linux/perfmon.h>
 #include <linux/smp.h>
+#include <linux/perfmon_kern.h>
 
 MODULE_AUTHOR("Stephane Eranian <eranian@hpl.hp.com>");
 MODULE_DESCRIPTION("Dual-Core Itanium 2 (Montecito) PMU description table");

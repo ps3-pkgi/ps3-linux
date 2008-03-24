@@ -27,7 +27,7 @@
 #include <linux/completion.h>
 #include <linux/kallsyms.h>
 #include <linux/random.h>
-#include <linux/perfmon.h>
+#include <linux/perfmon_kern.h>
 
 #include <asm/asm.h>
 #include <asm/bootinfo.h>
