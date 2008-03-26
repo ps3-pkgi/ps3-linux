@@ -57,7 +57,7 @@ __system_reset_overlay:
 	bctr
 
 1:
-	/* Load r3 for null pointer write check later. */
+	/* Save the value at addr zero for a null pointer write check later. */
 
 	li	r4, 0
 	lwz	r3, 0(r4)
