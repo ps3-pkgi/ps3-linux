@@ -113,7 +113,7 @@ static void ps3_panic(char *str)
 	printk("   Please press POWER button.\n");
 	printk("\n");
 
-	while(1)
+	while (1)
 		lv1_pause(1);
 }
 
