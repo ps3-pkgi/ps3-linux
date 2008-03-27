@@ -125,6 +125,7 @@ void platform_init(unsigned long null_check)
 	void *chosen;
 	unsigned long ft_addr;
 	u64 rm_size;
+	unsigned long val;
 
 	console_ops.write = ps3_console_write;
 	platform_ops.exit = ps3_exit;
@@ -152,9 +153,10 @@ void platform_init(unsigned long null_check)
 
 	printf(" flat tree at 0x%lx\n\r", ft_addr);
 
-	if (*(unsigned long *)0 != null_check)
-		printf("null check failed: %lx != %lx\n\r", *(unsigned long *)0,
-			(unsigned long)null_check);
+	val = *(unsigned long *)0;
+
+	if (val != null_check)
+		printf("null check failed: %lx != %lx\n\r", val, null_check);
 
 	((kernel_entry_t)0)(ft_addr, 0, NULL);
 
