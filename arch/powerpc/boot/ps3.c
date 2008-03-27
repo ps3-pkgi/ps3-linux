@@ -46,6 +46,7 @@ BSS_STACK(4096);
  * edit the command line passed to vmlinux (by setting /chosen/bootargs).
  * The buffer is put in it's own section so that tools may locate it easier.
  */
+
 static char cmdline[COMMAND_LINE_SIZE]
 	__attribute__((__section__("__builtin_cmdline")));
 
@@ -151,16 +152,9 @@ void platform_init(unsigned long null_check)
 
 	printf(" flat tree at 0x%lx\n\r", ft_addr);
 
-	if (*(unsigned long *)0 != null_check) {
-		char *p;
-
-		printf("null check failed: %lx != %lx\n\r",
-			*(unsigned long *)0,
+	if (*(unsigned long *)0 != null_check)
+		printf("null check failed: %lx != %lx\n\r", *(unsigned long *)0,
 			(unsigned long)null_check);
-		for (p = 0; p < 16; p++)
-			printf("%2.2x ", (unsigned int)*p);
-		printf("\n\r");
-	}
 
 	((kernel_entry_t)0)(ft_addr, 0, NULL);
 
