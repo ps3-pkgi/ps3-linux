@@ -51,6 +51,8 @@
 #include <net/ipconfig.h>
 #endif
 
+#include "entry.h"
+
 /* Used to synchronize accesses to NatSemi SUPER I/O chip configure
  * operations in asm/ns87303.h
  */
