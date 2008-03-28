@@ -485,27 +485,6 @@ void ps3_set_bookmark(u64 bookmark);
 void ps3_set_pm_bookmark(u64 tag, u64 incident, u64 th_id);
 int ps3_set_signal(u64 rtas_signal_group, u8 signal_bit, u16 sub_unit,
 	u8 bus_word);
-
-u32 ps3_read_phys_ctr(u32 cpu, u32 phys_ctr);
-void ps3_write_phys_ctr(u32 cpu, u32 phys_ctr, u32 val);
-u32 ps3_read_ctr(u32 cpu, u32 ctr);
-void ps3_write_ctr(u32 cpu, u32 ctr, u32 val);
-
-u32 ps3_read_pm07_control(u32 cpu, u32 ctr);
-void ps3_write_pm07_control(u32 cpu, u32 ctr, u32 val);
-u32 ps3_read_pm(u32 cpu, enum pm_reg_name reg);
-void ps3_write_pm(u32 cpu, enum pm_reg_name reg, u32 val);
-
-u32 ps3_get_ctr_size(u32 cpu, u32 phys_ctr);
-void ps3_set_ctr_size(u32 cpu, u32 phys_ctr, u32 ctr_size);
-
-void ps3_enable_pm(u32 cpu);
-void ps3_disable_pm(u32 cpu);
-void ps3_enable_pm_interrupts(u32 cpu, u32 thread, u32 mask);
-void ps3_disable_pm_interrupts(u32 cpu);
-
-u32 ps3_get_and_clear_pm_interrupts(u32 cpu);
-void ps3_sync_irq(int node);
 u32 ps3_get_hw_thread_id(int cpu);
 u64 ps3_get_spe_id(void *arg);
 

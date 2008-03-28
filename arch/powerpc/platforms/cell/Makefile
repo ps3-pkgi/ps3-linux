@@ -1,3 +1,4 @@
+obj-$(CONFIG_PPC_CELL)			+= pmu-core.o
 obj-$(CONFIG_PPC_CELL_NATIVE)		+= interrupt.o iommu.o setup.o \
 					   cbe_regs.o spider-pic.o \
 					   pervasive.o pmu.o io-workarounds.o

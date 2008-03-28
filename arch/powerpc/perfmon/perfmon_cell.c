@@ -1928,14 +1928,14 @@ static void pfm_cell_irq_handler(struct pt_regs *regs, struct pfm_context *ctx)
 
 static struct pfm_cell_platform_pmu_info ps3_platform_pmu_info = {
 #ifdef CONFIG_PPC_PS3
-	.read_ctr                    = ps3_read_ctr,
-	.write_ctr                   = ps3_write_ctr,
-	.write_pm07_control          = ps3_write_pm07_control,
-	.write_pm                    = ps3_write_pm,
-	.enable_pm                   = ps3_enable_pm,
-	.disable_pm                  = ps3_disable_pm,
-	.enable_pm_interrupts        = ps3_enable_pm_interrupts,
-	.get_and_clear_pm_interrupts = ps3_get_and_clear_pm_interrupts,
+	.read_ctr                    = cbe_read_ctr,
+	.write_ctr                   = cbe_write_ctr,
+	.write_pm07_control          = cbe_write_pm07_control,
+	.write_pm                    = cbe_write_pm,
+	.enable_pm                   = cbe_enable_pm,
+	.disable_pm                  = cbe_disable_pm,
+	.enable_pm_interrupts        = cbe_enable_pm_interrupts,
+	.get_and_clear_pm_interrupts = cbe_get_and_clear_pm_interrupts,
 	.get_hw_thread_id            = ps3_get_hw_thread_id,
 	.get_cpu_ppe_priv_regs       = NULL,
 	.get_cpu_pmd_regs            = NULL,

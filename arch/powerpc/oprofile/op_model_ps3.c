@@ -318,7 +318,7 @@ static void write_pm_cntrl(int cpu)
 	 * the count mode based on the user selection of user and kernel.
 	 */
 	val |= CBE_PM_COUNT_MODE_SET(pm_regs.pm_cntrl.count_mode);
-	ps3_write_pm(cpu, pm_control, val);
+	cbe_write_pm(cpu, pm_control, val);
 }
 
 static inline void
@@ -355,7 +355,7 @@ static inline void enable_ctr(u32 cpu, u32 ctr, u32 *pm07_cntrl)
 {
 
 	pm07_cntrl[ctr] |= CBE_PM_CTR_ENABLE;
-	ps3_write_pm07_control(cpu, ctr, pm07_cntrl[ctr]);
+	cbe_write_pm07_control(cpu, ctr, pm07_cntrl[ctr]);
 }
 
 static void add_sample(u32 cpu)
@@ -372,14 +372,14 @@ static void add_sample(u32 cpu)
 		is_kernel = is_kernel_addr(pc);
 
 		for (i = 0; i < num_counters; ++i) {
-			value = ps3_read_ctr(cpu, i);
+			value = cbe_read_ctr(cpu, i);
 			if (value >= count_value[i] && count_value[i] != 0) {
 				OP_DBG("pmu:add_sample ctr:%d"
 				       " value:0x%x reset:0x%x count:0x%x",
 				       i, value, reset_value[i],
 				       count_value[i]);
 				oprofile_add_pc(pc, is_kernel, i);
-				ps3_write_ctr(cpu, i, reset_value[i]);
+				cbe_write_ctr(cpu, i, reset_value[i]);
 			}
 		}
 	}
@@ -450,8 +450,8 @@ static void cell_virtual_cntr(unsigned long data)
 		 * stop counters, save counter values, restore counts
 		 * for previous thread
 		 */
-		ps3_disable_pm(cpu);
-		ps3_disable_pm_interrupts(cpu);
+		cbe_disable_pm(cpu);
+		cbe_disable_pm_interrupts(cpu);
 
 		/*
 		 * Add sample data at here.
@@ -475,14 +475,14 @@ static void cell_virtual_cntr(unsigned long data)
 				enable_ctr(cpu, i,
 					   pm_regs.pm07_cntrl);
 			} else {
-				ps3_write_pm07_control(cpu, i, 0);
+				cbe_write_pm07_control(cpu, i, 0);
 			}
 		}
 
 		/* Enable interrupts on the CPU thread that is starting */
-		ps3_enable_pm_interrupts(cpu, next_hdw_thread,
+		cbe_enable_pm_interrupts(cpu, next_hdw_thread,
 					 virt_cntr_inter_mask);
-		ps3_enable_pm(cpu);
+		cbe_enable_pm(cpu);
 	}
 
 	spin_unlock_irqrestore(&virt_cntr_lock, flags);
@@ -612,13 +612,13 @@ static int cell_cpu_setup(struct op_counter_config *cntr)
 		return 0;
 
 	/* Stop all counters */
-	ps3_disable_pm(cpu);
-	ps3_disable_pm_interrupts(cpu);
+	cbe_disable_pm(cpu);
+	cbe_disable_pm_interrupts(cpu);
 
-	ps3_write_pm(cpu, pm_interval, 0);
-	ps3_write_pm(cpu, pm_start_stop, 0);
-	ps3_write_pm(cpu, group_control, pm_regs.group_control);
-	ps3_write_pm(cpu, debug_bus_control, pm_regs.debug_bus_control);
+	cbe_write_pm(cpu, pm_interval, 0);
+	cbe_write_pm(cpu, pm_start_stop, 0);
+	cbe_write_pm(cpu, group_control, pm_regs.group_control);
+	cbe_write_pm(cpu, debug_bus_control, pm_regs.debug_bus_control);
 	write_pm_cntrl(cpu);
 
 	for (i = 0; i < num_counters; ++i) {
@@ -654,19 +654,19 @@ static int cell_global_start_ppu(struct op_counter_config *ctr)
 
 		for (i = 0; i < num_counters; ++i) {
 			if (ctr_enabled & (1 << i)) {
-				ps3_write_ctr(cpu, i, reset_value[i]);
+				cbe_write_ctr(cpu, i, reset_value[i]);
 				enable_ctr(cpu, i, pm_regs.pm07_cntrl);
 				interrupt_mask |=
 				    CBE_PM_CTR_OVERFLOW_INTR(i);
 			} else {
 				/* Disable counter */
-				ps3_write_pm07_control(cpu, i, 0);
+				cbe_write_pm07_control(cpu, i, 0);
 			}
 		}
 
-		ps3_get_and_clear_pm_interrupts(cpu);
-		ps3_enable_pm_interrupts(cpu, hdw_thread, interrupt_mask);
-		ps3_enable_pm(cpu);
+		cbe_get_and_clear_pm_interrupts(cpu);
+		cbe_enable_pm_interrupts(cpu, hdw_thread, interrupt_mask);
+		cbe_enable_pm(cpu);
 	}
 
 	virt_cntr_inter_mask = interrupt_mask;
@@ -716,13 +716,13 @@ static void cell_global_stop_ppu(void)
 			continue;
 
 		/* Stop the counters */
-		ps3_disable_pm(cpu);
+		cbe_disable_pm(cpu);
 
 		/* Deactivate the signals */
 		ps3_set_signal(0, 0, 0, 0);	/*clear all */
 
 		/* Deactivate interrupts */
-		ps3_disable_pm_interrupts(cpu);
+		cbe_disable_pm_interrupts(cpu);
 	}
 }
 

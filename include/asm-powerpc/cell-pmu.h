@@ -78,33 +78,136 @@ enum pm_reg_name {
 	pm_start_stop,
 };
 
-/* Routines for reading/writing the PMU registers. */
-extern u32  cbe_read_phys_ctr(u32 cpu, u32 phys_ctr);
-extern void cbe_write_phys_ctr(u32 cpu, u32 phys_ctr, u32 val);
-extern u32  cbe_read_ctr(u32 cpu, u32 ctr);
-extern void cbe_write_ctr(u32 cpu, u32 ctr, u32 val);
-
-extern u32  cbe_read_pm07_control(u32 cpu, u32 ctr);
-extern void cbe_write_pm07_control(u32 cpu, u32 ctr, u32 val);
-extern u32  cbe_read_pm(u32 cpu, enum pm_reg_name reg);
-extern void cbe_write_pm(u32 cpu, enum pm_reg_name reg, u32 val);
-
-extern u32  cbe_get_ctr_size(u32 cpu, u32 phys_ctr);
-extern void cbe_set_ctr_size(u32 cpu, u32 phys_ctr, u32 ctr_size);
-
-extern void cbe_enable_pm(u32 cpu);
-extern void cbe_disable_pm(u32 cpu);
-
-extern void cbe_read_trace_buffer(u32 cpu, u64 *buf);
-
-extern void cbe_enable_pm_interrupts(u32 cpu, u32 thread, u32 mask);
-extern void cbe_disable_pm_interrupts(u32 cpu);
-extern u32  cbe_get_and_clear_pm_interrupts(u32 cpu);
-extern void cbe_sync_irq(int node);
-
 #define CBE_COUNT_SUPERVISOR_MODE       0
 #define CBE_COUNT_HYPERVISOR_MODE       1
 #define CBE_COUNT_PROBLEM_MODE          2
 #define CBE_COUNT_ALL_MODES             3
+
+/**
+ * struct cell_pmu_ops - Provides a platfrom independent PMU abstraction.
+ * @priv: Void pointer variable for platform driver use.
+ */
+
+struct cell_pmu_ops {
+	void* priv;
+	u32 (*read_phys_ctr)(void* p, u32 cpu, u32 phys_ctr);
+	void (*write_phys_ctr)(void* p, u32 cpu, u32 phys_ctr, u32 val);
+	u32 (*read_ctr)(void* p, u32 cpu, u32 ctr);
+	void (*write_ctr)(void* p, u32 cpu, u32 ctr, u32 val);
+	u32 (*read_pm07_control)(void* p, u32 cpu, u32 ctr);
+	void (*write_pm07_control)(void* p, u32 cpu, u32 ctr, u32 val);
+	u32 (*read_pm)(void* p, u32 cpu, enum pm_reg_name reg);
+	void (*write_pm)(void* p, u32 cpu, enum pm_reg_name reg, u32 val);
+	u32  (*get_ctr_size)(void* p, u32 cpu, u32 phys_ctr);
+	void (*set_ctr_size)(void* p, u32 cpu, u32 phys_ctr, u32 ctr_size);
+	void (*enable_pm)(void* p, u32 cpu);
+	void (*disable_pm)(void* p, u32 cpu);
+	void (*read_trace_buffer)(void* p, u32 cpu, u64 *buf);
+	u32  (*get_and_clear_pm_interrupts)(void* p, u32 cpu);
+	void (*enable_pm_interrupts)(void* p, u32 cpu, u32 thread, u32 mask);
+	void (*disable_pm_interrupts)(void* p, u32 cpu);
+	void (*sync_irq)(void* p, int node);
+};
+
+extern const struct cell_pmu_ops *cell_pmu_ops;
+
+/**
+ * cell_pmu_ops_init - Initialize the cell_pmu_ops pointer.
+ * @ops: A platfrom specific instance of struct cell_pmu_ops.
+ */
+
+static inline void cell_pmu_ops_init(const struct cell_pmu_ops *ops)
+{
+	cell_pmu_ops = ops;
+}
+
+/* Routines for reading/writing the PMU registers. */
+
+static inline u32 cbe_read_phys_ctr(u32 cpu, u32 phys_ctr)
+{
+	return cell_pmu_ops->read_phys_ctr(cell_pmu_ops->priv, cpu, phys_ctr);
+}
+
+static inline void cbe_write_phys_ctr(u32 cpu, u32 phys_ctr, u32 val)
+{
+	cell_pmu_ops->write_phys_ctr(cell_pmu_ops->priv, cpu, phys_ctr, val);
+}
+
+static inline u32 cbe_read_ctr(u32 cpu, u32 ctr)
+{
+	return cell_pmu_ops->read_ctr(cell_pmu_ops->priv, cpu, ctr);
+}
+
+static inline void cbe_write_ctr(u32 cpu, u32 ctr, u32 val)
+{
+	cell_pmu_ops->write_ctr(cell_pmu_ops->priv, cpu, ctr, val);
+}
+
+static inline u32  cbe_read_pm07_control(u32 cpu, u32 ctr)
+{
+	return cell_pmu_ops->read_pm07_control(cell_pmu_ops->priv, cpu, ctr);
+}
+
+static inline void cbe_write_pm07_control(u32 cpu, u32 ctr, u32 val)
+{
+	cell_pmu_ops->write_pm07_control(cell_pmu_ops->priv, cpu, ctr, val);
+}
+
+static inline u32  cbe_read_pm(u32 cpu, enum pm_reg_name reg)
+{
+	return cell_pmu_ops->read_pm(cell_pmu_ops->priv, cpu, reg);
+}
+
+static inline void cbe_write_pm(u32 cpu, enum pm_reg_name reg, u32 val)
+{
+	cell_pmu_ops->write_pm(cell_pmu_ops->priv, cpu, reg, val);
+}
+
+static inline u32 cbe_get_ctr_size(u32 cpu, u32 phys_ctr)
+{
+	return cell_pmu_ops->get_ctr_size(cell_pmu_ops->priv, cpu, phys_ctr);
+}
+
+static inline void cbe_set_ctr_size(u32 cpu, u32 phys_ctr, u32 ctr_size)
+{
+	cell_pmu_ops->set_ctr_size(cell_pmu_ops->priv, cpu, phys_ctr, ctr_size);
+}
+
+static inline void cbe_enable_pm(u32 cpu)
+{
+	cell_pmu_ops->enable_pm(cell_pmu_ops->priv, cpu);
+}
+
+static inline void cbe_disable_pm(u32 cpu)
+{
+	return cell_pmu_ops->disable_pm(cell_pmu_ops->priv, cpu);
+}
+
+static inline void cbe_read_trace_buffer(u32 cpu, u64 *buf)
+{
+	cell_pmu_ops->read_trace_buffer(cell_pmu_ops->priv, cpu, buf);
+}
+
+static inline void cbe_enable_pm_interrupts(u32 cpu, u32 thread, u32 mask)
+{
+	cell_pmu_ops->enable_pm_interrupts(cell_pmu_ops->priv, cpu, thread,
+		mask);
+}
+
+static inline void cbe_disable_pm_interrupts(u32 cpu)
+{
+	cell_pmu_ops->disable_pm_interrupts(cell_pmu_ops->priv, cpu);
+}
+
+static inline u32  cbe_get_and_clear_pm_interrupts(u32 cpu)
+{
+	return cell_pmu_ops->get_and_clear_pm_interrupts(cell_pmu_ops->priv,
+		cpu);
+}
+
+static inline void cbe_sync_irq(int node)
+{
+	cell_pmu_ops->sync_irq(cell_pmu_ops->priv, node);
+}
 
 #endif /* __ASM_CELL_PMU_H__ */
