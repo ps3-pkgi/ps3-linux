@@ -210,18 +210,30 @@ struct task_struct;
 extern void ia64_save_extra (struct task_struct *task);
 extern void ia64_load_extra (struct task_struct *task);
 
-#define IA64_HAS_EXTRA_STATE(t)						\
-	(((t)->thread.flags & IA64_THREAD_DBG_VALID)			\
-	 || IS_IA32_PROCESS(task_pt_regs(t)))
+#ifdef CONFIG_VIRT_CPU_ACCOUNTING
+extern void ia64_account_on_switch (struct task_struct *prev, struct task_struct *next);
+# define IA64_ACCOUNT_ON_SWITCH(p,n) ia64_account_on_switch(p,n)
+#else
+# define IA64_ACCOUNT_ON_SWITCH(p,n)
+#endif
+
+#ifdef CONFIG_PERFMON
+  DECLARE_PER_CPU(unsigned long, pfm_syst_info);
+# define PERFMON_IS_SYSWIDE() (__get_cpu_var(pfm_syst_info) & 0x1)
+#else
+# define PERFMON_IS_SYSWIDE() (0)
+#endif
+
+#define IA64_HAS_EXTRA_STATE(t)							\
+	((t)->thread.flags & (IA64_THREAD_DBG_VALID|IA64_THREAD_PM_VALID)	\
+	 || IS_IA32_PROCESS(task_pt_regs(t)) || PERFMON_IS_SYSWIDE())
 
 #define __switch_to(prev,next,last) do {							 \
+	IA64_ACCOUNT_ON_SWITCH(prev, next);							 \
 	if (IA64_HAS_EXTRA_STATE(prev))								 \
 		ia64_save_extra(prev);								 \
 	if (IA64_HAS_EXTRA_STATE(next))								 \
 		ia64_load_extra(next);								 \
-	if (test_tsk_thread_flag(prev, TIF_PERFMON_CTXSW)					 \
-	    || test_tsk_thread_flag(next, TIF_PERFMON_CTXSW))					 \
-		pfm_ctxsw(prev, next);								 \
 	ia64_psr(task_pt_regs(next))->dfh = !ia64_is_local_fpu_owner(next);			 \
 	(last) = ia64_switch_to((next));							 \
 } while (0)
@@ -261,6 +273,10 @@ void cpu_idle_wait(void);
 #define arch_align_stack(x) (x)
 
 void default_idle(void);
+
+#ifdef CONFIG_VIRT_CPU_ACCOUNTING
+extern void account_system_vtime(struct task_struct *);
+#endif
 
 #endif /* __KERNEL__ */
 
