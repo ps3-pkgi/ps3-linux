@@ -27,7 +27,6 @@
 /*
  * arch-specific user visible interface definitions
  */
-
 #define PFM_ARCH_MAX_PMCS	(256+64) /* 256 HW 64 SW */
 #define PFM_ARCH_MAX_PMDS	(256+64) /* 256 HW 64 SW */
 

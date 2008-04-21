@@ -25,6 +25,7 @@
 #include <linux/module.h>
 #include <linux/vmalloc.h>
 #include <linux/topology.h>
+#include <linux/kprobes.h>
 #include <linux/pci.h>
 #include <linux/perfmon_kern.h>
 
@@ -39,37 +40,38 @@ static int force_nmi;
 MODULE_PARM_DESC(force_nmi, "bool: force use of NMI for PMU interrupt");
 module_param(force_nmi, bool, 0600);
 
+#define HAS_IBS		0x01	/* has IBS  support */
+#define HAS_IBS_EXT	0x02	/* has extended IBS support */
+#define USE_EI		0x04	/* uses extended interrupts */
+
+static	u8  ibs_eilvt_off, ibs_status;	/* AMD: extended interrupt LVT offset */
+
+static void pfm_amd64_restore_pmcs(struct pfm_context *ctx,
+				   struct pfm_event_set *set);
+static void __kprobes pfm_amd64_quiesce(void);
+static int pfm_amd64_has_ovfls(struct pfm_context *ctx);
+static int pfm_amd64_stop_save(struct pfm_context *ctx,
+			       struct pfm_event_set *set);
+
+#define IBSFETCHCTL_PMC	4 /* pmc4 */
+#define IBSFETCHCTL_PMD	4 /* pmd4 */
+#define IBSOPSCTL_PMC	5 /* pmc5 */
+#define IBSOPSCTL_PMD	7 /* pmd7 */
+
+static u64 enable_mask[PFM_MAX_PMCS];
+static u16 max_enable;
+
 static struct pfm_arch_pmu_info pfm_amd64_pmu_info = {
-	.pmc_addrs = {
-/* pmc0  */	{{MSR_K7_EVNTSEL0, 0}, 0, PFM_REGT_EN},
-/* pmc1  */	{{MSR_K7_EVNTSEL1, 0}, 1, PFM_REGT_EN},
-/* pmc2  */	{{MSR_K7_EVNTSEL2, 0}, 2, PFM_REGT_EN},
-/* pmc3  */	{{MSR_K7_EVNTSEL3, 0}, 3, PFM_REGT_EN},
-/* pmc4  */	{{MSR_AMD64_IBSFETCHCTL, 0}, 0, PFM_REGT_EN|PFM_REGT_IBS},
-/* pmc5  */	{{MSR_AMD64_IBSOPCTL, 0}, 0, PFM_REGT_EN|PFM_REGT_IBS},
-	},
-	.pmd_addrs = {
-/* pmd0  */	{{MSR_K7_PERFCTR0, 0}, 0, PFM_REGT_CTR},
-/* pmd1  */	{{MSR_K7_PERFCTR1, 0}, 0, PFM_REGT_CTR},
-/* pmd2  */	{{MSR_K7_PERFCTR2, 0}, 0, PFM_REGT_CTR},
-/* pmd3  */	{{MSR_K7_PERFCTR3, 0}, 0, PFM_REGT_CTR},
-/* pmd4  */	{{MSR_AMD64_IBSFETCHCTL, 0}, 0, PFM_REGT_IBS},
-/* pmd5  */	{{MSR_AMD64_IBSFETCHLINAD, 0}, 0, PFM_REGT_IBS},
-/* pmd6  */	{{MSR_AMD64_IBSFETCHPHYSAD, 0}, 0, PFM_REGT_IBS},
-/* pmd7  */	{{MSR_AMD64_IBSOPCTL, 0}, 0, PFM_REGT_IBS},
-/* pmd8  */	{{MSR_AMD64_IBSOPRIP, 0}, 0, PFM_REGT_IBS},
-/* pmd9  */	{{MSR_AMD64_IBSOPDATA, 0}, 0, PFM_REGT_IBS},
-/* pmd10 */	{{MSR_AMD64_IBSOPDATA2, 0}, 0, PFM_REGT_IBS},
-/* pmd11 */	{{MSR_AMD64_IBSOPDATA3, 0}, 0, PFM_REGT_IBS_EXT},
-/* pmd12 */	{{MSR_AMD64_IBSDCLINAD, 0}, 0, PFM_REGT_IBS_EXT},
-/* pmd13 */	{{MSR_AMD64_IBSDCPHYSAD, 0}, 0, PFM_REGT_IBS_EXT},
-	},
-	.ibsfetchctl_pmc = 4,
-	.ibsfetchctl_pmd = 4,
-	.ibsopctl_pmc = 5,
-	.ibsopctl_pmd = 7,
-	.pmu_style = PFM_X86_PMU_AMD64,
+	.stop_save = pfm_amd64_stop_save,
+	.has_ovfls = pfm_amd64_has_ovfls,
+	.quiesce = pfm_amd64_quiesce,
+	.restore_pmcs = pfm_amd64_restore_pmcs
 };
+
+#define PFM_AMD64_IBSFETCHVAL	(1ULL<<49) /* valid fetch sample */
+#define PFM_AMD64_IBSFETCHEN	(1ULL<<48) /* fetch sampling enabled */
+#define PFM_AMD64_IBSOPVAL	(1ULL<<18) /* valid execution sample */
+#define PFM_AMD64_IBSOPEN	(1ULL<<17) /* execution sampling enabled */
 
 /*
  * force Local APIC interrupt on overflow
@@ -78,32 +80,25 @@ static struct pfm_arch_pmu_info pfm_amd64_pmu_info = {
 #define PFM_K8_NO64	(1ULL<<20)
 
 /*
- * for performance counter control registers:
- *
- * reserved bits must be zero
+ * reserved bits must be 1
  *
  * for family 15:
  * - upper 32 bits are reserved
+ * - bit 20, bit 21
  *
  * for family 16:
  * - bits 36-39 are reserved
  * - bits 42-63 are reserved
- */
-#define PFM_K8_RSVD ((~((1ULL<<32)-1)) | (1ULL<<20) | (1ULL<<21))
-#define PFM_16_RSVD ((0x3fffffULL<<42) | (0xfULL<<36) | (1ULL<<20) | (1ULL<<21))
-
-/*
+ * - bit 20, bit 21
+ *
  * for IBS registers:
  * 	IBSFETCHCTL: all bits are reserved except bits 57, 48, 15:0
  * 	IBSOPSCTL  : all bits are reserved except bits 17, 15:0
  */
+#define PFM_K8_RSVD 	((~((1ULL<<32)-1)) | (1ULL<<20) | (1ULL<<21))
+#define PFM_16_RSVD ((0x3fffffULL<<42) | (0xfULL<<36) | (1ULL<<20) | (1ULL<<21))
 #define PFM_AMD64_IBSFETCHCTL_RSVD	(~((1ULL<<48)|(1ULL<<57)|0xffffULL))
 #define PFM_AMD64_IBSOPCTL_RSVD		(~((1ULL<<17)|0xffffULL))
-
-#define IBSCTL				0x1cc
-#define IBSCTL_LVTOFFSETVAL		(1 << 8)
-
-#define ENABLE_CF8_EXT_CFG		(1ULL << 46)
 
 static struct pfm_regmap_desc pfm_amd64_pmc_desc[] = {
 /* pmc0  */ PMC_D(PFM_REG_I64, "PERFSEL0", PFM_K8_VAL, PFM_K8_RSVD, PFM_K8_NO64, MSR_K7_EVNTSEL0),
@@ -116,11 +111,17 @@ static struct pfm_regmap_desc pfm_amd64_pmc_desc[] = {
 #define PFM_AMD_NUM_PMCS ARRAY_SIZE(pfm_amd64_pmc_desc)
 
 #define PFM_REG_IBS (PFM_REG_I|PFM_REG_INTR)
+
+/*
+ * AMD64 counters are 48 bits, upper bits are reserved
+ */
+#define PFM_AMD64_CTR_RSVD	(~((1ULL<<48)-1))
+
 static struct pfm_regmap_desc pfm_amd64_pmd_desc[] = {
-/* pmd0  */ PMD_D(PFM_REG_C,   "PERFCTR0",	MSR_K7_PERFCTR0),
-/* pmd1  */ PMD_D(PFM_REG_C,   "PERFCTR1",	MSR_K7_PERFCTR1),
-/* pmd2  */ PMD_D(PFM_REG_C,   "PERFCTR2",	MSR_K7_PERFCTR2),
-/* pmd3  */ PMD_D(PFM_REG_C,   "PERFCTR3",	MSR_K7_PERFCTR3),
+/* pmd0  */ PMD_DR(PFM_REG_C,   "PERFCTR0",	MSR_K7_PERFCTR0, PFM_AMD64_CTR_RSVD),
+/* pmd1  */ PMD_DR(PFM_REG_C,   "PERFCTR1",	MSR_K7_PERFCTR1, PFM_AMD64_CTR_RSVD),
+/* pmd2  */ PMD_DR(PFM_REG_C,   "PERFCTR2",	MSR_K7_PERFCTR2, PFM_AMD64_CTR_RSVD),
+/* pmd3  */ PMD_DR(PFM_REG_C,   "PERFCTR3",	MSR_K7_PERFCTR3, PFM_AMD64_CTR_RSVD),
 /* pmd4  */ PMD_D(PFM_REG_IBS, "IBSFETCHCTL",	MSR_AMD64_IBSFETCHCTL),
 /* pmd5  */ PMD_D(PFM_REG_IRO, "IBSFETCHLINAD",	MSR_AMD64_IBSFETCHLINAD),
 /* pmd6  */ PMD_D(PFM_REG_IRO, "IBSFETCHPHYSAD", MSR_AMD64_IBSFETCHPHYSAD),
@@ -147,7 +148,7 @@ extern spinlock_t pci_config_lock;
 	(0x80000000 | ((reg & 0xF00) << 16) | ((bus & 0xFF) << 16) \
 	| (devfn << 8) | (reg & 0xFC))
 
-#define is_ibs(x) (pfm_amd64_pmu_info.pmc_addrs[x].reg_type & PFM_REGT_IBS)
+#define is_ibs_pmc(x) (x == 4 || x == 5)
 
 static int pci_read(unsigned int seg, unsigned int bus,
 		    unsigned int devfn, int reg, int len, u32 *value)
@@ -223,6 +224,7 @@ pci_write_ext_config_dword(struct pci_dev *dev, int where, u32 val)
 
 static void pfm_amd64_enable_pci_ecs_per_cpu(void)
 {
+#define ENABLE_CF8_EXT_CFG		(1ULL << 46)
 	u64 reg;
 	/* enable PCI extended config space */
 	rdmsrl(MSR_AMD64_NB_CFG, reg);
@@ -242,11 +244,13 @@ static void pfm_amd64_setup_eilvt_per_cpu(void *info)
 	lvt_off =  setup_APIC_eilvt_ibs(LOCAL_PERFMON_VECTOR,
 					APIC_EILVT_MSG_FIX, 0);
 	PFM_DBG("APIC_EILVT%d set to 0x%x", lvt_off, LOCAL_PERFMON_VECTOR);
-	pfm_amd64_pmu_info.ibs_eilvt_off = lvt_off;
+	ibs_eilvt_off = lvt_off;
 }
 
 static int pfm_amd64_setup_eilvt(void)
 {
+#define IBSCTL_LVTOFFSETVAL		(1 << 8)
+#define IBSCTL				0x1cc
 	struct pci_dev *cpu_cfg;
 	int nodes;
 	u32 value = 0;
@@ -263,12 +267,10 @@ static int pfm_amd64_setup_eilvt(void)
 		if (!cpu_cfg)
 			break;
 		++nodes;
-		pci_write_ext_config_dword(cpu_cfg, IBSCTL,
-					   pfm_amd64_pmu_info.ibs_eilvt_off
+		pci_write_ext_config_dword(cpu_cfg, IBSCTL, ibs_eilvt_off
 					   | IBSCTL_LVTOFFSETVAL);
 		pci_read_ext_config_dword(cpu_cfg, IBSCTL, &value);
-		if (value != (pfm_amd64_pmu_info.ibs_eilvt_off
-			      | IBSCTL_LVTOFFSETVAL)) {
+		if (value != (ibs_eilvt_off | IBSCTL_LVTOFFSETVAL)) {
 			PFM_DBG("Failed to setup IBS LVT offset, "
 				"IBSCTL = 0x%08x", value);
 			return 1;
@@ -388,7 +390,7 @@ static int pfm_amd64_load_context(struct pfm_context *ctx)
 			if (!test_bit(i, cast_ulp(set->used_pmcs)))
 				continue;
 
-			if (!is_ibs(i) && (set->pmcs[i] & 0xff) >= 0xee)
+			if (!is_ibs_pmc(i) && (set->pmcs[i] & 0xff) >= 0xee)
 				goto found;
 			n--;
 		}
@@ -401,7 +403,7 @@ found:
 /*
  * invoked on pfm_unload_context()
  */
-static int pfm_amd64_unload_context(struct pfm_context *ctx)
+static void pfm_amd64_unload_context(struct pfm_context *ctx)
 {
 	struct pfm_context **entry, *old;
 	int proc_id;
@@ -427,7 +429,6 @@ static int pfm_amd64_unload_context(struct pfm_context *ctx)
 		else
 			PFM_DBG("released NorthBridge events globally");
 	}
-	return 0;
 }
 
 /*
@@ -466,7 +467,7 @@ static int pfm_amd64_setup_nb_event_control(void)
 	 * activate write-checker for PMC registers
 	 */
 	for (c = 0; c < PFM_AMD_NUM_PMCS; c++) {
-		if (!is_ibs(c))
+		if (!is_ibs_pmc(c))
 			pfm_amd64_pmc_desc[c].type |= PFM_REG_WC;
 	}
 
@@ -486,52 +487,39 @@ static int pfm_amd64_setup_nb_event_control(void)
  */
 static void pfm_amd64_check_registers(void)
 {
-	struct pfm_arch_ext_reg *ext_reg;
-	u16 i, has_ibs, has_ibsext;
+	u16 i;
 
-	has_ibs = pfm_amd64_pmu_info.flags & PFM_X86_FL_IBS;
-	has_ibsext = pfm_amd64_pmu_info.flags & PFM_X86_FL_IBS_EXT;
+	PFM_DBG("has_ibs=%d has_ibs_ext=%d",
+		!!(ibs_status & HAS_IBS),
+		!!(ibs_status & HAS_IBS_EXT));
 
-	PFM_DBG("has_ibs=%d has_ibs_ext=%d", has_ibs, has_ibsext);
+	__set_bit(0, cast_ulp(enable_mask));
+	__set_bit(1, cast_ulp(enable_mask));
+	__set_bit(2, cast_ulp(enable_mask));
+	__set_bit(3, cast_ulp(enable_mask));
+	max_enable = 3+1;
+
 
 	/*
-	 * Scan PMC registers
+	 * remove IBS registers if feature not present
 	 */
-	ext_reg = pfm_amd64_pmu_info.pmc_addrs;
-	for (i = 0; i < PFM_AMD_NUM_PMCS;  i++, ext_reg++) {
-		if (!has_ibs && ext_reg->reg_type & PFM_REGT_IBS) {
-			ext_reg->reg_type = PFM_REGT_NA;
-			pfm_amd64_pmc_desc[i].type = PFM_REG_NA;
-			PFM_DBG("pmc%u not available", i);
-		}
-		if (!has_ibsext && ext_reg->reg_type & PFM_REGT_IBS_EXT) {
-			ext_reg->reg_type = PFM_REGT_NA;
-			pfm_amd64_pmc_desc[i].type = PFM_REG_NA;
-			PFM_DBG("pmc%u not available", i);
-		}
+	if (!(ibs_status & HAS_IBS)) {
+		pfm_amd64_pmc_desc[4].type = PFM_REG_NA;
+		pfm_amd64_pmc_desc[5].type = PFM_REG_NA;
+		for (i=4; i < 14; i++)
+			pfm_amd64_pmd_desc[i].type = PFM_REG_NA;
+	} else {
+		__set_bit(16, cast_ulp(enable_mask));
+		__set_bit(17, cast_ulp(enable_mask));
+		max_enable = 17 + 1;
 	}
 
 	/*
-	 * Scan PMD registers
+	 * remove IBS extended registers if feature not present
 	 */
-	ext_reg = pfm_amd64_pmu_info.pmd_addrs;
-	for (i = 0; i < PFM_AMD_NUM_PMDS;  i++, ext_reg++) {
-		if (!has_ibs && ext_reg->reg_type & PFM_REGT_IBS) {
-			ext_reg->reg_type = PFM_REGT_NA;
+	if (!(ibs_status & HAS_IBS_EXT)) {
+		for (i=11; i < 14; i++)
 			pfm_amd64_pmd_desc[i].type = PFM_REG_NA;
-			PFM_DBG("pmd%u not available", i);
-		}
-		if (!has_ibsext && ext_reg->reg_type & PFM_REGT_IBS_EXT) {
-			ext_reg->reg_type = PFM_REGT_NA;
-			pfm_amd64_pmd_desc[i].type = PFM_REG_NA;
-			PFM_DBG("pmd%u not available", i);
-		}
-
-		/*
-		 * adjust reserved mask for counters
-		 */
-		if (ext_reg->reg_type & PFM_REGT_CTR)
-			pfm_amd64_pmd_desc[i].rsvd_msk = ~((1ULL<<48)-1);
 	}
 	/*
 	 * adjust reserved bit fields for family 16
@@ -555,10 +543,9 @@ static int pfm_amd64_probe_pmu(void)
 	case 16:
 		if (current_cpu_data.x86_model >= 2) {
 			/* Family 10h, RevB and later */
-			pfm_amd64_pmu_info.flags |= PFM_X86_FL_IBS_EXT
-				| PFM_X86_FL_USE_EI;
+			ibs_status |= HAS_IBS_EXT | USE_EI;
 		}
-		pfm_amd64_pmu_info.flags |= PFM_X86_FL_IBS;
+		ibs_status |= HAS_IBS;
 		rdmsrl(MSR_AMD64_IBSCTL, val);
 	case 15:
 	case  6:
@@ -585,31 +572,242 @@ static int pfm_amd64_probe_pmu(void)
 		pfm_amd64_pmu_info.flags |= PFM_X86_FL_USE_NMI;
 
 	/* Setup extended interrupt */
-	if (pfm_amd64_pmu_info.flags & PFM_X86_FL_USE_EI) {
+	if (ibs_status & USE_EI) {
 		if (pfm_amd64_setup_eilvt()) {
 			PFM_INFO("Failed to initialize extended interrupts "
 				 "for IBS");
-			pfm_amd64_pmu_info.flags &= ~(PFM_X86_FL_IBS
-					      | PFM_X86_FL_IBS_EXT
-					      | PFM_X86_FL_USE_EI);
+			ibs_status  &= ~(HAS_IBS | HAS_IBS_EXT | USE_EI);
 			PFM_INFO("Unable to use IBS");
 		}
 	}
 
-	if (pfm_amd64_pmu_info.flags & PFM_X86_FL_IBS)
+	if (ibs_status & HAS_IBS)
 		PFM_INFO("IBS supported");
 
-	if (pfm_amd64_pmu_info.flags & PFM_X86_FL_IBS_EXT)
+	if (ibs_status & HAS_IBS_EXT)
 		PFM_INFO("IBS extended registers supported");
 
-	if (pfm_amd64_pmu_info.flags & PFM_X86_FL_USE_EI)
+	if (ibs_status & USE_EI)
 		PFM_INFO("Using extended interrupts for IBS");
-	else if (pfm_amd64_pmu_info.flags & (PFM_X86_FL_IBS|PFM_X86_FL_IBS_EXT))
+	else if (ibs_status & (HAS_IBS|HAS_IBS_EXT))
 		PFM_INFO("Using performance counter interrupts for IBS");
 
 	pfm_amd64_check_registers();
 
 	return 0;
+}
+
+/*
+ * detect is counters have overflowed.
+ * return:
+ * 	0 : no overflow
+ * 	1 : at least one overflow
+ */
+static int __kprobes pfm_amd64_has_ovfls(struct pfm_context *ctx)
+{
+	struct pfm_regmap_desc *xrd;
+	u64 *cnt_mask;
+	u64 wmask, val;
+	u16 i, num;
+
+	/*
+	 * Check for IBS events
+	 */
+	if (ibs_status & HAS_IBS) {
+		rdmsrl(MSR_AMD64_IBSFETCHCTL, val);
+		if (val & PFM_AMD64_IBSFETCHVAL)
+			return 1;
+		rdmsrl(MSR_AMD64_IBSOPCTL, val);
+		if (val & PFM_AMD64_IBSOPVAL)
+			return 1;
+	}
+	/*
+	 * Check regular counters
+	 */
+	cnt_mask = pfm_pmu_conf->regs.cnt_pmds;
+	num = pfm_pmu_conf->regs.num_counters;
+	wmask = 1ULL << pfm_pmu_conf->counter_width;
+	xrd = pfm_amd64_pmd_desc;
+
+	for (i = 0; num; i++) {
+		if (test_bit(i, cast_ulp(cnt_mask))) {
+			rdmsrl(xrd[i].hw_addr, val);
+			if (!(val & wmask))
+				return 1;
+			num--;
+		}
+	}
+	return 0;
+}
+
+/*
+ * Must check for IBS event BEFORE stop_save_p6 because
+ * stopping monitoring does destroy IBS state information
+ * in IBSFETCHCTL/IBSOPCTL because they are tagged as enable
+ * registers.
+ */
+static int pfm_amd64_stop_save(struct pfm_context *ctx, struct pfm_event_set *set)
+{
+	struct pfm_arch_pmu_info *pmu_info;
+	u64 used_mask[PFM_PMC_BV];
+	u64 *cnt_pmds;
+	u64 val, wmask, ovfl_mask;
+	u32 i, count, use_ibs;
+
+	pmu_info = pfm_pmu_info();
+
+	/*
+	 * IBS used if:
+	 *   - on family 10h processor with IBS
+	 *   - at least one of the IBS PMD registers is used
+	 */
+	use_ibs = (ibs_status & HAS_IBS)
+		&& (test_bit(IBSFETCHCTL_PMD, cast_ulp(set->used_pmds))
+		    ||test_bit(IBSOPSCTL_PMD, cast_ulp(set->used_pmds)));
+
+	wmask = 1ULL << pfm_pmu_conf->counter_width;
+
+	bitmap_and(cast_ulp(used_mask),
+		   cast_ulp(set->used_pmcs),
+		   cast_ulp(enable_mask),
+		   max_enable);
+
+	count = bitmap_weight(cast_ulp(used_mask), max_enable);
+
+	/*
+	 * stop monitoring
+	 * Unfortunately, this is very expensive!
+	 * wrmsrl() is serializing.
+	 *
+	 * With IBS, we need to do read-modify-write to preserve the content
+	 * for OpsCTL and FetchCTL because they are also used as PMDs and saved
+	 * below
+	 */
+	if (use_ibs) {
+		for (i = 0; count; i++) {
+			if (test_bit(i, cast_ulp(used_mask))) {
+				if (i == IBSFETCHCTL_PMC) {
+					rdmsrl(pfm_pmu_conf->pmc_desc[i].hw_addr, val);
+					val &= ~PFM_AMD64_IBSFETCHEN;
+				} else if (i == IBSOPSCTL_PMC) {
+					rdmsrl(pfm_pmu_conf->pmc_desc[i].hw_addr, val);
+					val &= ~PFM_AMD64_IBSOPEN;
+				} else
+					val = 0;
+				wrmsrl(pfm_pmu_conf->pmc_desc[i].hw_addr, val);
+				count--;
+			}
+		}
+	} else {
+		for (i = 0; count; i++) {
+			if (test_bit(i, cast_ulp(used_mask))) {
+				wrmsrl(pfm_pmu_conf->pmc_desc[i].hw_addr, 0);
+				count--;
+			}
+		}
+	}
+
+	/*
+	 * if we already having a pending overflow condition, we simply
+	 * return to take care of this first.
+	 */
+	if (set->npend_ovfls)
+		return 1;
+
+	ovfl_mask = pfm_pmu_conf->ovfl_mask;
+	cnt_pmds = pfm_pmu_conf->regs.cnt_pmds;
+
+	/*
+	 * check for pending overflows and save PMDs (combo)
+	 * we employ used_pmds because we also need to save
+	 * and not just check for pending interrupts.
+	 *
+	 * Must check for counting PMDs because of virtual PMDs and IBS
+	 */
+	count = set->nused_pmds;
+	for (i = 0; count; i++) {
+		if (test_bit(i, cast_ulp(set->used_pmds))) {
+			val = pfm_arch_read_pmd(ctx, i);
+			if (likely(test_bit(i, cast_ulp(cnt_pmds)))) {
+				if (!(val & wmask)) {
+					__set_bit(i, cast_ulp(set->povfl_pmds));
+					set->npend_ovfls++;
+				}
+				val = (set->pmds[i].value & ~ovfl_mask) | (val & ovfl_mask);
+			}
+			set->pmds[i].value = val;
+			count--;
+		}
+	}
+
+	/*
+	 * check if IBS contains valid data, and mark the corresponding
+	 * PMD has overflowed
+	 */
+	if (use_ibs) {
+		if (set->pmds[IBSFETCHCTL_PMD].value & PFM_AMD64_IBSFETCHVAL) {
+			__set_bit(IBSFETCHCTL_PMD, cast_ulp(set->povfl_pmds));
+			set->npend_ovfls++;
+		}
+		if (set->pmds[IBSOPSCTL_PMD].value & PFM_AMD64_IBSOPVAL) {
+			__set_bit(IBSOPSCTL_PMD, cast_ulp(set->povfl_pmds));
+			set->npend_ovfls++;
+		}
+	}
+	/* 0 means: no need to save PMDs at upper level */
+	return 0;
+}
+
+/**
+ * pfm_amd64_quiesce_pmu -- stop monitoring without grabbing any lock
+ *
+ * called from NMI interrupt handler to immediately stop monitoring
+ * cannot grab any lock, including perfmon related locks
+ */
+static void __kprobes pfm_amd64_quiesce(void)
+{
+	/*
+	 * quiesce PMU by clearing available registers that have
+	 * the start/stop capability
+	 */
+	if (test_bit(0, cast_ulp(pfm_pmu_conf->regs.pmcs)))
+		wrmsrl(MSR_K7_EVNTSEL0, 0);
+	if (test_bit(1, cast_ulp(pfm_pmu_conf->regs.pmcs)))
+		wrmsrl(MSR_K7_EVNTSEL0+1, 0);
+	if (test_bit(2, cast_ulp(pfm_pmu_conf->regs.pmcs)))
+		wrmsrl(MSR_K7_EVNTSEL0+2, 0);
+	if (test_bit(3, cast_ulp(pfm_pmu_conf->regs.pmcs)))
+		wrmsrl(MSR_K7_EVNTSEL0+3, 0);
+
+	if (test_bit(4, cast_ulp(pfm_pmu_conf->regs.pmcs)))
+		wrmsrl(MSR_AMD64_IBSFETCHCTL, 0);
+	if (test_bit(5, cast_ulp(pfm_pmu_conf->regs.pmcs)))
+		wrmsrl(MSR_AMD64_IBSOPCTL, 0);
+}
+
+/**
+ * pfm_amd64_restore_pmcs - reload PMC registers
+ * @ctx: context to restore from
+ * @set: current event set
+ *
+ * optimized version of pfm_arch_restore_pmcs(). On AMD64, we can
+ * afford to only restore the pmcs registers we use, because they are
+ * all independent from each other.
+ */
+static void pfm_amd64_restore_pmcs(struct pfm_context *ctx,
+				   struct pfm_event_set *set)
+{
+	u64 *mask;
+	u16 i, num;
+
+	mask = set->used_pmcs;
+	num = set->nused_pmcs;
+	for (i = 0; num; i++) {
+		if (test_bit(i, cast_ulp(mask))) {
+			wrmsrl(pfm_amd64_pmc_desc[i].hw_addr,set->pmcs[i]);
+			num--;
+		}
+	}
 }
 
 static struct pfm_pmu_config pfm_amd64_pmu_conf = {
@@ -621,7 +819,7 @@ static struct pfm_pmu_config pfm_amd64_pmu_conf = {
 	.num_pmd_entries = PFM_AMD_NUM_PMDS,
 	.probe_pmu = pfm_amd64_probe_pmu,
 	.version = "1.2",
-	.arch_info = &pfm_amd64_pmu_info,
+	.pmu_info = &pfm_amd64_pmu_info,
 	.flags = PFM_PMU_BUILTIN_FLAG,
 	.owner = THIS_MODULE,
 };

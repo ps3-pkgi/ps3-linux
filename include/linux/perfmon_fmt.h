@@ -23,14 +23,6 @@
 
 #include <linux/kobject.h>
 
-/*
- * ovfl_ctrl bitmask of flags
- */
-#define PFM_OVFL_CTRL_NOTIFY	0x1	/* notify user */
-#define PFM_OVFL_CTRL_RESET	0x2	/* reset overflowed pmds */
-#define PFM_OVFL_CTRL_MASK	0x4	/* mask monitoring */
-
-
 typedef int (*fmt_validate_t )(u32 flags, u16 npmds, void *arg);
 typedef	int (*fmt_getsize_t)(u32 flags, void *arg, size_t *size);
 typedef int (*fmt_init_t)(struct pfm_context *ctx, void *buf, u32 flags, u16 nmpds, void *arg);

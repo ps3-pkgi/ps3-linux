@@ -72,6 +72,16 @@
 		spin_lock(l); \
 	} while(0)
 
+/*
+ * on Power, due to lazy masking of the interrupts, we need to convert
+ * regular spin_lock in spin + mask. This affects context switches and
+ * interrupt handling
+ */
+#undef pfm_spin_lock
+#define pfm_spin_lock(l, f) pfm_spin_lock_irqsave(l, f)
+#undef pfm_spin_unlock
+#define pfm_spin_unlock(l, f) pfm_spin_unlock_irqrestore(l, f)
+
 enum powerpc_pmu_type {
 	PFM_POWERPC_PMU_NONE,
 	PFM_POWERPC_PMU_604,
@@ -118,16 +128,14 @@ struct pfm_arch_pmu_info {
 	void (*ctxswin_thread)(struct task_struct *task,
 			       struct pfm_context *ctx,
 			       struct pfm_event_set *set);
-	int  (*load_context)(struct pfm_context *ctx,
-			     struct pfm_event_set *set,
-			     struct task_struct *task);
-	int  (*unload_context)(struct pfm_context *ctx,
-			       struct task_struct *task);
+	int  (*load_context)(struct pfm_context *ctx);
+	void (*unload_context)(struct pfm_context *ctx);
 	int  (*create_context)(struct pfm_context *ctx,
 			       u32 ctx_flags);
 	void (*free_context)(struct pfm_context *ctx);
 	int  (*acquire_pmu)(void);
 	void (*release_pmu)(void);
+	int  (*can_access_pmu)(struct pfm_context *ctx, int can_access);
 	void *platform_info;
 };
 
@@ -149,7 +157,9 @@ static inline void pfm_arch_write_pmc(struct pfm_context *ctx,
 				      unsigned int cnum,
 				      u64 value)
 {
-	struct pfm_arch_pmu_info *arch_info = pfm_pmu_conf->arch_info;
+	struct pfm_arch_pmu_info *arch_info;
+
+	arch_info =  pfm_pmu_info();
 
 	/*
 	 * we only write to the actual register when monitoring is
@@ -166,7 +176,9 @@ static inline void pfm_arch_write_pmc(struct pfm_context *ctx,
 static inline void pfm_arch_write_pmd(struct pfm_context *ctx,
 				      unsigned int cnum, u64 value)
 {
-	struct pfm_arch_pmu_info *arch_info = pfm_pmu_conf->arch_info;
+	struct pfm_arch_pmu_info *arch_info;
+
+	arch_info = pfm_pmu_info();
 
 	value &= pfm_pmu_conf->ovfl_mask;
 
@@ -177,7 +189,9 @@ static inline void pfm_arch_write_pmd(struct pfm_context *ctx,
 
 static inline u64 pfm_arch_read_pmd(struct pfm_context *ctx, unsigned int cnum)
 {
-	struct pfm_arch_pmu_info *arch_info = pfm_pmu_conf->arch_info;
+	struct pfm_arch_pmu_info *arch_info;
+
+	arch_info = pfm_pmu_info();
 
 	BUG_ON(!arch_info->read_pmd);
 
@@ -213,25 +227,19 @@ static inline int pfm_arch_is_active(struct pfm_context *ctx)
 }
 
 static inline void pfm_arch_ctxswout_sys(struct task_struct *task,
-					 struct pfm_context *ctx,
-					 struct pfm_event_set *set)
+					 struct pfm_context *ctx)
 {}
 
 static inline void pfm_arch_ctxswin_sys(struct task_struct *task,
-					struct pfm_context *ctx,
-					struct pfm_event_set *set)
+					struct pfm_context *ctx)
 {}
 
 void pfm_arch_init_percpu(void);
 int  pfm_arch_is_monitoring_active(struct pfm_context *ctx);
-int  pfm_arch_ctxswout_thread(struct task_struct *task, struct pfm_context *ctx,
-			      struct pfm_event_set *set);
-void pfm_arch_ctxswin_thread(struct task_struct *task, struct pfm_context *ctx,
-			     struct pfm_event_set *set);
-void pfm_arch_stop(struct task_struct *task, struct pfm_context *ctx,
-			  struct pfm_event_set *set);
-void pfm_arch_start(struct task_struct *task, struct pfm_context *ctx,
-			   struct pfm_event_set *set);
+int  pfm_arch_ctxswout_thread(struct task_struct *task,struct pfm_context *ctx);
+void pfm_arch_ctxswin_thread(struct task_struct *task, struct pfm_context *ctx);
+void pfm_arch_stop(struct task_struct *task, struct pfm_context *ctx);
+void pfm_arch_start(struct task_struct *task, struct pfm_context *ctx);
 void pfm_arch_restore_pmds(struct pfm_context *ctx, struct pfm_event_set *set);
 void pfm_arch_restore_pmcs(struct pfm_context *ctx, struct pfm_event_set *set);
 int  pfm_arch_get_ovfl_pmds(struct pfm_context *ctx,
@@ -248,7 +256,7 @@ char *pfm_arch_get_pmu_module_name(void);
  */
 static inline void pfm_arch_intr_freeze_pmu(struct pfm_context *ctx, struct pfm_event_set *set)
 {
-	pfm_arch_stop(current, ctx, set);
+	pfm_arch_stop(current, ctx);
 }
 
 void powerpc_irq_handler(struct pt_regs *regs);
@@ -271,7 +279,7 @@ static inline void pfm_arch_intr_unfreeze_pmu(struct pfm_context *ctx)
 	if (ctx->state == PFM_CTX_MASKED)
 		return;
 
-	arch_info = pfm_pmu_conf->arch_info;
+	arch_info = pfm_pmu_info();
 	BUG_ON(!arch_info->enable_counters);
 	arch_info->enable_counters(ctx, ctx->active_set);
 }
@@ -303,7 +311,7 @@ static inline void pfm_arch_mask_monitoring(struct pfm_context *ctx,
 static inline void pfm_arch_unmask_monitoring(struct pfm_context *ctx,
 					      struct pfm_event_set *set)
 {
-	pfm_arch_start(current, ctx, set);
+	pfm_arch_start(current, ctx);
 }
 
 
@@ -312,15 +320,13 @@ static inline int pfm_arch_pmu_config_init(struct pfm_pmu_config *cfg)
 	return 0;
 }
 
-static inline void pfm_arch_pmu_config_remove(void)
-{}
-
 static inline int pfm_arch_context_create(struct pfm_context *ctx,
 					  u32 ctx_flags)
 {
-	struct pfm_arch_pmu_info *arch_info = pfm_pmu_conf->arch_info;
+	struct pfm_arch_pmu_info *arch_info;
 	int rc = 0;
 
+	arch_info = pfm_pmu_info();
 	if (arch_info->create_context)
 		rc = arch_info->create_context(ctx, ctx_flags);
 
@@ -329,8 +335,9 @@ static inline int pfm_arch_context_create(struct pfm_context *ctx,
 
 static inline void pfm_arch_context_free(struct pfm_context *ctx)
 {
-	struct pfm_arch_pmu_info *arch_info = pfm_pmu_conf->arch_info;
+	struct pfm_arch_pmu_info *arch_info;
 
+	arch_info = pfm_pmu_info();
 	if (arch_info->free_context)
 		arch_info->free_context(ctx);
 }
@@ -360,53 +367,33 @@ static inline int pfm_arch_init(void)
 	return 0;
 }
 
-static inline int pfm_arch_load_context(struct pfm_context *ctx,
-					struct pfm_event_set *set,
-					struct task_struct *task)
+static inline int pfm_arch_load_context(struct pfm_context *ctx)
 {
-	struct pfm_arch_pmu_info *arch_info = pfm_pmu_conf->arch_info;
+	struct pfm_arch_pmu_info *arch_info;
 	int rc = 0;
 
+	arch_info = pfm_pmu_info();
 	if (arch_info->load_context)
-		rc = arch_info->load_context(ctx, set, task);
+		rc = arch_info->load_context(ctx);
 
 	return rc;
 }
 
-static inline int pfm_arch_unload_context(struct pfm_context *ctx,
-					  struct task_struct *task)
+static inline void pfm_arch_unload_context(struct pfm_context *ctx)
 {
-	struct pfm_arch_pmu_info *arch_info = pfm_pmu_conf->arch_info;
-	int rc = 0;
+	struct pfm_arch_pmu_info *arch_info;
 
+	arch_info = pfm_pmu_info();
 	if (arch_info->unload_context)
-		rc = arch_info->unload_context(ctx, task);
-
-	return rc;
-}
-
-/*
- * not applicable to powerpc
- */
-static inline int pfm_smpl_buffer_alloc_compat(struct pfm_context *ctx,
-					       size_t rsize, struct file *filp)
-{
-	return -EINVAL;
-}
-
-static inline ssize_t pfm_arch_compat_read(struct pfm_context *ctx,
-			     char __user *buf,
-			     int non_block,
-			     size_t size)
-{
-	return -EINVAL;
+		arch_info->unload_context(ctx);
 }
 
 static inline int pfm_arch_pmu_acquire(void)
 {
-	struct pfm_arch_pmu_info *arch_info = pfm_pmu_conf->arch_info;
+	struct pfm_arch_pmu_info *arch_info;
 	int rc = 0;
 
+	arch_info = pfm_pmu_info();
 	if (arch_info->acquire_pmu) {
 		rc = arch_info->acquire_pmu();
 		if (rc)
@@ -418,8 +405,9 @@ static inline int pfm_arch_pmu_acquire(void)
 
 static inline void pfm_arch_pmu_release(void)
 {
-	struct pfm_arch_pmu_info *arch_info = pfm_pmu_conf->arch_info;
+	struct pfm_arch_pmu_info *arch_info;
 
+	arch_info = pfm_pmu_info();
 	if (arch_info->release_pmu)
 		arch_info->release_pmu();
 
@@ -456,16 +444,19 @@ struct pfm_arch_context {
 };
 
 /*
- * This function returns whether the target SPU program is running.
+ * This function returns whether the pmc/pmd register access is allowed.
  */
-static inline int pfm_cell_can_access_pmu_in_cell_spe_follow(
-	struct pfm_context *ctx)
+static inline int pfm_arch_can_access_pmu(
+	struct pfm_context *ctx, int can_access)
 {
-	struct pfm_arch_context *ctx_arch = pfm_ctx_arch(ctx);
-	if (ctx_arch->arg)
-		return 1;
+	struct pfm_arch_pmu_info *arch_info;
+
+	arch_info =  pfm_pmu_info();
+
+	if (arch_info->can_access_pmu)
+		return arch_info->can_access_pmu(ctx, can_access);
 	else
-		return 0;
+		return can_access;
 }
 
 #define PFM_ARCH_CTX_SIZE sizeof(struct pfm_arch_context)

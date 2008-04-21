@@ -385,7 +385,7 @@ static struct pfm_pmu_config pfm_mont_pmu_conf={
 	.pmc_write_check = pfm_mont_pmc_check,
 	.probe_pmu = pfm_mont_probe_pmu,
 	.version = "1.0",
-	.arch_info = &pfm_mont_pmu_info,
+	.pmu_info = &pfm_mont_pmu_info,
 	.flags = PFM_PMU_BUILTIN_FLAG,
 	.owner = THIS_MODULE
 };

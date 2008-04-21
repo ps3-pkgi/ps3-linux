@@ -21,6 +21,7 @@
   */
 #include <linux/module.h>
 #include <linux/perfmon_kern.h>
+#include <linux/kprobes.h>
 #include <asm/msr.h>
 #include <asm/apic.h>
 #include <asm/nmi.h>
@@ -36,6 +37,53 @@ module_param(force, bool, 0600);
 static int force_nmi;
 MODULE_PARM_DESC(force_nmi, "bool: force use of NMI for PMU interrupt");
 module_param(force_nmi, bool, 0600);
+
+/*
+ * For extended register information in addition to address that is used
+ * at runtime to figure out the mapping of reg addresses to logical procs
+ * and association of registers to hardware specific features
+ */
+struct pfm_p4_regmap {
+	/*
+	 * one each for the logical CPUs.  Index 0 corresponds to T0 and
+	 * index 1 corresponds to T1.  Index 1 can be zero if no T1
+	 * complement reg exists.
+	 */
+	unsigned long addrs[2]; /* 2 = number of threads */
+	unsigned int ctr;	/* for CCCR/PERFEVTSEL, associated counter */
+	unsigned int reg_type;
+};
+
+/*
+ * bitmask for pfm_p4_regmap.reg_type
+ */
+#define PFM_REGT_NA		0x0000	/* not available */
+#define PFM_REGT_EN		0x0001	/* has enable bit (cleared on ctxsw) */
+#define PFM_REGT_ESCR		0x0002	/* P4: ESCR */
+#define PFM_REGT_CCCR		0x0004	/* P4: CCCR */
+#define PFM_REGT_PEBS		0x0010	/* PEBS related */
+#define PFM_REGT_NOHT		0x0020	/* unavailable with HT */
+#define PFM_REGT_CTR		0x0040	/* counter */
+
+/*
+ * architecture specific context extension.
+ * located at: (struct pfm_arch_context *)(ctx+1)
+ */
+struct pfm_arch_p4_context {
+	u32	npend_ovfls;	/* P4 NMI #pending ovfls */
+	u32	reserved;
+	u64	povfl_pmds[PFM_PMD_BV]; /* P4 NMI overflowed counters */
+	u64	saved_cccrs[PFM_MAX_PMCS];
+};
+
+/*
+ * ESCR reserved bitmask:
+ * - bits 31 - 63 reserved
+ * - T1_OS and T1_USR bits are reserved - set depending on logical proc
+ *      user mode application should use T0_OS and T0_USR to indicate
+ * RSVD: reserved bits must be 1
+ */
+#define PFM_ESCR_RSVD  ~0x000000007ffffffcULL
 
 /*
  * CCCR default value:
@@ -59,6 +107,8 @@ module_param(force_nmi, bool, 0600);
 			| (0x1ull<<30))
 
 #define PFM_P4_NO64	(3ULL<<26) /* use 3 even in non HT mode */
+
+#define PEBS_PMD	8  /* thread0: IQ_CTR4, thread1: IQ_CTR5 */
 
 /*
  * With HyperThreading enabled:
@@ -86,8 +136,22 @@ module_param(force_nmi, bool, 0600);
 #define PFM_REGT_NHTCTR  (PFM_REGT_CTR|PFM_REGT_NOHT)
 #define PFM_REGT_ENAC    (PFM_REGT_CCCR|PFM_REGT_EN)
 
-static struct pfm_arch_pmu_info pfm_p4_pmu_info={
- .pmc_addrs = {
+static void pfm_p4_write_pmc(struct pfm_context *ctx, unsigned int cnum, u64 value);
+static void pfm_p4_write_pmd(struct pfm_context *ctx, unsigned int cnum, u64 value);
+static u64 pfm_p4_read_pmd(struct pfm_context *ctx, unsigned int cnum);
+static u64 pfm_p4_read_pmc(struct pfm_context *ctx, unsigned int cnum);
+static int pfm_p4_create_context(struct pfm_context *ctx, u32 ctx_flags);
+static void pfm_p4_free_context(struct pfm_context *ctx);
+static int pfm_p4_has_ovfls(struct pfm_context *ctx);
+static int pfm_p4_stop_save(struct pfm_context *ctx, struct pfm_event_set *set);
+static void pfm_p4_restore_pmcs(struct pfm_context *ctx, struct pfm_event_set *set);
+static void pfm_p4_nmi_copy_state(struct pfm_context *ctx);
+static void __kprobes pfm_p4_quiesce(void);
+
+static u64 enable_mask[PFM_MAX_PMCS];
+static u16 max_enable;
+
+static struct pfm_p4_regmap pmc_addrs[PFM_MAX_PMCS] = {
 	/*pmc 0 */    {{MSR_P4_BPU_ESCR0, MSR_P4_BPU_ESCR1}, 0, PFM_REGT_ESCR}, /*   BPU_ESCR0,1 */
 	/*pmc 1 */    {{MSR_P4_IS_ESCR0, MSR_P4_IS_ESCR1}, 0, PFM_REGT_ESCR}, /*    IS_ESCR0,1 */
 	/*pmc 2 */    {{MSR_P4_MOB_ESCR0, MSR_P4_MOB_ESCR1}, 0, PFM_REGT_ESCR}, /*   MOB_ESCR0,1 */
@@ -155,9 +219,9 @@ static struct pfm_arch_pmu_info pfm_p4_pmu_info={
 	/*pmc 62*/    {{MSR_P4_IQ_CCCR5,     0},17, PFM_REGT_NHTCCCR}, /*    IQ_CCCR5   */
 	/*pmc 63*/    {{0x3f2,     0}, 0, PFM_REGT_NHTPEBS},/* PEBS_MATRIX_VERT */
 	/*pmc 64*/    {{0x3f1,     0}, 0, PFM_REGT_NHTPEBS} /* PEBS_ENABLE   */
-},
+};
 
-.pmd_addrs = {
+static struct pfm_p4_regmap pmd_addrs[PFM_MAX_PMDS] = {
 	/*pmd 0 */    {{MSR_P4_BPU_PERFCTR0, MSR_P4_BPU_PERFCTR2}, 0, PFM_REGT_CTR},  /*   BPU_CTR0,2  */
 	/*pmd 1 */    {{MSR_P4_BPU_PERFCTR1, MSR_P4_BPU_PERFCTR3}, 0, PFM_REGT_CTR},  /*   BPU_CTR1,3  */
 	/*pmd 2 */    {{MSR_P4_MS_PERFCTR0, MSR_P4_MS_PERFCTR2}, 0, PFM_REGT_CTR},  /*    MS_CTR0,2  */
@@ -179,9 +243,20 @@ static struct pfm_arch_pmu_info pfm_p4_pmu_info={
 	/*pmd 15*/    {{MSR_P4_IQ_PERFCTR2,     0}, 0, PFM_REGT_NHTCTR},  /*    IQ_CTR2    */
 	/*pmd 16*/    {{MSR_P4_IQ_PERFCTR3,     0}, 0, PFM_REGT_NHTCTR},  /*    IQ_CTR3    */
 	/*pmd 17*/    {{MSR_P4_IQ_PERFCTR5,     0}, 0, PFM_REGT_NHTCTR},  /*    IQ_CTR5    */
-},
-.pebs_ctr_idx = 8, /* thread0: IQ_CTR4, thread1: IQ_CTR5 */
-.pmu_style = PFM_X86_PMU_P4
+};
+
+static struct pfm_arch_pmu_info pfm_p4_pmu_info={
+	.write_pmc = pfm_p4_write_pmc,
+	.write_pmd = pfm_p4_write_pmd,
+	.read_pmc = pfm_p4_read_pmc,
+	.read_pmd = pfm_p4_read_pmd,
+	.create_context = pfm_p4_create_context,
+	.free_context = pfm_p4_free_context,
+	.has_ovfls = pfm_p4_has_ovfls,
+	.stop_save = pfm_p4_stop_save,
+	.restore_pmcs = pfm_p4_restore_pmcs,
+	.nmi_copy_state = pfm_p4_nmi_copy_state,
+	.quiesce = pfm_p4_quiesce
 };
 
 static struct pfm_regmap_desc pfm_p4_pmc_desc[]={
@@ -349,13 +424,11 @@ static int pfm_p4_probe_pmu(void)
 		if (ht_enabled) {
 			PFM_INFO("disabling half the registers for HT");
 			for (i = 0; i < PFM_P4_NUM_PMCS; i++) {
-				if (pfm_p4_pmu_info.pmc_addrs[(i)].reg_type &
-				    PFM_REGT_NOHT)
+				if (pmc_addrs[(i)].reg_type & PFM_REGT_NOHT)
 					pfm_p4_pmc_desc[i].type = PFM_REG_NA;
 			}
 			for (i = 0; i < PFM_P4_NUM_PMDS; i++) {
-				if (pfm_p4_pmu_info.pmd_addrs[(i)].reg_type &
-				    PFM_REGT_NOHT)
+				if (pmd_addrs[(i)].reg_type & PFM_REGT_NOHT)
 					pfm_p4_pmd_desc[i].type = PFM_REG_NA;
 			}
 		}
@@ -364,24 +437,453 @@ static int pfm_p4_probe_pmu(void)
 	if (cpu_has_ds) {
 		PFM_INFO("Data Save Area (DS) supported");
 
-		pfm_p4_pmu_info.flags = PFM_X86_FL_PMU_DS;
-
 		if (cpu_has_pebs) {
 			/*
 			 * PEBS does not work with HyperThreading enabled
 			 */
-	                if (ht_enabled) {
+	                if (ht_enabled)
 				PFM_INFO("PEBS supported, status off (because of HT)");
-			} else {
-				pfm_p4_pmu_info.flags |= PFM_X86_FL_PMU_PEBS;
+			else
 				PFM_INFO("PEBS supported, status on");
-			}
 		}
 	}
+
+	/*
+	 * build enable mask
+	 */
+	for (i = 0; i < PFM_P4_NUM_PMCS; i++) {
+		if (pmc_addrs[(i)].reg_type & PFM_REGT_EN) {
+			__set_bit(i, cast_ulp(enable_mask));
+			max_enable = i + 1;
+		}
+	}
+
 	if (force_nmi)
 		pfm_p4_pmu_info.flags |= PFM_X86_FL_USE_NMI;
 	return 0;
 }
+static inline int get_smt_id(void)
+{
+#ifdef CONFIG_SMP
+	int cpu = smp_processor_id();
+	return (cpu != first_cpu(__get_cpu_var(cpu_sibling_map)));
+#else
+	return 0;
+#endif
+}
+
+static void __pfm_write_reg_p4(const struct pfm_p4_regmap *xreg, u64 val)
+{
+	u64 pmi;
+	int smt_id;
+
+	smt_id = get_smt_id();
+	/*
+	 * HT is only supported by P4-style PMU
+	 *
+	 * Adjust for T1 if necessary:
+	 *
+	 * - move the T0_OS/T0_USR bits into T1 slots
+	 * - move the OVF_PMI_T0 bits into T1 slot
+	 *
+	 * The P4/EM64T T1 is cleared by description table.
+	 * User only works with T0.
+	 */
+	if (smt_id) {
+		if (xreg->reg_type & PFM_REGT_ESCR) {
+
+			/* copy T0_USR & T0_OS to T1 */
+			val |= ((val & 0xc) >> 2);
+
+			/* clear bits T0_USR & T0_OS */
+			val &= ~0xc;
+
+		} else if (xreg->reg_type & PFM_REGT_CCCR) {
+			pmi = (val >> 26) & 0x1;
+			if (pmi) {
+				val &=~(1UL<<26);
+				val |= 1UL<<27;
+			}
+		}
+	}
+	if (xreg->addrs[smt_id])
+		wrmsrl(xreg->addrs[smt_id], val);
+}
+
+void __pfm_read_reg_p4(const struct pfm_p4_regmap *xreg, u64 *val)
+{
+	int smt_id;
+
+	smt_id = get_smt_id();
+
+	if (likely(xreg->addrs[smt_id])) {
+		rdmsrl(xreg->addrs[smt_id], *val);
+		/*
+		 * HT is only supported by P4-style PMU
+		 *
+		 * move the Tx_OS and Tx_USR bits into
+		 * T0 slots setting the T1 slots to zero
+		 */
+		if (xreg->reg_type & PFM_REGT_ESCR) {
+			if (smt_id)
+				*val |= (((*val) & 0x3) << 2);
+
+			/*
+			 * zero out bits that are reserved
+			 * (including T1_OS and T1_USR)
+			 */
+			*val &= PFM_ESCR_RSVD;
+		}
+	} else {
+		*val = 0;
+	}
+}
+static void pfm_p4_write_pmc(struct pfm_context *ctx, unsigned int cnum, u64 value)
+{
+	__pfm_write_reg_p4(&pmc_addrs[cnum], value);
+}
+
+static void pfm_p4_write_pmd(struct pfm_context *ctx, unsigned int cnum, u64 value)
+{
+	__pfm_write_reg_p4(&pmd_addrs[cnum], value);
+}
+
+static u64 pfm_p4_read_pmd(struct pfm_context *ctx, unsigned int cnum)
+{
+	u64 tmp;
+	__pfm_read_reg_p4(&pmd_addrs[cnum], &tmp);
+	return tmp;
+}
+
+static u64 pfm_p4_read_pmc(struct pfm_context *ctx, unsigned int cnum)
+{
+	u64 tmp;
+	__pfm_read_reg_p4(&pmc_addrs[cnum], &tmp);
+	return tmp;
+}
+
+struct pfm_ds_area_p4 {
+	unsigned long	bts_buf_base;
+	unsigned long	bts_index;
+	unsigned long	bts_abs_max;
+	unsigned long	bts_intr_thres;
+	unsigned long	pebs_buf_base;
+	unsigned long	pebs_index;
+	unsigned long	pebs_abs_max;
+	unsigned long	pebs_intr_thres;
+	u64		pebs_cnt_reset;
+};
+
+
+static int pfm_p4_stop_save(struct pfm_context *ctx, struct pfm_event_set *set)
+{
+	struct pfm_arch_pmu_info *pmu_info;
+	struct pfm_arch_context *ctx_arch;
+	struct pfm_ds_area_p4 *ds = NULL;
+	u64 used_mask[PFM_PMC_BV];
+	u16 i, j, count, pebs_idx = ~0;
+	u16 max_pmc;
+	u64 cccr, ctr1, ctr2, ovfl_mask;
+
+	pmu_info = &pfm_p4_pmu_info;
+	ctx_arch = pfm_ctx_arch(ctx);
+	max_pmc = pfm_pmu_conf->regs.max_pmc;
+	ovfl_mask = pfm_pmu_conf->ovfl_mask;
+
+	/*
+	 * build used enable PMC bitmask
+	 * if user did not set any CCCR, then mask is
+	 * empty and there is nothing to do because nothing
+	 * was started
+	 */
+	bitmap_and(cast_ulp(used_mask),
+		   cast_ulp(set->used_pmcs),
+		   cast_ulp(enable_mask),
+		   max_enable);
+
+	count = bitmap_weight(cast_ulp(used_mask), max_enable);
+
+	PFM_DBG_ovfl("npend=%u ena_mask=0x%llx u_pmcs=0x%llx count=%u num=%u",
+		set->npend_ovfls,
+		(unsigned long long)enable_mask[0],
+		(unsigned long long)set->used_pmcs[0],
+		count, max_enable);
+
+	/*
+	 * ensures we do not destroy pending overflow
+	 * information. If pended interrupts are already
+	 * known, then we just stop monitoring.
+	 */
+	if (set->npend_ovfls) {
+		/*
+		 * clear enable bit
+		 * unfortunately, this is very expensive!
+		 */
+		for (i = 0; count; i++) {
+			if (test_bit(i, cast_ulp(used_mask))) {
+				__pfm_write_reg_p4(pmc_addrs+i, 0);
+				count--;
+			}
+		}
+		/* need save PMDs at upper level */
+		return 1;
+	}
+
+	if (ctx_arch->flags.use_pebs) {
+		ds = ctx_arch->ds_area;
+		pebs_idx = PEBS_PMD;
+		PFM_DBG("ds=%p pebs_idx=0x%llx thres=0x%llx",
+			ds,
+			(unsigned long long)ds->pebs_index,
+			(unsigned long long)ds->pebs_intr_thres);
+	}
+
+	/*
+	 * stop monitoring AND collect pending overflow information AND
+	 * save pmds.
+	 *
+	 * We need to access the CCCR twice, once to get overflow info
+	 * and a second to stop monitoring (which destroys the OVF flag)
+	 * Similarly, we need to read the counter twice to check whether
+	 * it did overflow between the CCR read and the CCCR write.
+	 */
+	for (i = 0; count; i++) {
+		if (i != pebs_idx && test_bit(i, cast_ulp(used_mask))) {
+			/*
+			 * controlled counter
+			 */
+			j = pmc_addrs[i].ctr;
+
+			/* read CCCR (PMC) value */
+			__pfm_read_reg_p4(pmc_addrs+i, &cccr);
+
+			/* read counter (PMD) controlled by PMC */
+			__pfm_read_reg_p4(pmd_addrs+j, &ctr1);
+
+			/* clear CCCR value: stop counter but destroy OVF */
+			__pfm_write_reg_p4(pmc_addrs+i, 0);
+
+			/* read counter controlled by CCCR again */
+			__pfm_read_reg_p4(pmd_addrs+j, &ctr2);
+
+			/*
+			 * there is an overflow if either:
+			 * 	- CCCR.ovf is set (and we just cleared it)
+			 * 	- ctr2 < ctr1
+			 * in that case we set the bit corresponding to the
+			 * overflowed PMD  in povfl_pmds.
+			 */
+			if ((cccr & (1ULL<<31)) || (ctr2 < ctr1)) {
+				__set_bit(j, cast_ulp(set->povfl_pmds));
+				set->npend_ovfls++;
+			}
+			ctr2 = (set->pmds[j].value & ~ovfl_mask) | (ctr2 & ovfl_mask);
+			set->pmds[j].value = ctr2;
+			count--;
+		}
+	}
+	/*
+	 * check for PEBS buffer full and set the corresponding PMD overflow
+	 */
+	if (ctx_arch->flags.use_pebs) {
+		PFM_DBG("ds=%p pebs_idx=0x%lx thres=0x%lx", ds, ds->pebs_index, ds->pebs_intr_thres);
+		if (ds->pebs_index >= ds->pebs_intr_thres
+		    && test_bit(PEBS_PMD, cast_ulp(set->used_pmds))) {
+			__set_bit(PEBS_PMD, cast_ulp(set->povfl_pmds));
+			set->npend_ovfls++;
+		}
+	}
+	/* 0 means: no need to save the PMD at higher level */
+	return 0;
+}
+
+static int pfm_p4_create_context(struct pfm_context *ctx, u32 ctx_flags)
+{
+	struct pfm_arch_context *ctx_arch;
+
+	ctx_arch = pfm_ctx_arch(ctx);
+
+	ctx_arch->data = kzalloc(sizeof(struct pfm_arch_p4_context),GFP_KERNEL);
+	if (!ctx_arch->data)
+		return -ENOMEM;
+
+	return 0;
+}
+
+static void pfm_p4_free_context(struct pfm_context *ctx)
+{
+	struct pfm_arch_context *ctx_arch;
+
+	ctx_arch = pfm_ctx_arch(ctx);
+	/*
+	 * we do not check if P4, because it would be NULL and
+	 * kfree can deal with NULL
+	 */
+	kfree(ctx_arch->data);
+}
+
+/*
+ * detect is counters have overflowed.
+ * return:
+ * 	0 : no overflow
+ * 	1 : at least one overflow
+ *
+ * used by Intel P4
+ */
+static int __kprobes pfm_p4_has_ovfls(struct pfm_context *ctx)
+{	
+	struct pfm_arch_pmu_info *pmu_info;
+	struct pfm_p4_regmap *xrc, *xrd;
+	struct pfm_arch_context *ctx_arch;
+	struct pfm_arch_p4_context *p4;
+	u64 ena_mask[PFM_PMC_BV];
+	u64 cccr, ctr1, ctr2;
+	int n, i, j;
+
+	pmu_info = &pfm_p4_pmu_info;
+
+	ctx_arch = pfm_ctx_arch(ctx);
+	xrc = pmc_addrs;
+	xrd = pmd_addrs;
+	p4 = ctx_arch->data;
+
+	bitmap_and(cast_ulp(ena_mask),
+		   cast_ulp(pfm_pmu_conf->regs.pmcs),
+		   cast_ulp(enable_mask),
+		   max_enable);
+
+	n = bitmap_weight(cast_ulp(ena_mask), max_enable);
+
+	for(i=0; n; i++) {
+		if (!test_bit(i, cast_ulp(ena_mask)))
+			continue;
+		/*
+		 * controlled counter
+		 */
+		j = xrc[i].ctr;
+
+		/* read CCCR (PMC) value */
+		__pfm_read_reg_p4(xrc+i, &cccr);
+
+		/* read counter (PMD) controlled by PMC */
+		__pfm_read_reg_p4(xrd+j, &ctr1);
+
+		/* clear CCCR value: stop counter but destroy OVF */
+		__pfm_write_reg_p4(xrc+i, 0);
+
+		/* read counter controlled by CCCR again */
+		__pfm_read_reg_p4(xrd+j, &ctr2);
+
+		/*
+		 * there is an overflow if either:
+		 * 	- CCCR.ovf is set (and we just cleared it)
+		 * 	- ctr2 < ctr1
+		 * in that case we set the bit corresponding to the
+		 * overflowed PMD in povfl_pmds.
+		 */
+		if ((cccr & (1ULL<<31)) || (ctr2 < ctr1)) {
+			__set_bit(j, cast_ulp(p4->povfl_pmds));
+			p4->npend_ovfls++;
+		}
+		p4->saved_cccrs[i] = cccr;
+		n--;
+	}
+	/*
+	 * if there was no overflow, then it means the NMI was not really
+	 * for us, so we have to resume monitoring
+	 */
+	if (unlikely(!p4->npend_ovfls)) {
+		for(i=0; n; i++) {
+			if (!test_bit(i, cast_ulp(ena_mask)))
+				continue;
+			__pfm_write_reg_p4(xrc+i, p4->saved_cccrs[i]);
+		}
+	}
+	return 0;
+}
+
+void pfm_p4_restore_pmcs(struct pfm_context *ctx, struct pfm_event_set *set)
+{
+	struct pfm_arch_pmu_info *pmu_info;
+	struct pfm_arch_context *ctx_arch;
+	u64 *mask;
+	u16 i, num;
+
+	ctx_arch = pfm_ctx_arch(ctx);
+	pmu_info = pfm_pmu_info();
+
+	/*
+	 * must restore DS pointer before restoring PMCs
+	 * as this can potentially reactivate monitoring
+	 */
+	if (ctx_arch->flags.use_ds)
+		wrmsrl(MSR_IA32_DS_AREA, (unsigned long)ctx_arch->ds_area);
+
+	/*
+	 * must restore everything because there are some dependencies
+	 * (e.g., ESCR and CCCR)
+	 */
+	num = pfm_pmu_conf->regs.num_pmcs;
+	mask = pfm_pmu_conf->regs.pmcs;
+	for (i = 0; num; i++) {
+		if (test_bit(i, cast_ulp(mask))) {
+			pfm_arch_write_pmc(ctx, i, set->pmcs[i]);
+			num--;
+		}
+	}
+}
+
+/*
+ * invoked only when NMI is used. Called from the LOCAL_PERFMON_VECTOR
+ * handler to copy P4 overflow state captured when the NMI triggered.
+ * Given that on P4, stopping monitoring destroy the overflow information
+ * we save it in pfm_has_ovfl_p4() where monitoring is also stopped.
+ *
+ * Here we propagate the overflow state to current active set. The
+ * freeze_pmu() call we not overwrite this state because npend_ovfls
+ * is non-zero.
+ */
+static void pfm_p4_nmi_copy_state(struct pfm_context *ctx)
+{
+	struct pfm_arch_context *ctx_arch;
+	struct pfm_event_set *set;
+	struct pfm_arch_p4_context *p4;
+
+	ctx_arch = pfm_ctx_arch(ctx);
+	p4 = ctx_arch->data;
+	set = ctx->active_set;
+
+	if (p4->npend_ovfls) {
+		set->npend_ovfls = p4->npend_ovfls;
+
+		bitmap_copy(cast_ulp(set->povfl_pmds),
+			    cast_ulp(p4->povfl_pmds),
+			    pfm_pmu_conf->regs.max_pmd);
+
+		p4->npend_ovfls = 0;
+	}
+}
+
+/**
+ * pfm_p4_quiesce - stop monitoring without grabbing any lock
+ *
+ * called from NMI interrupt handler to immediately stop monitoring
+ * cannot grab any lock, including perfmon related locks
+ */
+static void __kprobes pfm_p4_quiesce(void)
+{
+	u16 i;
+	/*
+	 * quiesce PMU by clearing available registers that have
+	 * the start/stop capability
+	 */
+	for(i=0; i < pfm_pmu_conf->regs.max_pmc; i++) {
+		if (test_bit(i, cast_ulp(pfm_pmu_conf->regs.pmcs))
+		    && test_bit(i, cast_ulp(enable_mask)))
+			__pfm_write_reg_p4(pmc_addrs+i, 0);
+	}
+}
+
 
 static struct pfm_pmu_config pfm_p4_pmu_conf={
 	.pmu_name = "Intel P4",
@@ -394,7 +896,7 @@ static struct pfm_pmu_config pfm_p4_pmu_conf={
 	.version = "1.0",
 	.flags = PFM_PMU_BUILTIN_FLAG,
 	.owner = THIS_MODULE,
-	.arch_info = &pfm_p4_pmu_info
+	.pmu_info = &pfm_p4_pmu_info
 };
 
 static int __init pfm_p4_pmu_init_module(void)

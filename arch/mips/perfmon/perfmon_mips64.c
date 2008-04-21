@@ -98,7 +98,7 @@ static struct pfm_pmu_config pfm_mips64_pmu_conf = {
 	.probe_pmu = pfm_mips64_probe_pmu,
 	.flags = PFM_PMU_BUILTIN_FLAG,
 	.owner = THIS_MODULE,
-	.arch_info = &pfm_mips64_pmu_info
+	.pmu_info = &pfm_mips64_pmu_info
 };
 
 static inline int n_counters(void)

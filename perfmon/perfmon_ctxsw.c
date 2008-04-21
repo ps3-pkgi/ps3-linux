@@ -39,27 +39,6 @@
 #include <linux/module.h>
 #include <linux/perfmon_kern.h>
 
-/*
- * used only in UP mode
- */
-void pfm_save_prev_context(struct pfm_context *ctxp)
-{
-	struct pfm_event_set *set;
-
-	/*
-	 * in UP per-thread, due to lazy save
-	 * there could be a context from another
-	 * task. We need to push it first before
-	 * installing our new state
-	 */
-	set = ctxp->active_set;
-	pfm_save_pmds(ctxp, set);
-	/*
-	 * do not clear ownership because we rewrite
-	 * right away
-	 */
-}
-
 void pfm_save_pmds(struct pfm_context *ctx, struct pfm_event_set *set)
 {
 	u64 val, ovfl_mask;
@@ -89,11 +68,12 @@ void pfm_save_pmds(struct pfm_context *ctx, struct pfm_event_set *set)
 /*
  * interrupts are  disabled (no preemption)
  */
-static void __pfm_ctxswin_thread(struct task_struct *task,
+void __pfm_ctxswin_thread(struct task_struct *task,
 				 struct pfm_context *ctx, u64 now)
 {
 	u64 cur_act;
 	struct pfm_event_set *set;
+	unsigned long flags __attribute__((unused));
 	int reload_pmcs, reload_pmds;
 	int mycpu, is_active;
 
@@ -102,9 +82,12 @@ static void __pfm_ctxswin_thread(struct task_struct *task,
 	cur_act = __get_cpu_var(pmu_activation_number);
 	/*
 	 * we need to lock context because it could be accessed
-	 * from another CPU
+	 * from another CPU. Normally the schedule() functions
+	 * has masked interrupts which should be enough to 
+	 * protect against PMU interrupts. If not then
+	 * pfm_spin_lock() can be overridden for each arch.
 	 */
-	spin_lock(&ctx->lock);
+	pfm_spin_lock(&ctx->lock, flags);
 
 	is_active = pfm_arch_is_active(ctx);
 
@@ -118,11 +101,8 @@ static void __pfm_ctxswin_thread(struct task_struct *task,
 	 * to vfree() with interrupts disabled.
 	 */
 	if (unlikely(ctx->state == PFM_CTX_ZOMBIE)) {
-		ctx->flags.work_type = PFM_WORK_ZOMBIE;
-		set_tsk_thread_flag(task, TIF_PERFMON_WORK);
-		pfm_arch_arm_handle_work(task);
-		spin_unlock(&ctx->lock);
-		return;
+		pfm_post_work(task, ctx, PFM_WORK_ZOMBIE);
+		goto done;
 	}
 
 	/*
@@ -137,10 +117,7 @@ static void __pfm_ctxswin_thread(struct task_struct *task,
 		reload_pmds = set->priv_flags & PFM_SETFL_PRIV_MOD_PMDS;
 	} else {
 #ifndef CONFIG_SMP
-		struct pfm_context *ctxp;
-		ctxp = __get_cpu_var(pmu_ctx);
-		if (ctxp)
-			pfm_save_prev_context(ctxp);
+		pfm_check_save_prev_ctx();
 #endif
 		reload_pmcs = 1;
 		reload_pmds = 1;
@@ -178,7 +155,7 @@ static void __pfm_ctxswin_thread(struct task_struct *task,
 	 */
 	pfm_set_pmu_owner(task, ctx);
 
-	pfm_arch_ctxswin_thread(task, ctx, set);
+	pfm_arch_ctxswin_thread(task, ctx);
 	/*
 	 * set->duration does not count when context in MASKED state.
 	 * set->duration_start is reset in unmask_monitoring()
@@ -213,7 +190,8 @@ static void __pfm_ctxswin_thread(struct task_struct *task,
 				hrtimer_start(h, set->hrtimer_rem, HRTIMER_MODE_REL);
 		}
 	}
-	spin_unlock(&ctx->lock);
+done:
+	pfm_spin_unlock(&ctx->lock, flags);
 }
 
 /*
@@ -222,17 +200,22 @@ static void __pfm_ctxswin_thread(struct task_struct *task,
  * In UP. we simply stop monitoring and leave the state
  * in place, i.e., lazy save
  */
-static void __pfm_ctxswout_thread(struct task_struct *task,
+void __pfm_ctxswout_thread(struct task_struct *task,
 				  struct pfm_context *ctx, u64 now)
 {
 	struct pfm_event_set *set;
+	unsigned long flags __attribute__((unused));
 	int need_save_pmds, is_active;
 
 	/*
 	 * we need to lock context because it could be accessed
-	 * from another CPU
+	 * from another CPU. Normally the schedule() functions
+	 * has masked interrupts which should be enough to 
+	 * protect against PMU interrupts. If not then
+	 * pfm_spin_lock() can be overridden for each arch.
 	 */
-	spin_lock(&ctx->lock);
+
+	pfm_spin_lock(&ctx->lock, flags);
 
 	is_active = pfm_arch_is_active(ctx);
 	set = ctx->active_set;
@@ -243,7 +226,7 @@ static void __pfm_ctxswout_thread(struct task_struct *task,
 	 * needed on ctxswin. We cannot afford to lose
 	 * a PMU interrupt.
 	 */
-	need_save_pmds = pfm_arch_ctxswout_thread(task, ctx, set);
+	need_save_pmds = pfm_arch_ctxswout_thread(task, ctx);
 
 	if (ctx->state == PFM_CTX_LOADED) {
 		/*
@@ -282,39 +265,19 @@ static void __pfm_ctxswout_thread(struct task_struct *task,
 	if (need_save_pmds)
 		pfm_save_pmds(ctx, set);
 #endif
-	spin_unlock(&ctx->lock);
+	pfm_spin_unlock(&ctx->lock, flags);
 }
 
 /*
- * no need to lock the context. To operate on a system-wide
- * context, the task has to run on the monitored CPU. In the
- * case of close issued on another CPU, an IPI is sent but
- * this routine runs with interrupts masked, so we are
- * protected
  *
- * On some architectures, such as IA-64, it may be necessary
- * to intervene during the context even in system-wide mode
- * to modify some machine state.
  */
-static void __pfm_ctxsw_sys(struct task_struct *prev,
-			    struct task_struct *next)
+static void __pfm_ctxswout_sys(struct task_struct *prev,
+			       struct task_struct *next)
 {
 	struct pfm_context *ctx;
-	struct pfm_event_set *set;
 
 	ctx = __get_cpu_var(pmu_ctx);
-	if (!ctx) {
-		pr_info("prev=%d tif=%d ctx=%p next=%d tif=%d ctx=%p\n",
-			prev->pid,
-			test_tsk_thread_flag(prev, TIF_PERFMON_CTXSW),
-			prev->pfm_context,
-			next->pid,
-			test_tsk_thread_flag(next, TIF_PERFMON_CTXSW),
-			next->pfm_context);
-		BUG_ON(!ctx);
-	}
-
-	set = ctx->active_set;
+	BUG_ON(!ctx);
 
 	/*
 	 * propagate TIF_PERFMON_CTXSW to ensure that:
@@ -333,46 +296,66 @@ static void __pfm_ctxsw_sys(struct task_struct *prev,
 	if (!ctx->flags.started)
 		return;
 
-	pfm_arch_ctxswout_sys(prev, ctx, set);
-	pfm_arch_ctxswin_sys(next, ctx, set);
+	pfm_arch_ctxswout_sys(prev, ctx);
 }
 
 /*
- * come here when either prev or next has TIF_PERFMON_CTXSW flag set
- * Note that this is not because a task has TIF_PERFMON_CTXSW set that
- * it has a context attached, e.g., in system-wide on certain arch.
+ *
  */
-void pfm_ctxsw(struct task_struct *prev, struct task_struct *next)
+static void __pfm_ctxswin_sys(struct task_struct *prev,
+			      struct task_struct *next)
 {
-	struct pfm_context *ctxp, *ctxn;
+	struct pfm_context *ctx;
+
+	ctx = __get_cpu_var(pmu_ctx);
+	BUG_ON(!ctx);
+
+	/*
+	 * nothing to do until actually started
+	 * XXX: assumes no mean to start from user level
+	 */
+	if (!ctx->flags.started)
+		return;
+
+	pfm_arch_ctxswin_sys(next, ctx);
+}
+
+void pfm_ctxsw_out(struct task_struct *prev,
+		   struct task_struct *next)
+{
+	struct pfm_context *ctxp;
 	u64 now;
 
 	now = sched_clock();
 
-	ctxp = NULL;
-	ctxn = NULL;
-	if (prev)
-		ctxp = prev->pfm_context;
-	if (next)
-		ctxn = next->pfm_context;
+	ctxp = prev->pfm_context;
 
 	if (ctxp)
 		__pfm_ctxswout_thread(prev, ctxp, now);
+	else
+		__pfm_ctxswout_sys(prev, next);
+
+	pfm_stats_inc(ctxswout_count);
+	pfm_stats_add(ctxswout_ns, sched_clock() - now);
+}
+EXPORT_SYMBOL_GPL(pfm_ctxsw_out);
+
+void pfm_ctxsw_in(struct task_struct *prev,
+		  struct task_struct *next)
+{
+	struct pfm_context *ctxn;
+	u64 now;
+
+	now = sched_clock();
+
+	ctxn = next->pfm_context;
 
 	if (ctxn)
 		__pfm_ctxswin_thread(next, ctxn, now);
+	else
+		__pfm_ctxswin_sys(prev, next);
 
-	/*
-	 * given that prev and next can never be the same, this
-	 * test is checking that ctxp == ctxn == NULL which is
-	 * an indication we have an active system-wide session on
-	 * this CPU that needs ctxsw intervention. Not all processors
-	 * needs this, IA64 is one.
-	 */
-	if (ctxp == ctxn)
-		__pfm_ctxsw_sys(prev, next);
-
-	pfm_stats_inc(ctxsw_count);
-	pfm_stats_add(ctxsw_ns, sched_clock() - now);
+	pfm_stats_inc(ctxswin_count);
+	pfm_stats_add(ctxswin_ns, sched_clock() - now);
 }
-EXPORT_SYMBOL_GPL(pfm_ctxsw);
+EXPORT_SYMBOL_GPL(pfm_ctxsw_in);

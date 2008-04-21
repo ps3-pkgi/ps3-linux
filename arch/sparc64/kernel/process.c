@@ -331,7 +331,7 @@ void exit_thread(void)
 			t->utraps[0]--;
 	}
 
-	pfm_exit_thread(current);
+	pfm_exit_thread();
 }
 
 void flush_thread(void)

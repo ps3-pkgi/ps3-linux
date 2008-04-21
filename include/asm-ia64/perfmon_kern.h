@@ -42,14 +42,6 @@
 static inline void pfm_arch_ovfl_reset_pmd(struct pfm_context *ctx, unsigned int cnum)
 {}
 
-static inline int pfm_arch_pmu_config_init(struct pfm_pmu_config *cfg)
-{
-	return 0;
-}
-
-static inline void pfm_arch_pmu_config_remove(void)
-{}
-
 /*
  * called from __pfm_interrupt_handler(). ctx is not NULL.
  * ctx is locked. PMU interrupt is masked.
@@ -156,8 +148,7 @@ static inline u64 pfm_arch_read_pmc(struct pfm_context *ctx, unsigned int cnum)
 }
 
 static inline void pfm_arch_ctxswout_sys(struct task_struct *task,
-					 struct pfm_context *ctx,
-					 struct pfm_event_set *set)
+					 struct pfm_context *ctx)
 {
 	struct pt_regs *regs;
 
@@ -166,12 +157,11 @@ static inline void pfm_arch_ctxswout_sys(struct task_struct *task,
 }
 
 static inline void pfm_arch_ctxswin_sys(struct task_struct *task,
-					struct pfm_context *ctx,
-					struct pfm_event_set *set)
+					struct pfm_context *ctx)
 {
 	struct pt_regs *regs;
 
-	if (!(set->flags & PFM_ITA_SETFL_INTR_ONLY)) {
+	if (!(ctx->active_set->flags & PFM_ITA_SETFL_INTR_ONLY)) {
 		regs = task_pt_regs(task);
 		ia64_psr(regs)->pp = 1;
 	}
@@ -193,14 +183,11 @@ int pfm_arch_context_create(struct pfm_context *ctx, u32 ctx_flags);
 static inline void pfm_arch_context_free(struct pfm_context *ctx)
 {}
 
-int pfm_arch_ctxswout_thread(struct task_struct *task, struct pfm_context *ctx,
-			     struct pfm_event_set *set);
-void pfm_arch_ctxswin_thread(struct task_struct *task, struct pfm_context *ctx,
-			     struct pfm_event_set *set);
+int pfm_arch_ctxswout_thread(struct task_struct *task,struct pfm_context *ctx);
+void pfm_arch_ctxswin_thread(struct task_struct *task, struct pfm_context *ctx);
 
-int pfm_arch_unload_context(struct pfm_context *ctx, struct task_struct *task);
-int pfm_arch_load_context(struct pfm_context *ctx, struct pfm_event_set *set,
-			  struct task_struct *task);
+void pfm_arch_unload_context(struct pfm_context *ctx);
+int pfm_arch_load_context(struct pfm_context *ctx);
 int pfm_arch_setfl_sane(struct pfm_context *ctx, u32 flags);
 
 void pfm_arch_mask_monitoring(struct pfm_context *ctx, struct pfm_event_set *set);
@@ -209,10 +196,8 @@ void pfm_arch_unmask_monitoring(struct pfm_context *ctx, struct pfm_event_set *s
 void pfm_arch_restore_pmds(struct pfm_context *ctx, struct pfm_event_set *set);
 void pfm_arch_restore_pmcs(struct pfm_context *ctx, struct pfm_event_set *set);
 
-void pfm_arch_stop(struct task_struct *task, struct pfm_context *ctx,
-		   struct pfm_event_set *set);
-void pfm_arch_start(struct task_struct *task, struct pfm_context *ctx,
-		    struct pfm_event_set *set);
+void pfm_arch_stop(struct task_struct *task, struct pfm_context *ctx);
+void pfm_arch_start(struct task_struct *task, struct pfm_context *ctx);
 
 int  pfm_arch_init(void);
 void pfm_arch_init_percpu(void);
@@ -271,8 +256,8 @@ ssize_t pfm_arch_compat_read(struct pfm_context *ctx,
 			     int non_block,
 			     size_t size);
 int pfm_ia64_compat_init(void);
-int pfm_smpl_buffer_alloc_compat(struct pfm_context *ctx,
-			         size_t rsize, struct file *filp);
+int pfm_smpl_buf_alloc_compat(struct pfm_context *ctx,
+			      size_t rsize, struct file *filp);
 #else
 static inline ssize_t pfm_arch_compat_read(struct pfm_context *ctx,
 			     char __user *buf,
@@ -282,8 +267,8 @@ static inline ssize_t pfm_arch_compat_read(struct pfm_context *ctx,
 	return -EINVAL;
 }
 
-static inline int pfm_smpl_buffer_alloc_compat(struct pfm_context *ctx,
-					       size_t rsize, struct file *filp)
+static inline int pfm_smpl_buf_alloc_compat(struct pfm_context *ctx,
+					    size_t rsize, struct file *filp)
 {
 	return -EINVAL;
 }
@@ -309,6 +294,11 @@ static inline void pfm_arch_disarm_handle_work(struct task_struct *task)
 	 * bit
 	 */
 	tsk_clear_notify_resume(task);
+}
+
+static inline int pfm_arch_pmu_config_init(struct pfm_pmu_config *cfg)
+{
+	return 0;
 }
 
 extern struct pfm_ia64_pmu_info *pfm_ia64_pmu_info;

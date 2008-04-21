@@ -347,9 +347,11 @@ struct task_struct *__switch_to(struct task_struct *prev,
 		new_thread->start_tb = current_tb;
 	}
 #endif
-	if (test_tsk_thread_flag(new, TIF_PERFMON_CTXSW)
-	    || test_tsk_thread_flag(prev, TIF_PERFMON_CTXSW))
-		pfm_ctxsw(prev, new);
+	if (test_tsk_thread_flag(prev, TIF_PERFMON_CTXSW))
+		pfm_ctxsw_out(prev, new);
+
+	if (test_tsk_thread_flag(new, TIF_PERFMON_CTXSW))
+		pfm_ctxsw_in(prev, new);
 
 	local_irq_save(flags);
 
@@ -501,7 +503,7 @@ void show_regs(struct pt_regs * regs)
 void exit_thread(void)
 {
 	discard_lazy_cpu_state();
-	pfm_exit_thread(current);
+	pfm_exit_thread();
 }
 
 void flush_thread(void)

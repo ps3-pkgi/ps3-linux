@@ -42,13 +42,15 @@
 #define PFM_REGFL_PMC_ALL	(PFM_REGFL_NO_EMUL64)
 #define PFM_REGFL_PMD_ALL	(PFM_REGFL_RANDOM|PFM_REGFL_OVFL_NOTIFY)
 
-/*
- * function called from sys_pfm_write_pmds() to write the
- * requested PMD registers. The function succeeds whether the context is
- * attached or not. When attached to another thread, that thread must be
- * stopped.
+/**
+ * __pfm_write_pmds - modified data registers
+ * @ctx: context to operate on
+ * @req: pfarg_pmd_t request from user
+ * @count: number of element in the pfarg_pmd_t vector
+ * @compat: used only on IA-64 to maintain backward compatibility with v2.0
  *
- * compat: is used only on IA-64 to maintain backward compatibility with v2.0
+ * The function succeeds whether the context is attached or not.
+ * When attached to another thread, that thread must be stopped.
  *
  * The context is locked and interrupts are disabled.
  */
@@ -81,9 +83,21 @@ int __pfm_write_pmds(struct pfm_context *ctx, struct pfarg_pmd *req, int count,
 	/*
 	 * we cannot access the actual PMD registers when monitoring is masked
 	 */
-	if (unlikely(ctx->state == PFM_CTX_LOADED))
+	if (unlikely(ctx->state == PFM_CTX_LOADED)) {
 		can_access_pmu = __get_cpu_var(pmu_owner) == ctx->task
-			       || ctx->flags.system;
+			      || ctx->flags.system;
+
+#ifdef CONFIG_PPC
+		/*
+		 * Architecture depended access check.
+		 *
+		 * cell_spe_follow mode needs this check.
+		 * Because the target SPU program may run on
+		 * the other CPU's SPU.
+		 */
+		can_access_pmu = pfm_arch_can_access_pmu(ctx, can_access_pmu);
+#endif
+	}
 
 	ret = -EINVAL;
 
@@ -101,7 +115,7 @@ int __pfm_write_pmds(struct pfm_context *ctx, struct pfarg_pmd *req, int count,
 		 * writes to read-only register are ignored
 		 */
 		if (unlikely(cnum >= max_pmd
-		    || !test_bit(cnum, cast_ulp(impl_pmds)))) {
+			|| !test_bit(cnum, cast_ulp(impl_pmds)))) {
 			PFM_DBG("pmd%u is not available", cnum);
 			goto error;
 		}
@@ -109,61 +123,61 @@ int __pfm_write_pmds(struct pfm_context *ctx, struct pfarg_pmd *req, int count,
 		pmd_type = pfm_pmu_conf->pmd_desc[cnum].type;
 		is_counter = pmd_type & PFM_REG_C64;
 
-		if (likely(!compat)) {
-			/*
-			 * ensure only valid flags are set
-			 */
-			if (req_flags & ~(PFM_REGFL_PMD_ALL)) {
-				PFM_DBG("pmd%u: invalid flags=0x%x",
-					cnum, req_flags);
-				goto error;
-			}
-			/*
-			 * OVFL_NOTIFY is valid for all types of PMD.
-			 * non counting PMD may trigger PMU interrupt
-			 * and thus may trigger recording of a sample.
-			 * This is the case with AMD family 16 and the
-			 * IBS feature, for instance.
-			 */
-			if (req_flags & PFM_REGFL_OVFL_NOTIFY)
-				flags |= PFM_REGFL_OVFL_NOTIFY;
+		/*
+		 * IA-64 backward compatibility
+		 */
+		if (unlikely(compat))
+			goto skip_check;
+		/*
+		 * ensure only valid flags are set
+		 */
+		if (req_flags & ~(PFM_REGFL_PMD_ALL)) {
+			PFM_DBG("pmd%u: invalid flags=0x%x",
+				cnum, req_flags);
+			goto error;
+		}
+		/*
+		 * OVFL_NOTIFY is valid for all types of PMD.
+		 * non counting PMD may trigger PMU interrupt
+		 * and thus may trigger recording of a sample.
+		 * This is the case with AMD family 16 and the
+		 * IBS feature, for instance.
+		 */
+		if (req_flags & PFM_REGFL_OVFL_NOTIFY)
+			flags |= PFM_REGFL_OVFL_NOTIFY;
 
-			/*
-			 * We allow randomization to non counting
-			 * PMD as well.
-			 */
-			if (req_flags & PFM_REGFL_RANDOM)
-				flags |= PFM_REGFL_RANDOM;
+		/*
+		 * We allow randomization to non counting PMD
+		 */
+		if (req_flags & PFM_REGFL_RANDOM)
+			flags |= PFM_REGFL_RANDOM;
 
-			/*
-			 * verify validity of smpl_pmds
-			 */
-			if (unlikely(!bitmap_subset(cast_ulp(smpl_pmds),
-						    cast_ulp(impl_pmds),
-						    max_pmd))) {
-				PFM_DBG("invalid smpl_pmds=0x%llx "
-					"for pmd%u",
-					(unsigned long long)smpl_pmds[0],
-					cnum);
-				goto error;
-			}
-
-			/*
-			 * verify validity of reset_pmds
-			 * check against impl_rw_pmds because it is not
-			 * possible to reset read-only PMDs
-			 */
-			if (unlikely(!bitmap_subset(cast_ulp(reset_pmds),
-						    cast_ulp(impl_rw_pmds),
-						    max_pmd))) {
-				PFM_DBG("invalid reset_pmds=0x%llx "
-					"for pmd%u",
-					(unsigned long long)reset_pmds[0],
-					cnum);
-				goto error;
-			}
+		/*
+		 * verify validity of smpl_pmds
+		 */
+		if (unlikely(!bitmap_subset(cast_ulp(smpl_pmds),
+					    cast_ulp(impl_pmds),
+					    max_pmd))) {
+			PFM_DBG("invalid smpl_pmds=0x%llx for pmd%u",
+				(unsigned long long)smpl_pmds[0],
+				cnum);
+			goto error;
 		}
 
+		/*
+		 * verify validity of reset_pmds
+		 * check against impl_rw_pmds because it is not
+		 * possible to reset read-only PMDs
+		 */
+		if (unlikely(!bitmap_subset(cast_ulp(reset_pmds),
+					    cast_ulp(impl_rw_pmds),
+					    max_pmd))) {
+			PFM_DBG("invalid reset_pmds=0x%llx for pmd%u",
+				(unsigned long long)reset_pmds[0],
+				cnum);
+			goto error;
+		}
+skip_check:
 		/*
 		 * locate event set
 		 */
@@ -171,9 +185,10 @@ int __pfm_write_pmds(struct pfm_context *ctx, struct pfarg_pmd *req, int count,
 			set = pfm_find_set(ctx, set_id, 0);
 			if (set == NULL) {
 				PFM_DBG("event set%u does not exist",
-					set_id);
+						set_id);
 				goto error;
 			}
+			prev_set_id = set_id;
 		}
 
 		/*
@@ -192,55 +207,54 @@ int __pfm_write_pmds(struct pfm_context *ctx, struct pfarg_pmd *req, int count,
 		 * now commit changes to software state
 		 */
 
-		if (likely(!compat)) {
-			set->pmds[cnum].flags = flags;
+		if (unlikely(compat))
+			goto skip_set;
 
-			/*
-			 * copy reset and sampling bitvectors
-			 */
-			bitmap_copy(cast_ulp(set->pmds[cnum].reset_pmds),
-					cast_ulp(reset_pmds),
-					max_pmd);
+		set->pmds[cnum].flags = flags;
 
-			bitmap_copy(cast_ulp(set->pmds[cnum].smpl_pmds),
-					cast_ulp(smpl_pmds),
-					max_pmd);
+		/*
+		 * copy reset and sampling bitvectors
+		 */
+		bitmap_copy(cast_ulp(set->pmds[cnum].reset_pmds),
+			    cast_ulp(reset_pmds),
+			    max_pmd);
 
-			set->pmds[cnum].eventid = req->reg_smpl_eventid;
+		bitmap_copy(cast_ulp(set->pmds[cnum].smpl_pmds),
+			    cast_ulp(smpl_pmds),
+			    max_pmd);
 
-			/*
-			 * Mark reset/smpl PMDS as used.
-			 *
-			 * We do not keep track of PMC because we have to
-			 * systematically restore ALL of them.
-			 */
-			bitmap_or(cast_ulp(set->used_pmds),
-					cast_ulp(set->used_pmds),
-					cast_ulp(reset_pmds), max_pmd);
+		set->pmds[cnum].eventid = req->reg_smpl_eventid;
 
-			bitmap_or(cast_ulp(set->used_pmds),
-					cast_ulp(set->used_pmds),
-					cast_ulp(smpl_pmds), max_pmd);
+		/*
+		 * Mark reset/smpl PMDS as used.
+		 */
+		bitmap_or(cast_ulp(set->used_pmds),
+			  cast_ulp(set->used_pmds),
+			  cast_ulp(reset_pmds), max_pmd);
 
-			/*
-			 * we reprogram the PMD hence, we clear any pending
-			 * ovfl. Does affect ovfl switch on restart but new
-			 * value has already been established here
-			 */
-			if (test_bit(cnum, cast_ulp(set->povfl_pmds))) {
-				set->npend_ovfls--;
-				__clear_bit(cnum, cast_ulp(set->povfl_pmds));
-			}
-			__clear_bit(cnum, cast_ulp(set->ovfl_pmds));
+		bitmap_or(cast_ulp(set->used_pmds),
+			  cast_ulp(set->used_pmds),
+			  cast_ulp(smpl_pmds), max_pmd);
 
-			/*
-			 * update ovfl_notify
-			 */
-			if (flags & PFM_REGFL_OVFL_NOTIFY)
-				__set_bit(cnum, cast_ulp(set->ovfl_notify));
-			else
-				__clear_bit(cnum, cast_ulp(set->ovfl_notify));
+		/*
+		 * we reprogram the PMD hence, we clear any pending
+		 * ovfl. Does affect ovfl switch on restart but new
+		 * value has already been established here
+		 */
+		if (test_bit(cnum, cast_ulp(set->povfl_pmds))) {
+			set->npend_ovfls--;
+			__clear_bit(cnum, cast_ulp(set->povfl_pmds));
 		}
+		__clear_bit(cnum, cast_ulp(set->ovfl_pmds));
+
+		/*
+		 * update ovfl_notify
+		 */
+		if (flags & PFM_REGFL_OVFL_NOTIFY)
+			__set_bit(cnum, cast_ulp(set->ovfl_notify));
+		else
+			__clear_bit(cnum, cast_ulp(set->ovfl_notify));
+skip_set:
 		/*
 		 * establish new switch count
 		 */
@@ -279,9 +293,8 @@ int __pfm_write_pmds(struct pfm_context *ctx, struct pfarg_pmd *req, int count,
 		/*
 		 * update number of used PMD registers
 		 */
-		set->nused_pmds = bitmap_weight(cast_ulp(set->used_pmds), max_pmd);
-
-		prev_set_id = set_id;
+		set->nused_pmds = bitmap_weight(cast_ulp(set->used_pmds),
+						max_pmd);
 
 		PFM_DBG("set%u pmd%u=0x%llx flags=0x%x a_pmu=%d "
 			"ctx_pmd=0x%llx s_reset=0x%llx "
@@ -317,11 +330,15 @@ error:
 	return ret;
 }
 
-/*
- * function called from sys_pfm_write_pmcs() to write the
- * requested PMC registers. The function succeeds whether the context is
- * attached or not. When attached to another thread, that thread must be
- * stopped.
+/**
+ * __pfm_write_pmcs - modified config registers
+ * @ctx: context to operate on
+ * @req: pfarg_pmc_t request from user
+ * @count: number of element in the pfarg_pmc_t vector
+ *
+ *
+ * The function succeeds whether the context is * attached or not.
+ * When attached to another thread, that thread must be stopped.
  *
  * The context is locked and interrupts are disabled.
  */
@@ -350,9 +367,21 @@ int __pfm_write_pmcs(struct pfm_context *ctx, struct pfarg_pmc *req, int count)
 	/*
 	 * we cannot access the actual PMC registers when monitoring is masked
 	 */
-	if (unlikely(ctx->state == PFM_CTX_LOADED))
+	if (unlikely(ctx->state == PFM_CTX_LOADED)) {
 		can_access_pmu = __get_cpu_var(pmu_owner) == ctx->task
 			        || ctx->flags.system;
+
+#ifdef CONFIG_PPC
+		/*
+		 * Architecture depended access check.
+		 *
+		 * cell_spe_follow mode needs this check.
+		 * Because the target SPU program may run on
+		 * the other CPU's SPU.
+		 */
+		can_access_pmu = pfm_arch_can_access_pmu(ctx, can_access_pmu);
+#endif
+	}
 
 	ret = -EINVAL;
 
@@ -394,6 +423,7 @@ int __pfm_write_pmcs(struct pfm_context *ctx, struct pfarg_pmc *req, int count)
 					set_id);
 				goto error;
 			}
+			prev_set_id = set_id;
 		}
 
 		/*
@@ -450,8 +480,6 @@ int __pfm_write_pmcs(struct pfm_context *ctx, struct pfarg_pmc *req, int count)
 				pfm_arch_write_pmc(ctx, cnum, value);
 		}
 
-		prev_set_id = set_id;
-
 		PFM_DBG("set%u pmc%u=0x%llx a_pmu=%d "
 			"u_pmcs=0x%llx nu_pmcs=%u",
 			set->id,
@@ -472,11 +500,15 @@ error:
 	return ret;
 }
 
-/*
- * function called from sys_pfm_read_pmds() to read the 64-bit value of
- * requested PMD registers. The function succeeds whether the context is
- * attached or not. When attached to another thread, that thread must be
- * stopped.
+/**
+ * __pfm_read_pmds - read data registers
+ * @ctx: context to operate on
+ * @req: pfarg_pmd_t request from user
+ * @count: number of element in the pfarg_pmd_t vector
+ *
+ *
+ * The function succeeds whether the context is attached or not.
+ * When attached to another thread, that thread must be stopped.
  *
  * The context is locked and interrupts are disabled.
  */
@@ -502,14 +534,13 @@ int __pfm_read_pmds(struct pfm_context *ctx, struct pfarg_pmd *req, int count)
 
 #ifdef CONFIG_PPC
 		/*
-		 * In the cell_spe_follow mode,
-		 * The target SPU program may run on the other CPU's SPU,
-		 * So pfm_cell_can_access_pmu_in_cell_spe_follow(ctx)
-		 * is used here.
+		 * Architecture depended access check.
+		 *
+		 * cell_spe_follow mode needs this check.
+		 * Because the target SPU program may run on
+		 * the other CPU's SPU.
 		 */
-		if (ctx->flags.cell_spe_follow && !ctx->flags.system)
-			can_access_pmu =
-				pfm_cell_can_access_pmu_in_cell_spe_follow(ctx);
+		can_access_pmu = pfm_arch_can_access_pmu(ctx, can_access_pmu);
 #endif
 
 		if (can_access_pmu)
@@ -544,6 +575,7 @@ int __pfm_read_pmds(struct pfm_context *ctx, struct pfarg_pmd *req, int count)
 					set_id);
 				goto error;
 			}
+			prev_set_id = set_id;
 		}
 		/*
 		 * it is not possible to read a PMD which was not requested:
@@ -552,14 +584,13 @@ int __pfm_read_pmds(struct pfm_context *ctx, struct pfarg_pmd *req, int count)
 		 * 	  pfm_write_pmds()
 		 *
 		 * This is motivated by security and for optimization purposes:
-		 * 	- on context switch restore, we can restore only what we
-		 * 	  use (except when regs directly readable at user level,
-		 * 	  e.g., IA-64 self-monitoring, I386 RDPMC).
+		 * 	- on context switch restore, we can restore only what
+		 * 	  we use (except when regs directly readable at user
+		 * 	  level, e.g., IA-64 self-monitoring, I386 RDPMC).
 		 * 	- do not need to maintain PMC -> PMD dependencies
 		 */
 		if (unlikely(!test_bit(cnum, cast_ulp(set->used_pmds)))) {
-			PFM_DBG("pmd%u cannot be read, because never "
-				"requested", cnum);
+			PFM_DBG("pmd%u cannot read, because not used", cnum);
 			goto error;
 		}
 
@@ -579,7 +610,7 @@ int __pfm_read_pmds(struct pfm_context *ctx, struct pfarg_pmd *req, int count)
 		if (set == active_set && can_access_pmu) {
 			hw_val = pfm_read_pmd(ctx, cnum);
 			if (pmd_type & PFM_REG_C64)
-				val = (val & ~ovfl_mask) | (hw_val & ovfl_mask);
+				val =(val & ~ovfl_mask) | (hw_val & ovfl_mask);
 			else
 				val = hw_val;
 		}
@@ -594,8 +625,6 @@ int __pfm_read_pmds(struct pfm_context *ctx, struct pfarg_pmd *req, int count)
 		req->reg_value = val;
 		req->reg_last_reset_val = lval;
 		req->reg_ovfl_switch_cnt = sw_cnt;
-
-		prev_set_id = set_id;
 	}
 	ret = 0;
 error:

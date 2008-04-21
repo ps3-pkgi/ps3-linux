@@ -63,11 +63,11 @@ struct pfm_dfl_smpl_entry {
 	__u16	ovfl_pmd;	/* index of overflowed PMD for this sample */
 	__u16	reserved;	/* for future use */
 	__u64	last_reset_val;	/* initial value of overflowed PMD */
-	__u64	ip;		/* where did the overflow interrupt happened  */
+	__u64	ip;		/* where did the overflow intr happened */
 	__u64	tstamp;		/* overflow timetamp */
 	__u16	cpu;		/* cpu on which the overfow occurred */
-	__u16	set;		/* event set active when overflow ocurred   */
-	__u32	tgid;		/* thread group id (for NPTL, this is getpid())*/
+	__u16	set;		/* event set active when overflow ocurred */
+	__u32	tgid;		/* thread group id (getpid() for NPTL) */
 };
 
 #define PFM_DFL_SMPL_VERSION_MAJ 1U

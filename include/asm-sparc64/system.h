@@ -146,9 +146,10 @@ do {						\
 	 * and 2 stores in this critical code path.  -DaveM
 	 */
 #define switch_to(prev, next, last)					\
-do {	if (test_tsk_thread_flag(prev, TIF_PERFMON_CTXSW)		\
-	    || test_tsk_thread_flag(next, TIF_PERFMON_CTXSW))		\
-		pfm_ctxsw(prev, next);					\
+do {	if (test_tsk_thread_flag(prev, TIF_PERFMON_CTXSW))		\
+		pfm_ctxsw_out(prev, next);				\
+	if (test_tsk_thread_flag(next, TIF_PERFMON_CTXSW))		\
+		pfm_ctxsw_in(prev, next);				\
 	flush_tlb_pending();						\
 	save_and_clear_fpu();						\
 	/* If you are tempted to conditionalize the following */	\

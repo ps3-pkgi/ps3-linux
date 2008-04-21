@@ -268,7 +268,7 @@ static struct pfm_pmu_config pfm_mck_pmu_conf={
 	.version = "1.0",
 	.flags = PFM_PMU_BUILTIN_FLAG,
 	.owner = THIS_MODULE,
-	.arch_info = &pfm_mck_pmu_info,
+	.pmu_info = &pfm_mck_pmu_info,
 };
 
 static int __init pfm_mck_pmu_init_module(void)

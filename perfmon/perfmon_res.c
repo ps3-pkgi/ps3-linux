@@ -214,7 +214,7 @@ void pfm_smpl_buf_space_release(struct pfm_context *ctx, size_t size)
 
 		mm->locked_vm -= size >> PAGE_SHIFT;
 
-		PFM_DBG("locked_vm=%lu size=%zu", mm->locked_vm, size);
+		PFM_DBG("size=%zu locked_vm=%lu", size, mm->locked_vm);
 
 		if (ctx->flags.mmap_nlock == 0)
 			up_write(&mm->mmap_sem);

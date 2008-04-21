@@ -276,7 +276,7 @@ static struct pfm_pmu_config pfm_power4_pmu_conf = {
 	.num_pmc_entries = PFM_PM_NUM_PMCS,
 	.num_pmd_entries = PFM_PM_NUM_PMDS,
 	.probe_pmu  = pfm_power4_probe_pmu,
-	.arch_info = &pfm_power4_pmu_info,
+	.pmu_info = &pfm_power4_pmu_info,
 	.flags = PFM_PMU_BUILTIN_FLAG,
 	.owner = THIS_MODULE
 };

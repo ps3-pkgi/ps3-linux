@@ -427,7 +427,7 @@ void exit_thread(void)
 		tss->x86_tss.io_bitmap_base = INVALID_IO_BITMAP_OFFSET;
 		put_cpu();
 	}
-	pfm_exit_thread(current);
+	pfm_exit_thread();
 }
 
 void flush_thread(void)
@@ -560,6 +560,9 @@ __switch_to_xtra(struct task_struct *prev_p, struct task_struct *next_p,
 	prev = &prev_p->thread;
 	next = &next_p->thread;
 
+	if (test_tsk_thread_flag(prev_p, TIF_PERFMON_CTXSW))
+		pfm_ctxsw_out(prev_p, next_p);
+
 	debugctl = prev->debugctlmsr;
 	if (next->ds_area_msr != prev->ds_area_msr) {
 		/* we clear debugctl to make sure DS
@@ -571,6 +574,9 @@ __switch_to_xtra(struct task_struct *prev_p, struct task_struct *next_p,
 
 	if (next->debugctlmsr != debugctl)
 		update_debugctlmsr(next->debugctlmsr);
+
+	if (test_tsk_thread_flag(next_p, TIF_PERFMON_CTXSW))
+		pfm_ctxsw_in(prev_p, next_p);
 
 	if (test_tsk_thread_flag(next_p, TIF_DEBUG)) {
 		set_debugreg(next->debugreg0, 0);
@@ -593,9 +599,6 @@ __switch_to_xtra(struct task_struct *prev_p, struct task_struct *next_p,
 	}
 #endif
 
-	if (test_tsk_thread_flag(next_p, TIF_PERFMON_CTXSW)
-	    || test_tsk_thread_flag(prev_p, TIF_PERFMON_CTXSW))
-		pfm_ctxsw(prev_p, next_p);
 
 #ifdef X86_BTS
 	if (test_tsk_thread_flag(prev_p, TIF_BTS_TRACE_TS))

@@ -54,8 +54,8 @@ typedef __u8 pfm_uuid_t[16];
 /*
  * PMU model specific commands (may not be supported on all PMU models)
  */
-#define PFM_WRITE_IBRS		0x20 /* obsolete: use PFM_WRITE_PMCS[256-263] */
-#define PFM_WRITE_DBRS		0x21 /* obsolete: use PFM_WRITE_PMCS[264-271] */
+#define PFM_WRITE_IBRS		0x20 /* obsolete: use PFM_WRITE_PMCS[256-263]*/
+#define PFM_WRITE_DBRS		0x21 /* obsolete: use PFM_WRITE_PMCS[264-271]*/
 
 /*
  * argument to PFM_CREATE_CONTEXT
@@ -78,12 +78,12 @@ struct pfarg_reg {
 	unsigned short	reg_reserved1;	   /* for future use */
 
 	unsigned long	reg_value;	   /* initial pmc/pmd value */
-	unsigned long	reg_flags;	   /* input: pmc/pmd flags, return: reg error */
+	unsigned long	reg_flags;	   /* input: flags, ret: error */
 
-	unsigned long	reg_long_reset;	   /* reset after buffer overflow notification */
+	unsigned long	reg_long_reset;	   /* reset value after notification */
 	unsigned long	reg_short_reset;   /* reset after counter overflow */
 
-	unsigned long	reg_reset_pmds[4]; /* which other counters to reset on overflow */
+	unsigned long	reg_reset_pmds[4]; /* registers to reset on overflow */
 	unsigned long	reg_random_seed;   /* seed for randomization */
 	unsigned long	reg_random_mask;   /* random range limit */
 	unsigned long   reg_last_reset_val;/* return: PMD last reset value */
@@ -120,7 +120,7 @@ typedef struct {
 	int		msg_type;		/* generic message header */
 	int		msg_ctx_fd;		/* generic message header */
 	unsigned long	msg_ovfl_pmds[4];	/* which PMDs overflowed */
-	unsigned short  msg_active_set;		/* active set at the time of overflow */
+	unsigned short  msg_active_set;		/* active set on overflow */
 	unsigned short  msg_reserved1;		/* for future use */
 	unsigned int    msg_reserved2;		/* for future use */
 	unsigned long	msg_tstamp;		/* for perf tuning/debug */
@@ -134,7 +134,7 @@ typedef struct {
 
 typedef struct {
 	int		msg_type;		/* type of the message */
-	int		msg_ctx_fd;		/* unique identifier for the context */
+	int		msg_ctx_fd;		/* context file descriptor */
 	unsigned long	msg_tstamp;		/* for perf tuning */
 } pfm_gen_msg_t;
 
@@ -163,6 +163,5 @@ typedef union {
 				 PFM_REG_RETFL_EINVAL)
 
 #define PFM_REG_HAS_ERROR(flag)	(((flag) & PFM_REG_RETFL_MASK) != 0)
-
 
 #endif /* _ASM_IA64_PERFMON_COMPAT_H_ */

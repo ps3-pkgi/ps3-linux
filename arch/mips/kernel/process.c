@@ -95,7 +95,7 @@ void start_thread(struct pt_regs * regs, unsigned long pc, unsigned long sp)
 
 void exit_thread(void)
 {
-  pfm_exit_thread(current);
+  pfm_exit_thread();
 }
 
 void flush_thread(void)

@@ -389,13 +389,12 @@ int pfm_pmu_register(struct pfm_pmu_config *cfg)
 	if (ret)
 		goto unlock;
 
-	ret = pfm_arch_pmu_config_init(pfm_pmu_conf);
+	ret = pfm_arch_pmu_config_init(cfg);
 	if (ret)
 		goto unlock;
 
 	ret = pfm_sysfs_add_pmu(pfm_pmu_conf);
 	if (ret) {
-		pfm_arch_pmu_config_remove();
 		pfm_pmu_conf = NULL;
 	}
 
@@ -435,7 +434,6 @@ void pfm_pmu_unregister(struct pfm_pmu_config *cfg)
 	BUG_ON(module_refcount(pfm_pmu_conf->owner));
 
 	if (cfg->owner == pfm_pmu_conf->owner) {
-		pfm_arch_pmu_config_remove();
 		pfm_sysfs_remove_pmu(pfm_pmu_conf);
 		pfm_pmu_conf = NULL;
 	}

@@ -22,8 +22,6 @@
 #ifndef _ASM_IA64_PERFMON_H_
 #define _ASM_IA64_PERFMON_H_
 
-#ifdef __KERNEL__
-
 /*
  * arch-specific user visible interface definitions
  */
@@ -40,7 +38,7 @@
  * bits[00-15]: generic flags (see asm/perfmon.h)
  * bits[16-31]: arch-specific flags
  */
-#define PFM_ITA_FL_INSECURE 0x10000 /* clear psr.sp on non system, non self-monitoring */
+#define PFM_ITA_FL_INSECURE 0x10000 /* clear psr.sp on non system, non self */
 
 /*
  * Itanium specific public event set flags (set_flags)
@@ -58,5 +56,4 @@
  */
 #include <asm/perfmon_compat.h>
 
-#endif /* __KERNEL__ */
 #endif /* _ASM_IA64_PERFMON_H_ */

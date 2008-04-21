@@ -63,9 +63,6 @@ void pfm_reset_stats(int cpu)
 static const char *pfm_stats_strs[] = {
 	"ovfl_intr_all_count",
 	"ovfl_intr_ns",
-	"ovfl_intr_p1_ns",
-	"ovfl_intr_p2_ns",
-	"ovfl_intr_p3_ns",
 	"ovfl_intr_spurious_count",
 	"ovfl_intr_replay_count",
 	"ovfl_intr_regular_count",
@@ -78,10 +75,12 @@ static const char *pfm_stats_strs[] = {
 	"set_switch_count",
 	"set_switch_ns",
 	"set_switch_exp",
-	"ctxsw_count",
-	"ctxsw_ns",
+	"ctxswin_count",
+	"ctxswin_ns",
 	"handle_timeout_count",
 	"ovfl_intr_nmi_count",
+	"ctxswout_count",
+	"ctxswout_ns",
 };
 #define PFM_NUM_STRS ARRAY_SIZE(pfm_stats_strs)
 

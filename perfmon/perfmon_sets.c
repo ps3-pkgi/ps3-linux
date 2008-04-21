@@ -40,9 +40,10 @@
 
 static struct kmem_cache	*pfm_set_cachep;
 
-/*
- * reload reference interrupt switch thresholds for PMD which
- * can interrupt
+/**
+ * pfm_reload_switch_thresholds - reload overflow-based switch thresholds per set
+ * @set: the set for which to reload thresholds
+ *
  */
 static void pfm_reload_switch_thresholds(struct pfm_event_set *set)
 {
@@ -65,40 +66,49 @@ static void pfm_reload_switch_thresholds(struct pfm_event_set *set)
 	}
 }
 
-/*
+/**
+ * pfm_prepare_sets - initialize sets on pfm_load_context
+ * @ctx : context to operate on
+ * @load_set: set to activate first
+ *
  * connect all sets, reset internal fields
  */
-int pfm_prepare_sets(struct pfm_context *ctx, struct pfm_event_set *act_set)
+struct pfm_event_set * pfm_prepare_sets(struct pfm_context *ctx, u16 load_set)
 {
-	struct pfm_event_set *set;
+	struct pfm_event_set *set, *p;
 	u16 max;
+
+	/*
+	 * locate first set to activate
+	 */
+	set = pfm_find_set(ctx, load_set, 0);
+	if (!set)
+		return NULL;
+
+	if (set->flags & PFM_SETFL_OVFL_SWITCH)
+		pfm_reload_switch_thresholds(set);
 
 	max = pfm_pmu_conf->regs.max_intr_pmd;
 
-	list_for_each_entry(set, &ctx->set_list, list) {
+	list_for_each_entry(p, &ctx->set_list, list) {
 		/*
 		 * cleanup bitvectors
 		 */
-		bitmap_zero(cast_ulp(set->ovfl_pmds), max);
-		bitmap_zero(cast_ulp(set->povfl_pmds), max);
+		bitmap_zero(cast_ulp(p->ovfl_pmds), max);
+		bitmap_zero(cast_ulp(p->povfl_pmds), max);
 
-		set->npend_ovfls = 0;
+		p->npend_ovfls = 0;
 
 		/*
 		 * we cannot just use plain clear because of arch-specific flags
 		 */
-		set->priv_flags &= ~(PFM_SETFL_PRIV_MOD_BOTH|PFM_SETFL_PRIV_SWITCH);
-
+		p->priv_flags &= ~(PFM_SETFL_PRIV_MOD_BOTH|PFM_SETFL_PRIV_SWITCH);
 		/*
 		 * neither duration nor runs are reset because typically loading/unloading
 		 * does not mean counts are reset. To reset, the set must be modified
 		 */
 	}
-
-	if (act_set->flags & PFM_SETFL_OVFL_SWITCH)
-		pfm_reload_switch_thresholds(act_set);
-
-	return 0;
+	return set;
 }
 
 /*
@@ -206,7 +216,7 @@ enum hrtimer_restart pfm_switch_sets(struct pfm_context *ctx,
 		goto skip_same_set;
 
 	if (is_active) {
-		pfm_arch_stop(current, ctx, set);
+		pfm_arch_stop(current, ctx);
 		pfm_save_pmds(ctx, set);
 		/*
 		 * compute elapsed ns for active set
@@ -259,8 +269,9 @@ skip_same_set:
 		 * do not need to restart when same set
 		 */
 		if (new_set != set) {
-			pfm_arch_start(current, ctx, new_set);
+			ctx->active_set = new_set;
 			new_set->duration_start = now;
+			pfm_arch_start(current, ctx);
 		}
 		/*
 		 * install new timeout if necessary
@@ -435,7 +446,7 @@ static int pfm_setfl_sane(struct pfm_context *ctx, u32 flags)
 /*
  * it is never possible to change the identification of an existing set
  */
-static int __pfm_change_evtset(struct pfm_context *ctx,
+static int pfm_change_evtset(struct pfm_context *ctx,
 			       struct pfm_event_set *set,
 			       struct pfarg_setdesc *req)
 {
@@ -529,7 +540,7 @@ static int __pfm_change_evtset(struct pfm_context *ctx,
 /*
  * this function does not modify the next field
  */
-void pfm_init_evtset(struct pfm_event_set *set)
+static void pfm_initialize_set(struct pfm_event_set *set)
 {
 	u64 *impl_pmcs;
 	u16 i, max_pmc;
@@ -608,6 +619,27 @@ struct pfm_event_set *pfm_find_set(struct pfm_context *ctx, u16 set_id, int allo
 	return new_set;
 }
 
+/**
+ * pfm_create_initial_set - create initial set from __pfm_c reate_context
+ * @ctx: context to atatched the set to
+ */
+int pfm_create_initial_set(struct pfm_context *ctx)
+{
+	struct pfm_event_set *set;
+
+	/*
+	 * create initial set0
+	 */
+	if (!pfm_find_set(ctx, 0, 1))
+		return -ENOMEM;
+
+	set = list_first_entry(&ctx->set_list, struct pfm_event_set, list);
+
+	pfm_initialize_set(set);
+
+	return 0;
+}
+
 /*
  * context is unloaded for this command. Interrupts are enabled
  */
@@ -627,11 +659,11 @@ int __pfm_create_evtsets(struct pfm_context *ctx, struct pfarg_setdesc *req,
 		if (set == NULL)
 			goto error_mem;
 
-		ret = __pfm_change_evtset(ctx, set, req);
+		ret = pfm_change_evtset(ctx, set, req);
 		if (ret)
 			goto error_params;
 
-		pfm_init_evtset(set);
+		pfm_initialize_set(set);
 	}
 	return 0;
 error_mem:

@@ -61,12 +61,12 @@
  *
  *	- perfmon system calls that operate with the context unloaded cannot
  *	  assume it is actually unloaded when they are called. They first need
- *	  to check and for that they need interrupts masked. Then if the context
- *	  is actually unloaded, they can unmask interrupts.
+ *	  to check and for that they need interrupts masked. Then, if the
+ *	  context is actually unloaded, they can unmask interrupts.
  *
  *	- interrupt masking holds true for other internal perfmon functions as
- *	  well. Except for PMU interrupt handler because those interrupts cannot
- *	  be nested.
+ *	  well. Except for PMU interrupt handler because those interrupts
+ *	  cannot be nested.
  *
  * 	- we mask ALL interrupts instead of just the PMU interrupt because we
  * 	  also need to protect against timer interrupts which could trigger
@@ -80,7 +80,8 @@
  * 	- task is dead or zombie
  * 	- cannot use blocking notification when self-monitoring
  */
-static int pfm_task_incompatible(struct pfm_context *ctx, struct task_struct *task)
+static int pfm_task_incompatible(struct pfm_context *ctx,
+				 struct task_struct *task)
 {
 	/*
 	 * cannot attach to a kernel thread
@@ -146,8 +147,10 @@ int pfm_get_task(struct pfm_context *ctx, pid_t pid, struct task_struct **task)
 
 	read_unlock(&tasklist_lock);
 
-	if (p == NULL)
+	if (!p) {
+		PFM_DBG("task not found %d", pid);
 		return -ESRCH;
+	}
 
 	ret = -EPERM;
 
@@ -367,74 +370,9 @@ int pfm_get_args(void __user *ureq, size_t sz, size_t lsz, void *laddr,
 	return 0;
 }
 
-/*
- * arg is kmalloc'ed, thus it needs a kfree by caller
- */
-int pfm_get_smpl_arg(char __user *fmt_uname, void __user *fmt_uarg, size_t usize, void **arg,
-		     struct pfm_smpl_fmt **fmt)
-{
-	struct pfm_smpl_fmt *f;
-	char *fmt_name;
-	void *addr = NULL;
-	size_t sz;
-	int ret;
-
-	fmt_name = getname(fmt_uname);
-	if (!fmt_name) {
-		PFM_DBG("getname failed");
-		return -ENOMEM;
-	}
-
-	/*
-	 * find fmt and increase refcount
-	 */
-	f = pfm_smpl_fmt_get(fmt_name);
-
-	putname(fmt_name);
-
-	if (f == NULL) {
-		PFM_DBG("buffer format not found");
-		return -EINVAL;
-	}
-
-	/*
-	 * expected format argument size
-	 */
-	sz = f->fmt_arg_size;
-
-	/*
-	 * check user size matches expected size
-	 * usize = -1 is for IA-64 backward compatibility
-	 */
-	ret = -EINVAL;
-	if (sz != usize && usize != -1) {
-		PFM_DBG("invalid arg size %zu, format expects %zu",
-			usize, sz);
-		goto error;
-	}
-
-	if (sz) {
-		ret = -ENOMEM;
-		addr = kmalloc(sz, GFP_KERNEL);
-		if (addr == NULL)
-			goto error;
-
-		ret = -EFAULT;
-		if (copy_from_user(addr, fmt_uarg, sz))
-			goto error;
-	}
-	*arg = addr;
-	*fmt = f;
-	return 0;
-
-error:
-	kfree(addr);
-	pfm_smpl_fmt_put(f);
-	return ret;
-}
 
 /*
- * unlike the other perfmon system calls, this one return a file descriptor
+ * unlike the other perfmon system calls, this one returns a file descriptor
  * or a value < 0 in case of error, very much like open() or socket()
  */
 asmlinkage long sys_pfm_create_context(struct pfarg_ctx __user *ureq,
@@ -442,7 +380,6 @@ asmlinkage long sys_pfm_create_context(struct pfarg_ctx __user *ureq,
 				       void __user *fmt_uarg, size_t fmt_size)
 {
 	struct pfarg_ctx req;
-	struct pfm_context *new_ctx;
 	struct pfm_smpl_fmt *fmt = NULL;
 	void *fmt_arg = NULL;
 	int ret;
@@ -462,7 +399,7 @@ asmlinkage long sys_pfm_create_context(struct pfarg_ctx __user *ureq,
 			goto abort;
 	}
 
-	ret = __pfm_create_context(&req, fmt, fmt_arg, PFM_NORMAL, &new_ctx);
+	ret = __pfm_create_context(&req, fmt, fmt_arg, PFM_NORMAL, NULL);
 
 	kfree(fmt_arg);
 abort:

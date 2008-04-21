@@ -113,31 +113,25 @@ static inline int pfm_arch_is_active(struct pfm_context *ctx)
 }
 
 static inline void pfm_arch_ctxswout_sys(struct task_struct *task,
-					 struct pfm_context *ctx,
-					 struct pfm_event_set *set)
+					 struct pfm_context *ctx)
 {
 }
 
 static inline void pfm_arch_ctxswin_sys(struct task_struct *task,
-					struct pfm_context *ctx,
-					struct pfm_event_set *set)
+					struct pfm_context *ctx)
 {
 }
 
 static inline void pfm_arch_ctxswin_thread(struct task_struct *task,
-					   struct pfm_context *ctx,
-					   struct pfm_event_set *set)
+					   struct pfm_context *ctx)
 {
 }
 
 int  pfm_arch_is_monitoring_active(struct pfm_context *ctx);
 int  pfm_arch_ctxswout_thread(struct task_struct *task,
-			      struct pfm_context *ctx,
-			      struct pfm_event_set *set);
-void pfm_arch_stop(struct task_struct *task, struct pfm_context *ctx,
-		   struct pfm_event_set *set);
-void pfm_arch_start(struct task_struct *task, struct pfm_context *ctx,
-		    struct pfm_event_set *set);
+			      struct pfm_context *ctx);
+void pfm_arch_stop(struct task_struct *task, struct pfm_context *ctx);
+void pfm_arch_start(struct task_struct *task, struct pfm_context *ctx);
 void pfm_arch_restore_pmds(struct pfm_context *ctx, struct pfm_event_set *set);
 void pfm_arch_restore_pmcs(struct pfm_context *ctx, struct pfm_event_set *set);
 char *pfm_arch_get_pmu_module_name(void);
@@ -145,7 +139,7 @@ char *pfm_arch_get_pmu_module_name(void);
 static inline void pfm_arch_intr_freeze_pmu(struct pfm_context *ctx,
 					    struct pfm_event_set *set)
 {
-	pfm_arch_stop(current, ctx, set);
+	pfm_arch_stop(current, ctx);
 	/*
 	 * we mark monitoring as stopped to avoid
 	 * certain side effects especially in
@@ -174,11 +168,6 @@ static inline void pfm_arch_intr_unfreeze_pmu(struct pfm_context *ctx)
 	pfm_arch_restore_pmcs(ctx, ctx->active_set);
 }
 
-static inline int pfm_arch_pmu_config_init(struct pfm_pmu_config *cfg)
-{
-	return 0;
-}
-
 /*
  * this function is called from the PMU interrupt handler ONLY.
  * On SPARC, the PMU is frozen via arch_stop, masking would be implemented
@@ -198,7 +187,7 @@ static inline void pfm_arch_mask_monitoring(struct pfm_context *ctx,
 static inline void pfm_arch_unmask_monitoring(struct pfm_context *ctx,
 					      struct pfm_event_set *set)
 {
-	pfm_arch_start(current, ctx, set);
+	pfm_arch_start(current, ctx);
 }
 
 static inline void pfm_arch_pmu_config_remove(void)
@@ -240,18 +229,13 @@ static inline void pfm_arch_init_percpu(void)
 {
 }
 
-static inline int pfm_arch_load_context(struct pfm_context *ctx,
-					struct pfm_event_set *set,
-					struct task_struct *task)
+static inline int pfm_arch_load_context(struct pfm_context *ctx)
 {
 	return 0;
 }
 
-static inline int pfm_arch_unload_context(struct pfm_context *ctx,
-					  struct task_struct *task)
-{
-	return 0;
-}
+static inline void pfm_arch_unload_context(struct pfm_context *ctx)
+{}
 
 extern void perfmon_interrupt(struct pt_regs *);
 
@@ -265,28 +249,16 @@ static inline void pfm_arch_pmu_release(void)
 	release_perfctr_intr(perfmon_interrupt);
 }
 
-/*
- * not used for sparc
- */
-static inline int pfm_smpl_buffer_alloc_compat(struct pfm_context *ctx,
-					       size_t rsize, struct file *filp)
-{
-	return -EINVAL;
-}
-
-static inline ssize_t pfm_arch_compat_read(struct pfm_context *ctx,
-					   char __user *buf,
-					   int non_block,
-					   size_t size)
-{
-	return -EINVAL;
-}
-
 static inline void pfm_arch_arm_handle_work(struct task_struct *task)
 {}
 
 static inline void pfm_arch_disarm_handle_work(struct task_struct *task)
 {}
+
+static inline int pfm_arch_pmu_config_init(struct pfm_pmu_config *cfg)
+{
+	return 0;
+}
 
 struct pfm_arch_context {
 	/* empty */

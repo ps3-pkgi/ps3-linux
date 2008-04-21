@@ -612,7 +612,7 @@ error:
  *
  * function called ONLY on current task
  */
-int pfm_smpl_buffer_alloc_compat(struct pfm_context *ctx, size_t rsize,
+int pfm_smpl_buf_alloc_compat(struct pfm_context *ctx, size_t rsize,
 			      struct file *filp)
 {
 	struct mm_struct *mm = current->mm;
@@ -627,7 +627,7 @@ int pfm_smpl_buffer_alloc_compat(struct pfm_context *ctx, size_t rsize,
 	/*
 	 * allocate buffer + map desc
 	 */
-	ret = pfm_smpl_buffer_alloc(ctx, rsize);
+	ret = pfm_smpl_buf_alloc(ctx, rsize);
 	if (ret)
 		return ret;
 
@@ -746,7 +746,7 @@ static void pfm_undo_create_context_fd(int fd, struct pfm_context *ctx)
 
 	put_unused_fd(fd);
 
-	pfm_context_free(ctx);
+	pfm_free_context(ctx);
 }
 
 static int pfm_get_smpl_arg_old(pfm_uuid_t uuid, void __user *fmt_uarg,

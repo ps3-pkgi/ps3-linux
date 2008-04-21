@@ -23,6 +23,7 @@
  * 02111-1307 USA
  */
 #include <linux/module.h>
+#include <linux/kprobes.h>
 #include <linux/perfmon_kern.h>
 #include <asm/msr.h>
 #include <asm/apic.h>
@@ -37,6 +38,9 @@ MODULE_PARM_DESC(force, "bool: force module to load succesfully");
 MODULE_PARM_DESC(force_nmi, "bool: force use of NMI for PMU interrupt");
 module_param(force, bool, 0600);
 module_param(force_nmi, bool, 0600);
+
+static u64 enable_mask[PFM_MAX_PMCS];
+static u16 max_enable;
 
 /*
  * - upper 32 bits are reserved
@@ -100,35 +104,21 @@ struct pmu_edx {
         unsigned int reserved:19;
 };
 
+static void pfm_intel_arch_restore_pmcs(struct pfm_context *ctx,
+					struct pfm_event_set *set);
+static int pfm_intel_arch_stop_save(struct pfm_context *ctx,
+				    struct pfm_event_set *set);
+static int pfm_intel_arch_has_ovfls(struct pfm_context *ctx);
+static void __kprobes pfm_intel_arch_quiesce(void);
 
 /*
  * physical addresses of MSR controlling the perfevtsel and counter registers
  */
 struct pfm_arch_pmu_info pfm_intel_arch_pmu_info={
-	.pmc_addrs = {
-/* pmc0  */	PFM_IA_SEL(0) ,  PFM_IA_SEL(1),  PFM_IA_SEL(2),  PFM_IA_SEL(3),
-/* pmc4  */	PFM_IA_SEL(4) ,  PFM_IA_SEL(5),  PFM_IA_SEL(6),  PFM_IA_SEL(7),
-/* pmc8  */	PFM_IA_SEL(8) ,  PFM_IA_SEL(9), PFM_IA_SEL(10), PFM_IA_SEL(11),
-/* pmc12 */	PFM_IA_SEL(12), PFM_IA_SEL(13), PFM_IA_SEL(14), PFM_IA_SEL(15),
-
-/* pmc16 */	{
-			.addrs[0] = MSR_CORE_PERF_FIXED_CTR_CTRL,
-			.reg_type = PFM_REGT_EN
-		}
-	},
-
-	.pmd_addrs = {
-/* pmd0  */	PFM_IA_CTR(0) ,  PFM_IA_CTR(1),  PFM_IA_CTR(2),  PFM_IA_CTR(3),
-/* pmd4  */	PFM_IA_CTR(4) ,  PFM_IA_CTR(5),  PFM_IA_CTR(6),  PFM_IA_CTR(7),
-/* pmd8  */	PFM_IA_CTR(8) ,  PFM_IA_CTR(9), PFM_IA_CTR(10), PFM_IA_CTR(11),
-/* pmd12 */	PFM_IA_CTR(12), PFM_IA_CTR(13), PFM_IA_CTR(14), PFM_IA_CTR(15),
-
-/* pmd16 */	PFM_IA_FCTR(0), PFM_IA_FCTR(1), PFM_IA_FCTR(2), PFM_IA_FCTR(3),
-/* pmd20 */	PFM_IA_FCTR(4), PFM_IA_FCTR(5), PFM_IA_FCTR(6), PFM_IA_FCTR(7),
-/* pmd24 */	PFM_IA_FCTR(8), PFM_IA_FCTR(9), PFM_IA_FCTR(10), PFM_IA_FCTR(11),
-/* pmd28 */	PFM_IA_FCTR(12), PFM_IA_FCTR(13), PFM_IA_FCTR(14), PFM_IA_FCTR(15)
-	},
-	.pmu_style = PFM_X86_PMU_P6
+	.stop_save = pfm_intel_arch_stop_save,
+	.has_ovfls = pfm_intel_arch_has_ovfls,
+	.quiesce = pfm_intel_arch_quiesce,
+	.restore_pmcs = pfm_intel_arch_restore_pmcs
 };
 
 #define PFM_IA_C(n) {                   \
@@ -141,7 +131,7 @@ struct pfm_arch_pmu_info pfm_intel_arch_pmu_info={
 	}
 
 #define PFM_IA_D(n) PMD_D(PFM_REG_C, "PMC"#n, MSR_P6_PERFCTR0+n)
-#define PFM_IA_FD(n) PMD_D(PFM_REG_C, "FIXED_CTR"#n, MSR_CORE_PERF_FIXED_CTR0+n)
+#define PFM_IA_FD(n) PMD_D(PFM_REG_C,"FIXED_CTR"#n, MSR_CORE_PERF_FIXED_CTR0+n)
 
 static struct pfm_regmap_desc pfm_intel_arch_pmc_desc[]={
 /* pmc0  */ PFM_IA_C(0),  PFM_IA_C(1),   PFM_IA_C(2),  PFM_IA_C(3),
@@ -172,8 +162,8 @@ static struct pfm_regmap_desc pfm_intel_arch_pmd_desc[]={
 };
 #define PFM_IA_MAX_PMDS	ARRAY_SIZE(pfm_intel_arch_pmd_desc)
 
-#define PFM_IA_MAX_CNT		16 /* maximum # of generic counters in mapping table */
-#define PFM_IA_MAX_FCNT		16 /* maximum # of fixed counters in mapping table */
+#define PFM_IA_MAX_CNT		16 /* # generic counters in mapping table */
+#define PFM_IA_MAX_FCNT		16 /* # of fixed counters in mapping table */
 #define PFM_IA_FCNT_BASE	16 /* base index of fixed counters PMD */
 
 static struct pfm_pmu_config pfm_intel_arch_pmu_conf;
@@ -282,17 +272,24 @@ static int pfm_intel_arch_probe_pmu(void)
 	num_cnt = eax.eax.num_cnt;
 
 	if (num_cnt >= PFM_IA_MAX_CNT) {
-		printk(KERN_INFO "perfmon: Limiting number of generic counters to %zu,"
-				 "HW supports %u", PFM_IA_MAX_PMCS, num_cnt);
+		printk(KERN_INFO "perfmon: Limiting number of generic counters"
+				 " to %zu, HW supports %u",
+				 PFM_IA_MAX_PMCS, num_cnt);
 		num_cnt = PFM_IA_MAX_CNT;
 
 	}
 
 	/*
 	 * adjust rsvd_msk for generic counters based on actual width
+	 * set enable_mask, we can use the PMD loop, because there is
+	 * one pmc per pmd and all pmds are counters
 	 */
-	for(i=0; i < num_cnt; i++)
-		pfm_intel_arch_pmd_desc[i].rsvd_msk = ~((1ULL<<eax.eax.cnt_width)-1);
+	for(i=0; i < num_cnt; i++) {
+		pfm_intel_arch_pmd_desc[i].rsvd_msk =
+			~((1ULL<<eax.eax.cnt_width)-1);
+		__set_bit(i, cast_ulp(enable_mask));
+	}
+	max_enable = i;
 
 	/*
 	 * mark unused generic counters as not available
@@ -311,7 +308,8 @@ static int pfm_intel_arch_probe_pmu(void)
 	 * adjust rsvd_msk for fixed counters based on actual width
 	 */
 	for(i=0; i < num_cnt; i++)
-		pfm_intel_arch_pmd_desc[PFM_IA_FCNT_BASE+i].rsvd_msk = ~((1ULL<<edx.edx.cnt_width)-1);
+		pfm_intel_arch_pmd_desc[PFM_IA_FCNT_BASE+i].rsvd_msk =
+			~((1ULL<<edx.edx.cnt_width)-1);
 
 	/*
 	 * mark unused fixed counters as
@@ -353,6 +351,153 @@ static int pfm_intel_arch_probe_pmu(void)
 	return 0;
 }
 
+/**
+ * pfm_intel_arch_has_ovfls - check for pending overflow condition
+ * @ctx: context to work on
+ *
+ * detect if counters have overflowed.
+ * return:
+ * 	0 : no overflow
+ * 	1 : at least one overflow
+ */
+static int __kprobes pfm_intel_arch_has_ovfls(struct pfm_context *ctx)
+{
+	u64 *cnt_mask;
+	u64 wmask, val;
+	u16 i, num;
+
+	cnt_mask = pfm_pmu_conf->regs.cnt_pmds;
+	num = pfm_pmu_conf->regs.num_counters;
+	wmask = 1ULL << pfm_pmu_conf->counter_width;
+
+	/*
+	 * we can leverage the fact that we know the mapping
+	 * to hardcode the MSR address and avoid accessing
+	 * more cachelines
+	 *
+	 * We need to check cnt_mask because not all registers
+	 * may be available.
+	 */
+	for (i = 0; num; i++) {
+		if (test_bit(i, cast_ulp(cnt_mask))) {
+			rdmsrl(MSR_P6_PERFCTR0+i, val);
+			if (!(val & wmask))
+				return 1;
+			num--;
+		}
+	}
+	return 0;
+}
+
+static int pfm_intel_arch_stop_save(struct pfm_context *ctx,
+				    struct pfm_event_set *set)
+{
+	u64 used_mask[PFM_PMC_BV];
+	u64 *cnt_pmds;
+	u64 val, wmask, ovfl_mask;
+	u32 i, count;
+
+	wmask = 1ULL << pfm_pmu_conf->counter_width;
+
+	bitmap_and(cast_ulp(used_mask),
+		   cast_ulp(set->used_pmcs),
+		   cast_ulp(enable_mask),
+		   max_enable);
+
+	count = bitmap_weight(cast_ulp(used_mask), max_enable);
+
+	/*
+	 * stop monitoring
+	 * Unfortunately, this is very expensive!
+	 * wrmsrl() is serializing.
+	 */
+	for (i = 0; count; i++) {
+		if (test_bit(i, cast_ulp(used_mask))) {
+			wrmsrl(pfm_pmu_conf->pmc_desc[i].hw_addr, 0);
+			count--;
+		}
+	}
+
+	/*
+	 * if we already having a pending overflow condition, we simply
+	 * return to take care of this first.
+	 */
+	if (set->npend_ovfls)
+		return 1;
+
+	ovfl_mask = pfm_pmu_conf->ovfl_mask;
+	cnt_pmds = pfm_pmu_conf->regs.cnt_pmds;
+
+	/*
+	 * check for pending overflows and save PMDs (combo)
+	 * we employ used_pmds because we also need to save
+	 * and not just check for pending interrupts.
+	 *
+	 * Must check for counting PMDs because of virtual PMDs
+	 */
+	count = set->nused_pmds;
+	for (i = 0; count; i++) {
+		if (test_bit(i, cast_ulp(set->used_pmds))) {
+			val = pfm_arch_read_pmd(ctx, i);
+			if (likely(test_bit(i, cast_ulp(cnt_pmds)))) {
+				if (!(val & wmask)) {
+					__set_bit(i,cast_ulp(set->povfl_pmds));
+					set->npend_ovfls++;
+				}
+				val = (set->pmds[i].value & ~ovfl_mask)
+				    | (val & ovfl_mask);
+			}
+			set->pmds[i].value = val;
+			count--;
+		}
+	}
+	/* 0 means: no need to save PMDs at upper level */
+	return 0;
+}
+
+/**
+ * pfm_intel_arch_quiesce - stop monitoring without grabbing any lock
+ *
+ * called from NMI interrupt handler to immediately stop monitoring
+ * cannot grab any lock, including perfmon related locks
+ */
+static void __kprobes pfm_intel_arch_quiesce(void)
+{
+	u16 i;
+	/*
+	 * quiesce PMU by clearing available registers that have
+	 * the start/stop capability
+	 */
+	for(i=0; i < pfm_pmu_conf->regs.max_pmc; i++) {
+		if (test_bit(i, cast_ulp(pfm_pmu_conf->regs.pmcs)))
+			wrmsrl(MSR_P6_EVNTSEL0+i, 0);
+	}
+}
+
+/**
+ * pfm_intel_arch_restore_pmcs - reload PMC registers
+ * @ctx: context to restore from
+ * @set: current event set
+ *
+ * optimized version of pfm_arch_restore_pmcs(). On architectural perfmon,
+ * we can afford to only restore the pmcs registers we use, because they
+ * are all independent from each other.
+ */
+static void pfm_intel_arch_restore_pmcs(struct pfm_context *ctx,
+					struct pfm_event_set *set)
+{
+	u64 *mask;
+	u16 i, num;
+
+	mask = set->used_pmcs;
+	num = set->nused_pmcs;
+	for (i = 0; num; i++) {
+		if (test_bit(i, cast_ulp(mask))) {
+			wrmsrl(pfm_pmu_conf->pmc_desc[i].hw_addr,set->pmcs[i]);
+			num--;
+		}
+	}
+}
 /*
  * Counters may have model-specific width. Yet the documentation says
  * that only the lower 32 bits can be written to due to the specification
@@ -371,7 +516,7 @@ static struct pfm_pmu_config pfm_intel_arch_pmu_conf={
 	.version = "1.0",
 	.flags = PFM_PMU_BUILTIN_FLAG,
 	.owner = THIS_MODULE,
-	.arch_info = &pfm_intel_arch_pmu_info
+	.pmu_info = &pfm_intel_arch_pmu_info
 };
 
 static int __init pfm_intel_arch_pmu_init_module(void)

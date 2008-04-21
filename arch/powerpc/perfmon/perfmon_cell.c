@@ -206,7 +206,7 @@ static int rtas_reset_signals(u32 cpu)
 	int rc;
 	struct pfm_cell_platform_pmu_info *info =
 		((struct pfm_arch_pmu_info *)
-		 (pfm_pmu_conf->arch_info))->platform_info;
+		 (pfm_pmu_conf->pmu_info))->platform_info;
 
 	memset(&signal, 0, sizeof(signal));
 	signal.cpu = RTAS_CPU(cpu);
@@ -234,7 +234,7 @@ static int rtas_activate_signals(struct cell_rtas_arg *signals,
 	int rc;
 	struct pfm_cell_platform_pmu_info *info =
 		((struct pfm_arch_pmu_info *)
-		 (pfm_pmu_conf->arch_info))->platform_info;
+		 (pfm_pmu_conf->pmu_info))->platform_info;
 
 	rc = info->rtas_call(info->rtas_token("ibm,cbe-perftools"),
 		       5, 1, NULL,
@@ -344,7 +344,7 @@ static int passthru(u32 cpu, u64 enable)
 	struct cbe_mic_tm_regs __iomem *mic_tm_regs;
 	struct pfm_cell_platform_pmu_info *info =
 		((struct pfm_arch_pmu_info *)
-		 (pfm_pmu_conf->arch_info))->platform_info;
+		 (pfm_pmu_conf->pmu_info))->platform_info;
 
 	ppe_priv_regs = info->get_cpu_ppe_priv_regs(cpu);
 	pmd_regs = info->get_cpu_pmd_regs(cpu);
@@ -657,7 +657,7 @@ static void pfm_cell_write_pmc(struct pfm_context *ctx,
 	int cpu = smp_processor_id();
 	struct pfm_cell_platform_pmu_info *info =
 		((struct pfm_arch_pmu_info *)
-		 (pfm_pmu_conf->arch_info))->platform_info;
+		 (pfm_pmu_conf->pmu_info))->platform_info;
 
 	if (cnum < NR_CTRS) {
 		info->write_pm07_control(cpu, cnum, value);
@@ -704,7 +704,7 @@ static void pfm_cell_write_pmd(struct pfm_context *ctx,
 	int cpu = smp_processor_id();
 	struct pfm_cell_platform_pmu_info *info =
 		((struct pfm_arch_pmu_info *)
-		 (pfm_pmu_conf->arch_info))->platform_info;
+		 (pfm_pmu_conf->pmu_info))->platform_info;
 
 	if (cnum < NR_CTRS) {
 		info->write_ctr(cpu, cnum, value);
@@ -734,7 +734,7 @@ static void pfm_cell_write_pmd_smp(struct pfm_context *ctx,
 	int target_cpu;
 	struct pfm_cell_remote_req req;
 
-	if (ctx->flags.cell_spe_follow && !ctx->flags.system) {
+	if (ctx->flags.not_dflt_ctxsw && !ctx->flags.system) {
 		target_cpu = get_target_cpu(ctx);
 		if (target_cpu == smp_processor_id()) {
 			pfm_cell_write_pmd(ctx, cnum, value);
@@ -765,7 +765,7 @@ static u64 pfm_cell_read_pmd(struct pfm_context *ctx,
 	int cpu = smp_processor_id();
 	struct pfm_cell_platform_pmu_info *info =
 		((struct pfm_arch_pmu_info *)
-		 (pfm_pmu_conf->arch_info))->platform_info;
+		 (pfm_pmu_conf->pmu_info))->platform_info;
 	u64 ret;
 
 	if (cnum < NR_CTRS) {
@@ -799,7 +799,7 @@ static u64 pfm_cell_read_pmd_smp(struct pfm_context *ctx, unsigned int cnum)
 	int target_cpu;
 	struct pfm_cell_remote_req req;
 
-	if (ctx->flags.cell_spe_follow && !ctx->flags.system) {
+	if (ctx->flags.not_dflt_ctxsw && !ctx->flags.system) {
 		target_cpu = get_target_cpu(ctx);
 		if (target_cpu == smp_processor_id())
 			return pfm_cell_read_pmd(ctx, cnum);
@@ -830,7 +830,7 @@ static void pfm_cell_enable_counters(struct pfm_context *ctx,
 {
 	struct pfm_cell_platform_pmu_info *info =
 		((struct pfm_arch_pmu_info *)
-		 (pfm_pmu_conf->arch_info))->platform_info;
+		 (pfm_pmu_conf->pmu_info))->platform_info;
 
 	if (set->priv_flags & PFM_SETFL_PRIV_WAIT_SUB_UNIT_UPDATE)
 		return ;
@@ -860,7 +860,7 @@ static void pfm_cell_enable_counters_smp(struct pfm_context *ctx,
 	int target_cpu;
 	struct pfm_cell_remote_req req;
 
-	if (ctx->flags.cell_spe_follow && !ctx->flags.system) {
+	if (ctx->flags.not_dflt_ctxsw && !ctx->flags.system) {
 		target_cpu = get_target_cpu(ctx);
 		if (target_cpu == smp_processor_id()) {
 			pfm_cell_enable_counters(ctx, set);
@@ -894,7 +894,7 @@ static void pfm_cell_disable_counters(struct pfm_context *ctx,
 {
 	struct pfm_cell_platform_pmu_info *info =
 		((struct pfm_arch_pmu_info *)
-		 (pfm_pmu_conf->arch_info))->platform_info;
+		 (pfm_pmu_conf->pmu_info))->platform_info;
 
 	info->disable_pm(smp_processor_id());
 	reset_signals(smp_processor_id());
@@ -922,7 +922,7 @@ static void pfm_cell_disable_counters_smp(struct pfm_context *ctx,
 	int target_cpu;
 	struct pfm_cell_remote_req req;
 
-	if (ctx->flags.cell_spe_follow && !ctx->flags.system) {
+	if (ctx->flags.not_dflt_ctxsw && !ctx->flags.system) {
 		target_cpu = get_target_cpu(ctx);
 		if (target_cpu == smp_processor_id()) {
 			pfm_cell_disable_counters(ctx, set);
@@ -1031,7 +1031,7 @@ static void pfm_cell_restore_pmcs(struct pfm_context *ctx,
 	u32 current_th_id;
 	struct pfm_cell_platform_pmu_info *info =
 		((struct pfm_arch_pmu_info *)
-		 (pfm_pmu_conf->arch_info))->platform_info;
+		 (pfm_pmu_conf->pmu_info))->platform_info;
 
 	if (set->priv_flags & PFM_SETFL_PRIV_WAIT_SUB_UNIT_UPDATE)
 		return ;
@@ -1099,7 +1099,7 @@ static void pfm_cell_restore_pmcs_smp(struct pfm_context *ctx,
 	int target_cpu;
 	struct pfm_cell_remote_req req;
 
-	if (ctx->flags.cell_spe_follow && !ctx->flags.system) {
+	if (ctx->flags.not_dflt_ctxsw && !ctx->flags.system) {
 		target_cpu = get_target_cpu(ctx);
 		if (target_cpu == smp_processor_id()) {
 			pfm_cell_restore_pmcs(ctx, set);
@@ -1134,7 +1134,7 @@ static void pfm_cell_restore_pmds(struct pfm_context *ctx,
 	int cpu = smp_processor_id();
 	struct pfm_cell_platform_pmu_info *info =
 		((struct pfm_arch_pmu_info *)
-		 (pfm_pmu_conf->arch_info))->platform_info;
+		 (pfm_pmu_conf->pmu_info))->platform_info;
 
 	/*
 	 * Write pm_control register value
@@ -1176,7 +1176,7 @@ static void pfm_cell_restore_pmds_smp(struct pfm_context *ctx,
 	int target_cpu;
 	struct pfm_cell_remote_req req;
 
-	if (ctx->flags.cell_spe_follow && !ctx->flags.system) {
+	if (ctx->flags.not_dflt_ctxsw && !ctx->flags.system) {
 		target_cpu = get_target_cpu(ctx);
 		if (target_cpu == smp_processor_id()) {
 			pfm_cell_restore_pmds(ctx, set);
@@ -1371,9 +1371,7 @@ static int pfm_update_pmX_event_subunit_field(struct pfm_context *ctx)
  *  The pmX_control PMCs which are used for PPU IU/XU event are marked with
  *  the thread id(PFM_COUNTER_CTRL_PMC_PPU_TH0/TH1).
  **/
-static int pfm_cell_load_context(struct pfm_context *ctx,
-				 struct pfm_event_set *set,
-				 struct task_struct *task)
+static int pfm_cell_load_context(struct pfm_context *ctx)
 {
 	int i;
 	u32 ppu_sig_grp[PFM_NUM_OF_GROUPS] = {SIG_GROUP_NONE, SIG_GROUP_NONE};
@@ -1385,8 +1383,8 @@ static int pfm_cell_load_context(struct pfm_context *ctx,
 	int cntr_width = 32;
 	int ret = 0;
 
-	if (pfm_cell_check_cntr_ovfl(ctx, set)) {
-		cntr_width = pfm_cell_get_cntr_width(ctx, set);
+	if (pfm_cell_check_cntr_ovfl(ctx, ctx->active_set)) {
+		cntr_width = pfm_cell_get_cntr_width(ctx, ctx->active_set);
 
 		/*
 		 * Counter overflow interrupt works with only 32bit counter,
@@ -1431,7 +1429,7 @@ static int pfm_cell_load_context(struct pfm_context *ctx,
 			}
 		}
 
-		if (ctx->flags.cell_spe_follow)
+		if (ctx->flags.not_dflt_ctxsw)
 			s->priv_flags |=
 				PFM_SETFL_PRIV_WAIT_SUB_UNIT_UPDATE;
 		else
@@ -1451,14 +1449,13 @@ static int pfm_cell_load_context(struct pfm_context *ctx,
  * For non-self-monitored contexts, the monitored thread will already have
  * been taken off the CPU and we don't need to do anything additional.
  **/
-static int pfm_cell_unload_context(struct pfm_context *ctx,
-				   struct task_struct *task)
+static void pfm_cell_unload_context(struct pfm_context *ctx)
 {
 	struct pfm_cell_platform_pmu_info *info =
 		((struct pfm_arch_pmu_info *)
-		 (pfm_pmu_conf->arch_info))->platform_info;
+		 (pfm_pmu_conf->pmu_info))->platform_info;
 
-	if (task == current || ctx->flags.system) {
+	if (ctx->task == current || ctx->flags.system) {
 		reset_signals(smp_processor_id());
 	}
 
@@ -1470,7 +1467,6 @@ static int pfm_cell_unload_context(struct pfm_context *ctx,
 	 */
 	info->disable_pm(smp_processor_id());
 	reset_signals(smp_processor_id());
-	return 0;
 }
 
 /**
@@ -1545,7 +1541,7 @@ static int pfm_cell_ctxswout_thread_smp(struct task_struct *task,
 	int target_cpu;
 	struct pfm_cell_remote_req req;
 
-	if (ctx->flags.cell_spe_follow && !ctx->flags.system) {
+	if (ctx->flags.not_dflt_ctxsw && !ctx->flags.system) {
 		target_cpu = get_target_cpu(ctx);
 		if (target_cpu == smp_processor_id())
 			return pfm_cell_ctxswout_thread(task, ctx, set);
@@ -1583,7 +1579,7 @@ static void pfm_cell_get_ovfl_pmds(struct pfm_context *ctx,
 	int i;
 	struct pfm_cell_platform_pmu_info *info =
 		((struct pfm_arch_pmu_info *)
-		 (pfm_pmu_conf->arch_info))->platform_info;
+		 (pfm_pmu_conf->pmu_info))->platform_info;
 
 	if (!ctx_arch->last_read_updated)
 		/* This routine was not called via the interrupt handler.
@@ -1637,7 +1633,7 @@ static void pfm_cell_get_ovfl_pmds_smp(struct pfm_context *ctx,
 	int target_cpu;
 	struct pfm_cell_remote_req req;
 
-	if (ctx->flags.cell_spe_follow && !ctx->flags.system) {
+	if (ctx->flags.not_dflt_ctxsw && !ctx->flags.system) {
 		target_cpu = get_target_cpu(ctx);
 		if (target_cpu == smp_processor_id()) {
 			pfm_cell_get_ovfl_pmds(ctx, set);
@@ -1727,12 +1723,12 @@ static int pfm_spe_ctxsw_thread(struct notifier_block *block,
 				spe_id, spu->node);
 			pfm_prepare_ctxswin_thread(p->pfm_context, spe_id);
 			ctx_arch->arg = arg;
-			pfm_ctxsw(NULL, p);
+			pfm_ctxsw_in(NULL, p);
 
 		} else {
 			PFM_DBG("=== PFM SPE CTXSWOUT === 0x%lx node:%d",
 				spe_id, spu->node);
-			pfm_ctxsw(p, NULL);
+			pfm_ctxsw_out(p, NULL);
 			ctx_arch->arg = NULL;
 		}
 
@@ -1750,9 +1746,9 @@ static int pfm_cell_create_context(struct pfm_context *ctx, u32 ctx_flags)
 	struct pfm_arch_context *ctx_arch = pfm_ctx_arch(ctx);
 	int ret = 0;
 
-	ctx->flags.cell_spe_follow =
+	ctx->flags.not_dflt_ctxsw =
 		(ctx_flags & PFM_FL_CELL_SPE_FOLLOW) ? 1:0;
-  	if (ctx->flags.cell_spe_follow) {
+  	if (ctx->flags.not_dflt_ctxsw) {
 
 		if (ctx->flags.system)
 			return -EINVAL;
@@ -1780,7 +1776,7 @@ static void pfm_cell_free_context(struct pfm_context *ctx)
 	struct pfm_arch_context *ctx_arch = pfm_ctx_arch(ctx);
 	int ret;
 
-	if (ctx->flags.cell_spe_follow) {
+	if (ctx->flags.not_dflt_ctxsw) {
 		if (ctx->flags.system)
 			return;
 
@@ -1833,6 +1829,28 @@ void pfm_cell_release_pmu(void)
 }
 
 /**
+ * pfm_cell_can_access_pmu
+ *
+ * In the per-thread & spe-follow mode,
+ * if the target spu program is running, the pmc/pmd register
+ * access is allowed.
+ **/
+int pfm_cell_can_access_pmu(struct pfm_context *ctx, int can_access)
+{
+	struct pfm_arch_context *ctx_arch = pfm_ctx_arch(ctx);
+
+	if (!ctx->flags.system && ctx->flags.not_dflt_ctxsw)
+		if (ctx_arch->arg)
+			/* the target spu program is running */
+			return 1;
+		else
+			/* the traget spu program is NOT running */
+			return 0;
+	else
+		return can_access;
+}
+
+/**
  * handle_trace_buffer_interrupts
  *
  * This routine is for processing just the interval timer and trace buffer
@@ -1862,7 +1880,7 @@ static void pfm_cell_irq_handler(struct pt_regs *regs, struct pfm_context *ctx)
 	int cpu = smp_processor_id();
 	struct pfm_cell_platform_pmu_info *info =
 		((struct pfm_arch_pmu_info *)
-		 (pfm_pmu_conf->arch_info))->platform_info;
+		 (pfm_pmu_conf->pmu_info))->platform_info;
 
 	/* Need to disable and reenable the performance counters to get the
 	 * desired behavior from the hardware. This is specific to the Cell
@@ -1966,6 +1984,7 @@ static struct pfm_cell_platform_pmu_info native_platform_pmu_info = {
 
 static struct pfm_arch_pmu_info pfm_cell_pmu_info = {
 	.pmu_style        = PFM_POWERPC_PMU_CELL,
+	.can_access_pmu   = pfm_cell_can_access_pmu,
 	.acquire_pmu      = pfm_cell_acquire_pmu,
 	.release_pmu      = pfm_cell_release_pmu,
 	.create_context   = pfm_cell_create_context,
@@ -1993,7 +2012,7 @@ static struct pfm_pmu_config pfm_cell_pmu_conf = {
 	.num_pmc_entries = PFM_PM_NUM_PMCS,
 	.num_pmd_entries = PFM_PM_NUM_PMDS,
 	.probe_pmu  = pfm_cell_probe_pmu,
-	.arch_info = &pfm_cell_pmu_info,
+	.pmu_info = &pfm_cell_pmu_info,
 	.flags = PFM_PMU_BUILTIN_FLAG,
 	.owner = THIS_MODULE,
 };

@@ -130,7 +130,7 @@ static struct pfm_pmu_config pfm_ia64gen_pmu_conf={
 	.version = "1.0",
 	.flags = PFM_PMU_BUILTIN_FLAG,
 	.owner = THIS_MODULE,
-	.arch_info = & pfm_ia64gen_pmu_info
+	.pmu_info = & pfm_ia64gen_pmu_info
 	/* no read/write checkers */
 };
 

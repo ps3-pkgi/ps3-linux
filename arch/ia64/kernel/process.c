@@ -706,7 +706,7 @@ exit_thread (void)
 	ia64_drop_fpu(current);
 
         /* if needed, stop monitoring and flush state to perfmon context */
-	pfm_exit_thread(current);
+	pfm_exit_thread();
 
 	/* free debug register resources */
 	pfm_release_dbregs(current);

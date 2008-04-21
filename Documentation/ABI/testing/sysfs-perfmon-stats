@@ -10,15 +10,25 @@ Description:	exports internal perfmon2 statistics to user. Mostly used for debug
 		There is one subdir per online CPU. Each subdir contains the following
 		entries:
 
-	/sys/devices/system/cpu/cpuXX/perfmon/ctxsw_count (read-only):
+	/sys/devices/system/cpu/cpuXX/perfmon/ctxswin_count (read-only):
 	
-		Number of PMU context switches (switch-out, switch-in or both).
+		Number of PMU context switch in.
 
-	/sys/devices/system/cpu/cpuXX/perfmon/ctxsw_ns (read-only):
+	/sys/devices/system/cpu/cpuXX/perfmon/ctxswin_ns (read-only):
 
-		Number of nanoseconds spent in the PMU context switch routine.
-		Dividing this number by the value of ctxsw_count, yields average
-		cost of the PMU context switch.
+		Number of nanoseconds spent in the PMU context switch in routine.
+		Dividing this number by the value of ctxswin_count, yields average
+		cost of the PMU context switch in.
+
+	/sys/devices/system/cpu/cpuXX/perfmon/ctxswout_count (read-only):
+
+		Number of PMU context switch out.
+
+	/sys/devices/system/cpu/cpuXX/perfmon/ctxswout_ns (read-only):
+
+		Number of nanoseconds spent in the PMU context switch in routine.
+		Dividing this number by the value of ctxswout_count, yields average
+		cost of the PMU context switch out.
 
 	/sys/devices/system/cpu/cpuXX/perfmon/fmt_handler_calls (read-only):
 

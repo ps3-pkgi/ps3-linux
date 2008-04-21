@@ -77,7 +77,7 @@ struct pfm_event_set {
 	u64 used_pmds[PFM_PMD_BV];	/* used PMDs */
 	u64 povfl_pmds[PFM_PMD_BV];	/* pending overflowed PMDs */
 	u64 ovfl_pmds[PFM_PMD_BV];	/* last overflowed PMDs */
-	u64 reset_pmds[PFM_PMD_BV];	/* union of PMDs to reset */
+	u64 reset_pmds[PFM_PMD_BV];	/* PMDs to reset after overflow */
 	u64 ovfl_notify[PFM_PMD_BV];	/* notify on overflow */
 	u64 used_pmcs[PFM_PMC_BV];	/* used PMCs */
 	u64 pmcs[PFM_MAX_PMCS];		/* PMC values */
@@ -118,7 +118,7 @@ struct pfm_context_flags {
 	unsigned int can_restart:8;	/* allowed to issue a PFM_RESTART */
 	unsigned int reset_count:8;	/* number of pending resets */
 	unsigned int is_self:1;		/* per-thread and self-montoring */
-	unsigned int cell_spe_follow:1;	/* cell spe ctx follow */
+	unsigned int not_dflt_ctxsw:1;	/* TIF_PERFMON_CTXSW is not set */
 	unsigned int reserved:4;	/* for future use */
 };
 
@@ -197,7 +197,7 @@ struct pfm_context {
 	 * pfm_overflow_handler() in pfm_context
 	 */
 	struct pfm_ovfl_arg 	ovfl_arg;
-	u64			ovfl_ovfl_notify[PFM_PMD_BV];
+	u64			tmp_ovfl_notify[PFM_PMD_BV];
 };
 
 /*
@@ -212,6 +212,19 @@ struct pfm_context {
 #define PFM_CMD_STOPPED		0x01	/* command needs thread stopped */
 #define PFM_CMD_UNLOADED	0x02	/* command needs ctx unloaded */
 #define PFM_CMD_UNLOAD		0x04	/* command is unload */
+
+/*
+ * context lazy save/restore activation count
+ */
+#define PFM_INVALID_ACTIVATION	((u64)~0)
+
+/*
+ * ovfl_ctrl bitmask (used by interrupt handler)
+ */
+#define PFM_OVFL_CTRL_NOTIFY	0x1	/* notify user */
+#define PFM_OVFL_CTRL_RESET	0x2	/* reset overflowed pmds */
+#define PFM_OVFL_CTRL_MASK	0x4	/* mask monitoring */
+#define PFM_OVFL_CTRL_SWITCH	0x8	/* switch sets */
 
 DECLARE_PER_CPU(struct task_struct *, pmu_owner);
 DECLARE_PER_CPU(struct pfm_context *, pmu_ctx);
@@ -297,23 +310,20 @@ int __pfm_write_pmcs(struct pfm_context *ctx, struct pfarg_pmc *req, int count);
 int __pfm_write_pmds(struct pfm_context *ctx, struct pfarg_pmd *req, int count,
 		     int compat);
 int __pfm_read_pmds(struct pfm_context *ctx, struct pfarg_pmd *req, int count);
+
 int __pfm_load_context(struct pfm_context *ctx, struct pfarg_load *req,
 		       struct task_struct *task);
 int __pfm_unload_context(struct pfm_context *ctx, int *can_release);
+
 int __pfm_stop(struct pfm_context *ctx, int *release_info);
 int  __pfm_restart(struct pfm_context *ctx, int *unblock);
 int __pfm_start(struct pfm_context *ctx, struct pfarg_start *start);
+
 int __pfm_delete_evtsets(struct pfm_context *ctx, void *arg, int count);
 int __pfm_getinfo_evtsets(struct pfm_context *ctx, struct pfarg_setinfo *req,
 			  int count);
 int __pfm_create_evtsets(struct pfm_context *ctx, struct pfarg_setdesc *req,
 			int count);
-
-int __pfm_create_context(struct pfarg_ctx *req,
-			 struct pfm_smpl_fmt *fmt,
-			 void *fmt_arg,
-			 int mode,
-			 struct pfm_context **new_ctx);
 
 int pfm_check_task_state(struct pfm_context *ctx, int check_mask,
 			 unsigned long *flags);
@@ -321,10 +331,14 @@ int pfm_check_task_state(struct pfm_context *ctx, int check_mask,
 struct pfm_event_set *pfm_find_set(struct pfm_context *ctx, u16 set_id,
 				   int alloc);
 
-struct pfm_context *pfm_get_ctx(int fd);
+int __pfm_create_context(struct pfarg_ctx *req,
+			 struct pfm_smpl_fmt *fmt,
+			 void *fmt_arg,
+			 int mode,
+			 struct pfm_context **new_ctx);
+void pfm_free_context(struct pfm_context *ctx);
+int pfm_init_ctx(void);
 
-void pfm_context_free(struct pfm_context *ctx);
-struct pfm_context *pfm_context_alloc(void);
 int pfm_pmu_conf_get(int autoload);
 void pfm_pmu_conf_put(void);
 
@@ -336,9 +350,12 @@ void pfm_session_release(int is_system, u32 cpu);
 int pfm_session_allcpus_acquire(void);
 void pfm_session_allcpus_release(void);
 
-int pfm_smpl_buffer_alloc(struct pfm_context *ctx, size_t rsize);
+int pfm_smpl_buf_alloc(struct pfm_context *ctx, size_t rsize);
+void pfm_smpl_buf_free(struct pfm_context *ctx);
 int pfm_smpl_buf_space_acquire(struct pfm_context *ctx, size_t size);
 void pfm_smpl_buf_space_release(struct pfm_context *ctx, size_t size);
+int pfm_smpl_buf_load_context(struct pfm_context *ctx);
+void pfm_smpl_buf_unload_context(struct pfm_context *ctx);
 
 struct pfm_smpl_fmt *pfm_smpl_fmt_get(char *name);
 void pfm_smpl_fmt_put(struct pfm_smpl_fmt *fmt);
@@ -351,17 +368,16 @@ int pfm_debugfs_add_cpu(int mycpu);
 void pfm_debugfs_del_cpu(int mycpu);
 
 void pfm_interrupt_handler(unsigned long iip, struct pt_regs *regs);
-void pfm_save_prev_context(struct pfm_context *ctxp);
 
 void pfm_reset_pmds(struct pfm_context *ctx, struct pfm_event_set *set,
 		    int num_pmds,
 		    int reset_mode);
 
-int pfm_prepare_sets(struct pfm_context *ctx, struct pfm_event_set *act_set);
+struct pfm_event_set *pfm_prepare_sets(struct pfm_context *ctx, u16 load_set);
 int pfm_init_sets(void);
 
 void pfm_free_sets(struct pfm_context *ctx);
-void pfm_init_evtset(struct pfm_event_set *set);
+int pfm_create_initial_set(struct pfm_context *ctx);
 void pfm_switch_sets_from_intr(struct pfm_context *ctx);
 enum hrtimer_restart pfm_handle_switch_timeout(struct hrtimer *t);
 
@@ -371,18 +387,69 @@ enum hrtimer_restart pfm_switch_sets(struct pfm_context *ctx,
 		    int no_restart);
 
 void pfm_save_pmds(struct pfm_context *ctx, struct pfm_event_set *set);
+/**
+ * pfm_save_prev_ctx - check if previous context exists and save state
+ *
+ * called from pfm_load_ctx_thread() and __pfm_ctxsin_thread() to
+ * check if previous context exists. If so saved its PMU state. This is used
+ * only for UP kernels.
+ *
+ * PMU ownership is not cleared because the function is always called while
+ * trying to install a new owner.
+ */
+static inline void pfm_check_save_prev_ctx(void)
+{
+#ifdef CONFIG_SMP
+	struct pfm_event_set *set;
+	struct pfm_context *ctxp;
+
+	ctxp = __get_cpu_var(pmu_ctx);
+	if (!ctxp)
+		return;
+	/*
+	 * in UP per-thread, due to lazy save
+	 * there could be a context from another
+	 * task. We need to push it first before
+	 * installing our new state
+	 */
+	set = ctxp->active_set;
+	pfm_save_pmds(ctxp, set);
+	/*
+	 * do not clear ownership because we rewrite
+	 * right away
+	 */
+#endif
+}
+
 
 int pfm_init_fs(void);
 
 int pfm_init_hotplug(void);
 void pfm_cpu_disable(void);
 
+void pfm_mask_monitoring(struct pfm_context *ctx, struct pfm_event_set *set);
+void pfm_resume_after_ovfl(struct pfm_context *ctx);
+void pfm_reset_pmds(struct pfm_context *ctx,
+		    struct pfm_event_set *set,
+		    int num_pmds,
+		    int reset_mode);
+int pfm_setup_smpl_fmt(struct pfm_context *ctx, u32 ctx_flags, void *fmt_arg,
+		       struct file *filp);
 /*
  * Allow arches to override the implementation for pfm_spin_lock_irqsave
  * and pfm_spin_unlock_irqrestore.
  */
 #define pfm_spin_lock_irqsave(l, f) spin_lock_irqsave(l, f)
 #define pfm_spin_unlock_irqrestore(l, f) spin_unlock_irqrestore(l, f)
+
+/*
+ * Allow arches to override implementation of spin_lock() and
+ * spin_unlock(). This may be necessary if interrupt masking
+ * conditions are different. The f argument is an unsigned long
+ * where typically flags can be saved.
+ */
+#define pfm_spin_lock(l, f) spin_lock(l)
+#define pfm_spin_unlock(l, f) spin_unlock(l)
 
 #include <linux/perfmon_pmu.h>
 #include <linux/perfmon_fmt.h>
@@ -399,16 +466,17 @@ extern const struct file_operations pfm_file_ops;
 #define PFM_NORMAL      0
 #define PFM_COMPAT      1
 
-void __pfm_exit_thread(struct task_struct *task);
+void __pfm_exit_thread(void);
 void __pfm_copy_thread(struct task_struct *task);
-void pfm_ctxsw(struct task_struct *prev, struct task_struct *next);
+void pfm_ctxsw_in(struct task_struct *prev, struct task_struct *next);
+void pfm_ctxsw_out(struct task_struct *prev, struct task_struct *next);
 void pfm_handle_work(struct pt_regs *regs);
 void __pfm_init_percpu (void *dummy);
 
-static inline void pfm_exit_thread(struct task_struct *task)
+static inline void pfm_exit_thread(void)
 {
-	if (task->pfm_context)
-		__pfm_exit_thread(task);
+	if (current->pfm_context)
+		__pfm_exit_thread();
 }
 
 static inline void pfm_copy_thread(struct task_struct *task)
@@ -431,15 +499,12 @@ static inline void pfm_init_percpu(void)
  * pfm statistics are available via debugfs
  * and perfmon subdir.
  *
- * When adding new stats, make sure you also
+ * When adding/removing new stats, make sure you also
  * update the name table in perfmon_debugfs.c
  */
 enum pfm_stats_names {
 	PFM_ST_ovfl_intr_all_count = 0,
 	PFM_ST_ovfl_intr_ns,
-	PFM_ST_ovfl_intr_p1_ns,
-	PFM_ST_ovfl_intr_p2_ns,
-	PFM_ST_ovfl_intr_p3_ns,
 	PFM_ST_ovfl_intr_spurious_count,
 	PFM_ST_ovfl_intr_replay_count,
 	PFM_ST_ovfl_intr_regular_count,
@@ -452,10 +517,12 @@ enum pfm_stats_names {
 	PFM_ST_set_switch_count,
 	PFM_ST_set_switch_ns,
 	PFM_ST_set_switch_exp,
-	PFM_ST_ctxsw_count,
-	PFM_ST_ctxsw_ns,
+	PFM_ST_ctxswin_count,
+	PFM_ST_ctxswin_ns,
 	PFM_ST_handle_timeout_count,
 	PFM_ST_ovfl_intr_nmi_count,
+	PFM_ST_ctxswout_count,
+	PFM_ST_ctxswout_ns,
 	PFM_ST_LAST	/* last entry marked */
 };
 #define PFM_NUM_STATS PFM_ST_LAST
@@ -515,6 +582,14 @@ static inline void pfm_write_pmd(struct pfm_context *ctx, unsigned int cnum, u64
 	pfm_arch_write_pmd(ctx, cnum, value);
 }
 
+static inline void pfm_post_work(struct task_struct *task,
+				 struct pfm_context *ctx, int type)
+{
+	ctx->flags.work_type = type;
+	set_tsk_thread_flag(task, TIF_PERFMON_WORK);
+	pfm_arch_arm_handle_work(task);
+}
+
 /*
  * max vector argument elements for local storage (no kmalloc/kfree)
  * The PFM_ARCH_PM*_ARG should be defined in perfmon_kern.h.
@@ -544,7 +619,8 @@ static inline void pfm_write_pmd(struct pfm_context *ctx, unsigned int cnum, u64
 #define pfm_exit_thread(_t)  		do { } while (0)
 #define pfm_handle_work(_t)    		do { } while (0)
 #define pfm_copy_thread(_t)		do { } while (0)
-#define pfm_ctxsw(_p, _t)     		do { } while (0)
+#define pfm_ctxsw_in(_p)     		do { } while (0)
+#define pfm_ctxsw_out(_p)     		do { } while (0)
 #define	pfm_release_allcpus()		do { } while (0)
 #define	pfm_reserve_allcpus()		(0)
 /*

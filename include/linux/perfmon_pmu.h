@@ -57,6 +57,14 @@ struct pfm_regmap_desc {
 	  .hw_addr = h	      \
 	}
 
+#define PMD_DR(t,d, h, r)     \
+	{ .type = t,          \
+	  .desc = d,          \
+	  .rsvd_msk = r,      \
+	  .no_emul64_msk = 0, \
+	  .hw_addr = h	      \
+	}
+
 #define PMX_NA \
 	{ .type = PFM_REG_NA }
 
@@ -141,7 +149,7 @@ struct pfm_pmu_config {
 	u16			num_pmc_entries;/* number of entries in pmc_desc */
 	u16			num_pmd_entries;/* number of entries in pmd_desc */
 
-	void			*arch_info;	/* arch-specific information */
+	void			*pmu_info;	/* model-specific information */
 	u32			flags;		/* set of flags */
 
 	struct module		*owner;		/* pointer to module struct */
@@ -156,6 +164,11 @@ struct pfm_pmu_config {
 	struct kobject		kobj;		/* for internal use only */
 };
 #define to_pmu(n) container_of(n, struct pfm_pmu_config, kobj)
+
+static inline void *pfm_pmu_info(void)
+{
+	return pfm_pmu_conf->pmu_info;
+}
 
 /*
  * pfm_pmu_config flags

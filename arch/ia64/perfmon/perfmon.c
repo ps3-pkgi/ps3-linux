@@ -150,13 +150,14 @@ int pfm_arch_context_create(struct pfm_context *ctx, u32 ctx_flags)
  * 	non-zero : did not save PMDs (as part of stopping the PMU)
  * 	       0 : saved PMDs (no need to save them in caller)
  */
-int pfm_arch_ctxswout_thread(struct task_struct *task, struct pfm_context *ctx,
-		       struct pfm_event_set *set)
+int pfm_arch_ctxswout_thread(struct task_struct *task, struct pfm_context *ctx)
 {
 	struct pfm_arch_context *ctx_arch;
+	struct pfm_event_set *set;
 	u64 psr, tmp;
 
 	ctx_arch = pfm_ctx_arch(ctx);
+	set = ctx->active_set;
 
 	/*
 	 * save current PSR: needed because we modify it
@@ -211,8 +212,7 @@ int pfm_arch_ctxswout_thread(struct task_struct *task, struct pfm_context *ctx,
  *
  * must reactivate monitoring
  */
-void pfm_arch_ctxswin_thread(struct task_struct *task, struct pfm_context *ctx,
-		      struct pfm_event_set *set)
+void pfm_arch_ctxswin_thread(struct task_struct *task, struct pfm_context *ctx)
 {
 	struct pfm_arch_context *ctx_arch;
 
@@ -281,8 +281,7 @@ void pfm_arch_release_session(struct pfm_context *ctx, u32 cpu)
  *
  * For system-wide task is NULL
  */
-int pfm_arch_load_context(struct pfm_context *ctx, struct pfm_event_set *set,
-			  struct task_struct *task)
+int pfm_arch_load_context(struct pfm_context *ctx)
 {
 	struct pfm_arch_context *ctx_arch;
 	struct pt_regs *regs;
@@ -307,13 +306,14 @@ int pfm_arch_load_context(struct pfm_context *ctx, struct pfm_event_set *set,
 				ret = -EBUSY;
 			} else {
 				pfm_arch_sessions.pfs_sys_use_dbr++;
-				PFM_DBG("pfs_sys_use_dbr=%u", pfm_arch_sessions.pfs_sys_use_dbr);
+				PFM_DBG("pfs_sys_use_dbr=%u",
+					pfm_arch_sessions.pfs_sys_use_dbr);
 			}
 			spin_unlock(&pfm_arch_sessions_lock);
 
-		} else if (task->thread.flags & IA64_THREAD_DBG_VALID) {
+		} else if (ctx->task->thread.flags & IA64_THREAD_DBG_VALID) {
 			PFM_DBG("load_pid [%d] thread is debugged, cannot "
-				  "use range restrictions", task->pid);
+				  "use range restrictions", ctx->task->pid);
 			ret = -EBUSY;
 		}
 		if (ret)
@@ -333,12 +333,12 @@ int pfm_arch_load_context(struct pfm_context *ctx, struct pfm_event_set *set,
 		return 0;
 	}
 
-	regs = task_pt_regs(task);
+	regs = task_pt_regs(ctx->task);
 
 	/*
 	 * self-monitoring systematically allows user level control
 	 */
-	if (task != current) {
+	if (ctx->task != current) {
 		/*
 		 * when not current, task is stopped, so this is safe
 		 */
@@ -358,7 +358,7 @@ int pfm_arch_load_context(struct pfm_context *ctx, struct pfm_event_set *set,
 	 */
 	if (ctx_arch->flags.insecure) {
 		ia64_psr(regs)->sp = 0;
-		PFM_DBG("clearing psr.sp for [%d]", task->pid);
+		PFM_DBG("clearing psr.sp for [%d]", ctx->task->pid);
 	}
 	return 0;
 }
@@ -401,7 +401,7 @@ int pfm_arch_setfl_sane(struct pfm_context *ctx, u32 flags)
  *
  * called for both system-wide and per-thread. task is NULL for ssytem-wide
  */
-int pfm_arch_unload_context(struct pfm_context *ctx, struct task_struct *task)
+void pfm_arch_unload_context(struct pfm_context *ctx)
 {
 	struct pfm_arch_context *ctx_arch;
 	struct pt_regs *regs;
@@ -420,17 +420,15 @@ int pfm_arch_unload_context(struct pfm_context *ctx, struct task_struct *task)
 			PFM_DBG("sys_use_dbr=%u", pfm_arch_sessions.pfs_sys_use_dbr);
 			spin_unlock(&pfm_arch_sessions_lock);
 		}
-		return 0;
+	} else {
+		regs = task_pt_regs(ctx->task);
+
+		/*
+		 * cancel user level control for per-task context
+		 */
+		ia64_psr(regs)->sp = 1;
+		PFM_DBG("setting psr.sp for [%d]", ctx->task->pid);
 	}
-
-	regs = task_pt_regs(task);
-
-	/*
-	 * cancel user level control for per-task context
-	 */
-	ia64_psr(regs)->sp = 1;
-	PFM_DBG("setting psr.sp for [%d]", task->pid);
-	return 0;
 }
 
 /*
@@ -440,10 +438,11 @@ int pfm_arch_unload_context(struct pfm_context *ctx, struct task_struct *task)
  */
 void pfm_arch_mask_monitoring(struct pfm_context *ctx, struct pfm_event_set *set)
 {
-	struct pfm_arch_pmu_info *arch_info = pfm_pmu_conf->arch_info;
+	struct pfm_arch_pmu_info *arch_info;
 	unsigned long mask;
 	unsigned int i;
 
+	arch_info = pfm_pmu_info();
 	/*
 	 * as an optimization we look at the first 64 PMC
 	 * registers only starting at PMC4.
@@ -507,11 +506,12 @@ void pfm_arch_restore_pmds(struct pfm_context *ctx, struct pfm_event_set *set)
  */
 void pfm_arch_restore_pmcs(struct pfm_context *ctx, struct pfm_event_set *set)
 {
-	struct pfm_arch_pmu_info *arch_info = pfm_pmu_conf->arch_info;
+	struct pfm_arch_pmu_info *arch_info;
 	u64 mask2 = 0, val, plm;
 	unsigned long impl_mask, mask_pmcs;
 	unsigned int i;
 
+	arch_info = pfm_pmu_info();
 	/*
 	 * as an optimization we only look at the first 64
 	 * PMC registers. In fact, we should never scan the
@@ -597,8 +597,7 @@ void pfm_arch_unmask_monitoring(struct pfm_context *ctx, struct pfm_event_set *s
  *
  * must disable active monitoring. ctx cannot be NULL
  */
-void pfm_arch_stop(struct task_struct *task, struct pfm_context *ctx,
-		   struct pfm_event_set *set)
+void pfm_arch_stop(struct task_struct *task, struct pfm_context *ctx)
 {
 	struct pfm_arch_context *ctx_arch;
 	struct pt_regs *regs;
@@ -635,7 +634,7 @@ void pfm_arch_stop(struct task_struct *task, struct pfm_context *ctx,
 		pfm_clear_psr_pp();
 		ia64_srlz_d();
 
-		if (set->flags & PFM_ITA_SETFL_IDLE_EXCL) {
+		if (ctx->active_set->flags & PFM_ITA_SETFL_IDLE_EXCL) {
 			PFM_DBG("disabling idle exclude");
 			__get_cpu_var(pfm_syst_info) &= ~PFM_ITA_CPUINFO_IDLE_EXCL;
 		}
@@ -657,8 +656,7 @@ void pfm_arch_stop(struct task_struct *task, struct pfm_context *ctx,
  *
  * must enable active monitoring.
  */
-void pfm_arch_start(struct task_struct *task, struct pfm_context *ctx,
-		    struct pfm_event_set *set)
+void pfm_arch_start(struct task_struct *task, struct pfm_context *ctx)
 {
 	struct pfm_arch_context *ctx_arch;
 	struct pt_regs *regs;
@@ -667,7 +665,7 @@ void pfm_arch_start(struct task_struct *task, struct pfm_context *ctx,
 
 	ctx_arch = pfm_ctx_arch(ctx);
 	regs = task_pt_regs(task);
-	flags = set->flags;
+	flags = ctx->active_set->flags;
 
 	/*
 	 * per-thread mode
@@ -720,7 +718,7 @@ void pfm_arch_start(struct task_struct *task, struct pfm_context *ctx,
 	}
 	ia64_srlz_d();
 
-	if (set->flags & PFM_ITA_SETFL_IDLE_EXCL) {
+	if (ctx->active_set->flags & PFM_ITA_SETFL_IDLE_EXCL) {
 		PFM_DBG("enable idle exclude");
 		__get_cpu_var(pfm_syst_info) |= PFM_ITA_CPUINFO_IDLE_EXCL;
 	}

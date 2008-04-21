@@ -26,8 +26,6 @@
 #ifndef _ASM_X86_PERFMON_KERN_H_
 #define _ASM_X86_PERFMON_KERN_H_
 
-#ifdef __KERNEL__
-
 #ifdef CONFIG_PERFMON
 
 #ifdef CONFIG_4KSTACKS
@@ -38,149 +36,74 @@
 #define PFM_ARCH_PMC_STK_ARG	4 /* about 200 bytes of stack space */
 #endif
 
-/*
- * For P4:
- * - bits 31 - 63 reserved
- * - T1_OS and T1_USR bits are reserved - set depending on logical proc
- *      user mode application should use T0_OS and T0_USR to indicate
- * RSVD: reserved bits must be 1
- */
-#define PFM_ESCR_RSVD  ~0x000000007ffffffcULL
-
-/*
- * bitmask for reg_type
- */
-#define PFM_REGT_NA		0x0000	/* not available */
-#define PFM_REGT_EN		0x0001	/* has enable bit (cleared on ctxsw) */
-#define PFM_REGT_ESCR		0x0002	/* P4: ESCR */
-#define PFM_REGT_CCCR		0x0004	/* P4: CCCR */
-#define PFM_REGT_PEBS		0x0010	/* PEBS related */
-#define PFM_REGT_NOHT		0x0020	/* unavailable with HT */
-#define PFM_REGT_CTR		0x0040	/* counter */
-#define PFM_REGT_OTH		0x0080	/* other type of register */
-#define PFM_REGT_IBS		0x0100	/* IBS register set */
-#define PFM_REGT_IBS_EXT	0x0200	/* IBS extended register set */
-
-/*
- * This design and the partitioning of resources for SMT (hyper threads)
- * is very static and limited due to limitations in the number of ESCRs
- * and CCCRs per group.
- */
-#define MAX_SMT_ID 1
-
-/*
- * For extended register information in addition to address that is used
- * at runtime to figure out the mapping of reg addresses to logical procs
- * and association of registers to hardware specific features
- */
-struct pfm_arch_ext_reg {
-	/*
-	 * one each for the logical CPUs.  Index 0 corresponds to T0 and
-	 * index 1 corresponds to T1.  Index 1 can be zero if no T1
-	 * complement reg exists.
-	 */
-	unsigned long addrs[MAX_SMT_ID+1];
-	unsigned int ctr;	/* for CCCR/PERFEVTSEL, associated counter */
-	unsigned int reg_type;
-};
-
-typedef int (*pfm_check_session_t)(struct pfm_context *ctx);
-
 struct pfm_arch_pmu_info {
-	struct pfm_arch_ext_reg pmc_addrs[PFM_MAX_PMCS];
-	struct pfm_arch_ext_reg pmd_addrs[PFM_MAX_PMDS];
-	u64 enable_mask[PFM_PMC_BV]; /* PMC registers with enable bit */
-
-	u16 max_ena;		/* highest enable bit + 1 */
-	u16 flags;		/* PMU feature flags */
-	u16 pebs_ctr_idx;	/* index of PEBS counter for overflow */
-	u16 reserved;		/* for future use */
+	u32 flags;		/* PMU feature flags */
+	/*
+	 * mandatory model-specific callbacks
+	 */
+	int  (*stop_save)(struct pfm_context *ctx, struct pfm_event_set *set);
+	int  (*has_ovfls)(struct pfm_context *ctx);
+	void (*quiesce)(void);
 
 	/*
-	 * optional callbacks invoked by pfm_arch_*load_context()
+	 * optional model-specific callbacks
 	 */
+	int (*create_context)(struct pfm_context *ctx, u32 ctx_flags);
+	void (*free_context)(struct pfm_context *ctx);
 	int (*load_context)(struct pfm_context *ctx);
-	int (*unload_context)(struct pfm_context *ctx);
-
-	u16 ibsfetchctl_pmc;	/* AMD: index of IBSFETCHCTL PMC register */
-	u16 ibsfetchctl_pmd;	/* AMD: index of IBSFETCHCTL PMD register */
-	u16 ibsopctl_pmc;	/* AMD: index of IBSOPCTL PMC register */
-	u16 ibsopctl_pmd;	/* AMD: index of IBSOPCTL PMD register */
-	u8  ibs_eilvt_off;	/* AMD: extended interrupt LVT offset */
-	u8  pmu_style;		/* type of PMU: P4, P6, CORE, AMD64 */
+	void (*unload_context)(struct pfm_context *ctx);
+	void (*write_pmc)(struct pfm_context *ctx,unsigned int cnum,u64 value);
+	void (*write_pmd)(struct pfm_context *ctx,unsigned int cnum,u64 value);
+	u64  (*read_pmd)(struct pfm_context *ctx, unsigned int cnum);
+	u64  (*read_pmc)(struct pfm_context *ctx, unsigned int cnum);
+	void (*nmi_copy_state)(struct pfm_context *ctx);
+	void (*start)(struct pfm_context *ctx);
+	void (*restore_pmcs)(struct pfm_context *ctx,
+			     struct pfm_event_set *set);
+	void (*restore_pmds)(struct pfm_context *ctx,
+			     struct pfm_event_set *set);
 };
-
-/*
- * X86 PMU style
- */
-#define PFM_X86_PMU_P4		1 /* Intel P4/Xeon/EM64T processor PMU */
-#define PFM_X86_PMU_P6		2 /* Intel P6/Pentium M */
-#define PFM_X86_PMU_CORE	3 /* Intel Core PMU */
-#define PFM_X86_PMU_AMD64	4 /* AMD64 PMU (K8, family 10h) */
 
 /*
  * PMU feature flags
  */
-#define PFM_X86_FL_PMU_DS	0x01	/* Intel: support for Data Save Area (DS) */
-#define PFM_X86_FL_PMU_PEBS	0x02	/* Intel: support PEBS (implies DS) */
-#define PFM_X86_FL_USE_NMI	0x04	/* user asking for NMI */
-#define PFM_X86_FL_NO_SHARING	0x08	/* no sharing with other subsystems */
-#define PFM_X86_FL_SHARING	0x10	/* PMU is being shared */
-#define PFM_X86_FL_IBS		0x20	/* AMD: PMU has IBS support */
-#define PFM_X86_FL_IBS_EXT	0x40	/* AMD: PMU has IBSext support */
-#define PFM_X86_FL_USE_EI	0x80	/* AMD: PMU uses extended interrupts */
+#define PFM_X86_FL_USE_NMI	0x01	/* user asking for NMI */
+#define PFM_X86_FL_NO_SHARING	0x02	/* no sharing with other subsystems */
+#define PFM_X86_FL_SHARING	0x04	/* PMU is being shared */
 
-/*
- * architecture specific context extension.
- * located at: (struct pfm_arch_context *)(ctx+1)
- */
-
-struct pfm_arch_p4_context {
-	u32	npend_ovfls;	/* P4 NMI #pending ovfls */
-	u32	reserved;
-	u64	povfl_pmds[PFM_PMD_BV]; /* P4 NMI overflowed counters */
-	u64	saved_cccrs[PFM_MAX_PMCS];
-};
-
-struct pfm_x86_context_flags {
-	unsigned int insecure:1;  /* insecure monitoring for non-self session */
+struct pfm_x86_ctx_flags {
+	unsigned int insecure:1;  /* rdpmc per-thread self-monitoring */
 	unsigned int use_pebs:1;  /* PEBS used */
 	unsigned int use_ds:1;    /* DS used */
 	unsigned int reserved:29; /* for future use */
 };
 
 struct pfm_arch_context {
-	u64				saved_real_iip;	/* instr pointer of last NMI intr (ctxsw) */
-	struct pfm_x86_context_flags	flags;		/* arch-specific flags */
-	void				*ds_area;	/* address of DS management area */
-	struct pfm_arch_p4_context	*p4;		/* P4 specific state */
+	u64 saved_real_iip;		/* instr pointer of last NMI intr */
+	struct pfm_x86_ctx_flags flags;	/* flags */
+	void *ds_area;			/* address of DS area (to go away) */
+	void *data;			/* model-specific data */
 };
 
-void __pfm_read_reg_p4(const struct pfm_arch_ext_reg *xreg, u64 *val);
-void __pfm_write_reg_p4(const struct pfm_arch_ext_reg *xreg, u64 val);
-
-
-extern int  pfm_arch_init(void);
-extern void pfm_arch_resend_irq(void);
-
-static inline void pfm_arch_serialize(void)
-{}
-
 /*
- * on x86, the PMDs are already saved by pfm_arch_freeze_pmu()
- * when entering the PMU interrupt handler, thus, we do not need
- * to save them again in pfm_switch_sets_from_intr()
+ * functions implemented as inline on x86
  */
-static inline void pfm_arch_save_pmds_from_intr(struct pfm_context *ctx,
-						struct pfm_event_set *set)
-{}
 
-/*
+/**
+ * pfm_arch_write_pmc - write a single PMC register
+ * @ctx: context to work on
+ * @cnum: PMC index
+ * @value: PMC 64-bit value
+ *
  * in certain situations, ctx may be NULL
  */
-static inline void pfm_arch_write_pmc(struct pfm_context *ctx, unsigned int cnum, u64 value)
+static inline void pfm_arch_write_pmc(struct pfm_context *ctx,
+				      unsigned int cnum, u64 value)
 {
-	struct pfm_arch_pmu_info *arch_info = pfm_pmu_conf->arch_info;
+	struct pfm_arch_pmu_info *pmu_info;
+
+	pmu_info = pfm_pmu_info();
+
 	/*
 	 * we only write to the actual register when monitoring is
 	 * active (pfm_start was issued)
@@ -188,24 +111,38 @@ static inline void pfm_arch_write_pmc(struct pfm_context *ctx, unsigned int cnum
 	if (ctx && ctx->flags.started == 0)
 		return;
 
+	/*
+	 * model-specific override, if any
+	 */
+	if (pmu_info->write_pmc) {
+		pmu_info->write_pmc(ctx, cnum, value);
+		return;
+	}
+
 	PFM_DBG_ovfl("pfm_arch_write_pmc(0x%lx, 0x%Lx)",
 		     pfm_pmu_conf->pmc_desc[cnum].hw_addr,
 		     (unsigned long long) value);
 
-	if (arch_info->pmu_style == PFM_X86_PMU_P4)
-		__pfm_write_reg_p4(&arch_info->pmc_addrs[cnum], value);
-	else
-		wrmsrl(pfm_pmu_conf->pmc_desc[cnum].hw_addr, value);
+	wrmsrl(pfm_pmu_conf->pmc_desc[cnum].hw_addr, value);
 }
 
-static inline void pfm_arch_write_pmd(struct pfm_context *ctx, unsigned int cnum, u64 value)
+/**
+ * pfm_arch_write_pmd - write a single PMD register
+ * @ctx: context to work on
+ * @cnum: PMD index
+ * @value: PMD 64-bit value
+ */
+static inline void pfm_arch_write_pmd(struct pfm_context *ctx,
+				      unsigned int cnum, u64 value)
 {
-	struct pfm_arch_pmu_info *arch_info = pfm_pmu_conf->arch_info;
+	struct pfm_arch_pmu_info *pmu_info;
+
+	pmu_info = pfm_pmu_info();
 
 	/*
-	 * to make sure the counter overflows, we set the bits from
-	 * bit 31 till the width of the counters.
-	 * We clear any other unimplemented bits.
+	 * to make sure the counter overflows, we set the
+	 * upper bits. we also clear any other unimplemented
+	 * bits as this may cause crash on some processors.
 	 */
 	if (pfm_pmu_conf->pmd_desc[cnum].type & PFM_REG_C64)
 		value = (value | ~pfm_pmu_conf->ovfl_mask)
@@ -215,18 +152,36 @@ static inline void pfm_arch_write_pmd(struct pfm_context *ctx, unsigned int cnum
 		     pfm_pmu_conf->pmd_desc[cnum].hw_addr,
 		     (unsigned long long) value);
 
-	if (arch_info->pmu_style == PFM_X86_PMU_P4)
-		__pfm_write_reg_p4(&arch_info->pmd_addrs[cnum], value);
-	else
-		wrmsrl(pfm_pmu_conf->pmd_desc[cnum].hw_addr, value);
+	/*
+	 * model-specific override, if any
+	 */
+	if (pmu_info->write_pmd) {
+		pmu_info->write_pmd(ctx, cnum, value);
+		return;
+	}
+
+	wrmsrl(pfm_pmu_conf->pmd_desc[cnum].hw_addr, value);
 }
 
+/**
+ * pfm_arch_read_pmd - read a single PMD register
+ * @ctx: context to work on
+ * @cnum: PMD index
+ *
+ * return value is register 64-bit value
+ */
 static inline u64 pfm_arch_read_pmd(struct pfm_context *ctx, unsigned int cnum)
 {
-	struct pfm_arch_pmu_info *arch_info = pfm_pmu_conf->arch_info;
+	struct pfm_arch_pmu_info *pmu_info;
 	u64 tmp;
-	if (arch_info->pmu_style == PFM_X86_PMU_P4)
-		__pfm_read_reg_p4(&arch_info->pmd_addrs[cnum], &tmp);
+
+	pmu_info = pfm_pmu_info();
+
+	/*
+	 * model-specific override, if any
+	 */
+	if (pmu_info->read_pmd)
+		tmp = pmu_info->read_pmd(ctx, cnum);
 	else
 		rdmsrl(pfm_pmu_conf->pmd_desc[cnum].hw_addr, tmp);
 
@@ -236,12 +191,25 @@ static inline u64 pfm_arch_read_pmd(struct pfm_context *ctx, unsigned int cnum)
 	return tmp;
 }
 
+/**
+ * pfm_arch_read_pmc - read a single PMC register
+ * @ctx: context to work on
+ * @cnum: PMC index
+ *
+ * return value is register 64-bit value
+ */
 static inline u64 pfm_arch_read_pmc(struct pfm_context *ctx, unsigned int cnum)
 {
-	struct pfm_arch_pmu_info *arch_info = pfm_pmu_conf->arch_info;
+	struct pfm_arch_pmu_info *pmu_info;
 	u64 tmp;
-	if (arch_info->pmu_style == PFM_X86_PMU_P4)
-		__pfm_read_reg_p4(&arch_info->pmc_addrs[cnum], &tmp);
+
+	pmu_info = pfm_pmu_info();
+
+	/*
+	 * model-specific override, if any
+	 */
+	if (pmu_info->read_pmc)
+		tmp = pmu_info->read_pmc(ctx, cnum);
 	else
 		rdmsrl(pfm_pmu_conf->pmc_desc[cnum].hw_addr, tmp);
 
@@ -251,130 +219,113 @@ static inline u64 pfm_arch_read_pmc(struct pfm_context *ctx, unsigned int cnum)
 	return tmp;
 }
 
-/*
+/**
+ * pfm_arch_is_active - return non-zero is monitoring has been started
+ * @ctx: context to check
+ *
  * At certain points, perfmon needs to know if monitoring has been
- * explicitely started/stopped by user via pfm_start/pfm_stop. The
- * information is tracked in flags.started. However on certain
- * architectures, it may be possible to start/stop directly from
- * user level with a single assembly instruction bypassing
- * the kernel. This function is used to determine by
- * an arch-specific mean if monitoring is actually started/stopped.
+ * explicitly started.
+ *
+ * On x86, there is not other way but to use pfm_start/pfm_stop
+ * to activate monitoring, thus we can simply check flags.started
  */
 static inline int pfm_arch_is_active(struct pfm_context *ctx)
 {
 	return ctx->flags.started;
 }
 
-static inline void pfm_arch_ctxswout_sys(struct task_struct *task,
-					 struct pfm_context *ctx,
-					 struct pfm_event_set *set)
-{}
 
-static inline void pfm_arch_ctxswin_sys(struct task_struct *task,
-					struct pfm_context *ctx,
-					struct pfm_event_set *set)
-{}
-
-static inline void pfm_arch_init_percpu(void)
-{}
-
-static inline void pfm_cacheflush(void *addr, unsigned int len)
-{}
-
-int  pfm_arch_ctxswout_thread(struct task_struct *task,
-			      struct pfm_context *ctx,
-			      struct pfm_event_set *set);
-
-void pfm_arch_ctxswin_thread(struct task_struct *task,
-			     struct pfm_context *ctx,
-			     struct pfm_event_set *set);
-
-void pfm_arch_stop(struct task_struct *task,
-		   struct pfm_context *ctx, struct pfm_event_set *set);
-void pfm_arch_start(struct task_struct *task,
-		    struct pfm_context *ctx, struct pfm_event_set *set);
-
-void pfm_arch_restore_pmds(struct pfm_context *ctx, struct pfm_event_set *set);
-void pfm_arch_restore_pmcs(struct pfm_context *ctx, struct pfm_event_set *set);
-int  pfm_arch_pmu_config_init(struct pfm_pmu_config *cfg);
-void pfm_arch_pmu_config_remove(void);
-char *pfm_arch_get_pmu_module_name(void);
-
-static inline int pfm_arch_unload_context(struct pfm_context *ctx,
-					  struct task_struct *task)
+/**
+ * pfm_arch_unload_context - detach context from thread or CPU
+ * @ctx: context to detach
+ *
+ * in system-wide ctx->task is NULL, otherwise it points to the
+ * attached thread
+ */
+static inline void pfm_arch_unload_context(struct pfm_context *ctx)
 {
-	struct pfm_arch_pmu_info *arch_info;
+	struct pfm_arch_pmu_info *pmu_info;
 	struct pfm_arch_context *ctx_arch;
-	int ret = 0;
 
 	ctx_arch = pfm_ctx_arch(ctx);
-
-	arch_info = pfm_pmu_conf->arch_info;
-	if (arch_info->unload_context) {
-		ret = arch_info->unload_context(ctx);
-	}
+	pmu_info = pfm_pmu_info();
 
 	if (ctx_arch->flags.insecure) {
 		PFM_DBG("clear cr4.pce");
 		clear_in_cr4(X86_CR4_PCE);
 	}
 
-	return ret;
+	if (pmu_info->unload_context)
+		pmu_info->unload_context(ctx);
 }
 
-static inline int pfm_arch_load_context(struct pfm_context *ctx,
-					struct pfm_event_set *set,
-					struct task_struct *task)
+/**
+ * pfm_arch_load_context - attach context to thread or CPU
+ * @ctx: context to attach
+ */
+static inline int pfm_arch_load_context(struct pfm_context *ctx)
 {
-	struct pfm_arch_pmu_info *arch_info;
+	struct pfm_arch_pmu_info *pmu_info;
 	struct pfm_arch_context *ctx_arch;
 	int ret = 0;
 
 	ctx_arch = pfm_ctx_arch(ctx);
+	pmu_info = pfm_pmu_info();
 
 	/*
-	 * RDPMC is automatically authorized in system-wide and
-	 * also in self-monitoring per-thread context.
-	 * It may be authorized in other situations if the
-	 * PFM_X86_FL_INSECURE flags was set
+	 * RDPMC authorized in system-wide and
+	 * per-thread self-monitoring.
+	 *
+	 * RDPMC only gives access to counts.
+	 *
+	 * The context-switch routine code does not restore
+	 * all the PMD registers (optimization), thus there
+	 * is a possible leak of counts there in per-thread
+	 * mode.
 	 */
-	if (ctx->flags.system || task == current) {
+	if (ctx->task == current || ctx->flags.system) {
 		PFM_DBG("set cr4.pce");
 		set_in_cr4(X86_CR4_PCE);
 		ctx_arch->flags.insecure = 1;
 	}
 
-	arch_info = pfm_pmu_conf->arch_info;
-	if (arch_info->load_context) {
-		ret = arch_info->load_context(ctx);
-	}
+	if (pmu_info->load_context)
+		ret = pmu_info->load_context(ctx);
+
 	return ret;
 }
 
-/*
- * this function is called from the PMU interrupt handler ONLY.
- * On x86, the PMU is frozen via arch_stop, masking would be implemented
- * via arch-stop as well. Given that the PMU is already stopped when
- * entering the interrupt handler, we do not need to stop it again, so
- * this function is a nop.
- */
-static inline void pfm_arch_mask_monitoring(struct pfm_context *ctx,
-					    struct pfm_event_set *set)
-{}
+void pfm_arch_restore_pmcs(struct pfm_context *ctx, struct pfm_event_set *set);
+void pfm_arch_start(struct task_struct *task, struct pfm_context *ctx);
+void pfm_arch_stop(struct task_struct *task, struct pfm_context *ctx);
 
-/*
- * on x86 masking/unmasking uses the start/stop mechanism, so we simply
- * need to start here.
+/**
+ * pfm_arch_unmask_monitoring - unmask monitoring
+ * @ctx: context to mask
+ * @set: current event set
+ *
+ * masking is slightly different from stopping in that, it does not undo
+ * the pfm_start() issued by user. This is used in conjunction with
+ * sampling. Masking means stop monitoring, but do not authorize user
+ * to issue pfm_start/stop during that time. Unmasking is achieved via
+ * pfm_restart() and also may also depend on the sampling format used.
+ *
+ * on x86 masking/unmasking use the start/stop mechanism, except
+ * that flags.started is not modified.
  */
 static inline void pfm_arch_unmask_monitoring(struct pfm_context *ctx,
 					      struct pfm_event_set *set)
 {
-	pfm_arch_start(current, ctx, set);
+	pfm_arch_start(current, ctx);
 }
 
-/*
- * called from __pfm_interrupt_handler(). ctx is not NULL.
- * ctx is locked. interrupts are masked
+/**
+ * pfm_arch_intr_freeze_pmu - stop monitoring when handling PMU interrupt
+ * @ctx: current context
+ * @set: current event set
+ *
+ * called from __pfm_interrupt_handler().
+ * ctx is not NULL. ctx is locked. interrupts are masked
  *
  * The following actions must take place:
  *  - stop all monitoring to ensure handler has consistent view.
@@ -388,7 +339,7 @@ static inline void pfm_arch_intr_freeze_pmu(struct pfm_context *ctx,
 	/*
 	 * on X86, freezing is equivalent to stopping
 	 */
-	pfm_arch_stop(current, ctx, set);
+	pfm_arch_stop(current, ctx);
 
 	/*
 	 * we mark monitoring as stopped to avoid
@@ -399,9 +350,13 @@ static inline void pfm_arch_intr_freeze_pmu(struct pfm_context *ctx,
 	ctx->flags.started = 0;
 }
 
-/*
- * unfreeze PMU from pfm_do_interrupt_handler().
- * ctx may be NULL for spurious interrupts.
+/**
+ * pfm_arch_intr_unfreeze_pmu - conditionally reactive monitoring
+ * @ctx: current context
+ *
+ * current context may be not when dealing when spurious interrupts
+ *
+ * Must re-activate monitoring if context is not MASKED.
  * interrupts are masked.
  */
 static inline void pfm_arch_intr_unfreeze_pmu(struct pfm_context *ctx)
@@ -423,32 +378,32 @@ static inline void pfm_arch_intr_unfreeze_pmu(struct pfm_context *ctx)
 	pfm_arch_restore_pmcs(ctx, ctx->active_set);
 }
 
-
-/*
- * function called from pfm_setfl_sane(). Context is locked
- * and interrupts are masked.
- * The value of flags is the value of ctx_flags as passed by
- * user.
+/**
+ * pfm_arch_setfl_sane - check arch/model specific event set flags
+ * @ctx: context to work on
+ * @flags: event set flags as passed by user
  *
- * function must check arch-specific set flags.
+ * called from pfm_setfl_sane(). Context is locked. Interrupts are masked.
+ *
  * Return:
- *      1 when flags are valid
- *      0 on error
+ *      0 when flags are valid
+ *      1 on error
  */
 static inline int pfm_arch_setfl_sane(struct pfm_context *ctx, u32 flags)
 {
 	return 0;
 }
 
-int pfm_arch_pmu_acquire(void);
-void pfm_arch_pmu_release(void);
-
-/*
- * For some CPUs, the upper bits of a counter must be set in order for the
+/**
+ * pfm_arch_ovfl_reset_pmd - reset pmd on overflow
+ * @ctx: current context
+ * @cnum: PMD index
+ *
+ * On some CPUs, the upper bits of a counter must be set in order for the
  * overflow interrupt to happen. On overflow, the counter has wrapped around,
  * and the upper bits are cleared. This function may be used to set them back.
  *
- * x86: The current version loses whatever is remaining in the counter,
+ * For x86, the current version loses whatever is remaining in the counter,
  * which is usually has a small count. In order not to loose this count,
  * we do a read-modify-write to set the upper bits while preserving the
  * low-order bits. This is slow but works.
@@ -460,69 +415,113 @@ static inline void pfm_arch_ovfl_reset_pmd(struct pfm_context *ctx, unsigned int
 	pfm_arch_write_pmd(ctx, cnum, val);
 }
 
-/*
- * not used for i386/x86_64
+/**
+ * pfm_arch_context_create - create context
+ * @ctx: newly created context
+ * @flags: context flags as passed by user
+ *
+ * called from __pfm_create_context()
  */
-static inline int pfm_smpl_buffer_alloc_compat(struct pfm_context *ctx,
-					       size_t rsize, struct file *filp)
-{
-	return -EINVAL;
-}
-static inline ssize_t pfm_arch_compat_read(struct pfm_context *ctx,
-			     char __user *buf,
-			     int non_block,
-			     size_t size)
-{
-	return -EINVAL;
-}
-
 static inline int pfm_arch_context_create(struct pfm_context *ctx, u32 ctx_flags)
 {
-	struct pfm_arch_pmu_info *arch_info = pfm_pmu_conf->arch_info;
-	struct pfm_arch_context *ctx_arch;
+	struct pfm_arch_pmu_info *pmu_info;
 
-	if (arch_info->pmu_style != PFM_X86_PMU_P4)
-		return 0;
+	pmu_info = pfm_pmu_info();
 
-	ctx_arch = pfm_ctx_arch(ctx);
-
-	ctx_arch->p4 = kzalloc(sizeof(*(ctx_arch->p4)), GFP_KERNEL);
-	if (!ctx_arch->p4)
-		return -ENOMEM;
+	if (pmu_info->create_context)
+		return pmu_info->create_context(ctx, ctx_flags);
 
 	return 0;
 }
 
+/**
+ * pfm_arch_context_free - free context
+ * @ctx: context to free
+ */
 static inline void pfm_arch_context_free(struct pfm_context *ctx)
 {
-	struct pfm_arch_context *ctx_arch;
+	struct pfm_arch_pmu_info *pmu_info;
 
-	ctx_arch = pfm_ctx_arch(ctx);
+	pmu_info = pfm_pmu_info();
 
-	/*
-	 * we do not check if P4, because it would be NULL and
-	 * kfree can deal with NULL
-	 */
-	kfree(ctx_arch->p4);
+	if (pmu_info->free_context)
+		pmu_info->free_context(ctx);
 }
+
+/*
+ * functions implemented in arch/x86/perfmon/perfmon.c
+ */
+int  pfm_arch_init(void);
+void pfm_arch_resend_irq(void);
+
+int  pfm_arch_ctxswout_thread(struct task_struct *task, struct pfm_context *ctx);
+void pfm_arch_ctxswin_thread(struct task_struct *task, struct pfm_context *ctx);
+
+void pfm_arch_restore_pmds(struct pfm_context *ctx, struct pfm_event_set *set);
+int  pfm_arch_pmu_config_init(struct pfm_pmu_config *cfg);
+void pfm_arch_pmu_config_remove(void);
+char *pfm_arch_get_pmu_module_name(void);
+int pfm_arch_pmu_acquire(void);
+void pfm_arch_pmu_release(void);
+
+/*
+ * pfm_arch_serialize - make PMU modifications visible to subsequent instructions
+ *
+ * This is a nop on x86
+ */
+static inline void pfm_arch_serialize(void)
+{}
+
+/*
+ * on x86, the PMDs are already saved by pfm_arch_freeze_pmu()
+ * when entering the PMU interrupt handler, thus, we do not need
+ * to save them again in pfm_switch_sets_from_intr()
+ */
+static inline void pfm_arch_save_pmds_from_intr(struct pfm_context *ctx,
+						struct pfm_event_set *set)
+{}
+
+
+static inline void pfm_arch_ctxswout_sys(struct task_struct *task,
+					 struct pfm_context *ctx)
+{}
+
+static inline void pfm_arch_ctxswin_sys(struct task_struct *task,
+					struct pfm_context *ctx)
+{}
+
+static inline void pfm_arch_init_percpu(void)
+{}
+
+static inline void pfm_cacheflush(void *addr, unsigned int len)
+{}
+
+/*
+ * this function is called from the PMU interrupt handler ONLY.
+ * On x86, the PMU is frozen via arch_stop, masking would be implemented
+ * via arch-stop as well. Given that the PMU is already stopped when
+ * entering the interrupt handler, we do not need to stop it again, so
+ * this function is a nop.
+ */
+static inline void pfm_arch_mask_monitoring(struct pfm_context *ctx,
+					    struct pfm_event_set *set)
+{}
+
 
 static inline void pfm_arch_arm_handle_work(struct task_struct *task)
-{
-}
+{}
 
 static inline void pfm_arch_disarm_handle_work(struct task_struct *task)
-{
-}
+{}
+
 #define PFM_ARCH_CTX_SIZE	(sizeof(struct pfm_arch_context))
 /*
- * i386/x86_64 do not need extra alignment requirements for the sampling buffer
+ * x86 does not need extra alignment requirements for the sampling buffer
  */
 #define PFM_ARCH_SMPL_ALIGN_SIZE	0
 
 asmlinkage void  pmu_interrupt(void);
 
 #endif /* CONFIG_PEFMON */
-
-#endif /* __KERNEL__ */
 
 #endif /* _ASM_X86_PERFMON_KERN_H_ */

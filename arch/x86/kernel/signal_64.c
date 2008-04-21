@@ -19,7 +19,11 @@
 #include <linux/stddef.h>
 #include <linux/personality.h>
 #include <linux/compiler.h>
+<<<<<<< HEAD:arch/x86/kernel/signal_64.c
 #include <asm/processor.h>
+=======
+#include <linux/perfmon_kern.h>
+>>>>>>> 8dfbcb00f75b74062a7e2a1a8172a766fac5c742:arch/x86/kernel/signal_64.c
 #include <asm/ucontext.h>
 #include <asm/uaccess.h>
 #include <asm/i387.h>

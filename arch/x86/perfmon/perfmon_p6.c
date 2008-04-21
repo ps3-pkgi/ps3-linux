@@ -22,6 +22,7 @@
  * 02111-1307 USA
   */
 #include <linux/module.h>
+#include <linux/kprobes.h>
 #include <linux/perfmon_kern.h>
 #include <asm/msr.h>
 #include <asm/nmi.h>
@@ -52,21 +53,24 @@ module_param(force_nmi, bool, 0600);
 #define PFM_P6_PMC_VAL  (1ULL<<20)
 #define PFM_P6_NO64	(1ULL<<20)
 
+
+static void __kprobes pfm_p6_quiesce(void);
+static int pfm_p6_has_ovfls(struct pfm_context *ctx);
+static int pfm_p6_stop_save(struct pfm_context *ctx,
+			    struct pfm_event_set *set);
+
+static u64 enable_mask[PFM_MAX_PMCS];
+static u16 max_enable;
+
 /*
  * PFM_X86_FL_NO_SHARING: because of the single enable bit on MSR_P6_EVNTSEL0
  * the PMU cannot be shared with NMI watchdog or Oprofile
  */
-struct pfm_arch_pmu_info pfm_p6_pmu_info={
-	.pmc_addrs = {
-		{{MSR_P6_EVNTSEL0, 0}, 0, PFM_REGT_EN}, /* has enable bit */
-		{{MSR_P6_EVNTSEL1, 0}, 1, PFM_REGT_OTH} /* no enable bit  */
-	},
-	.pmd_addrs = {
-		{{MSR_P6_PERFCTR0, 0}, 0, PFM_REGT_CTR},
-		{{MSR_P6_PERFCTR1, 0}, 0, PFM_REGT_CTR}
-	},
+struct pfm_arch_pmu_info pfm_p6_pmu_info = {
+	.stop_save = pfm_p6_stop_save,
+	.has_ovfls = pfm_p6_has_ovfls,
+	.quiesce = pfm_p6_quiesce,
 	.flags = PFM_X86_FL_NO_SHARING,
-	.pmu_style = PFM_X86_PMU_P6
 };
 
 static struct pfm_regmap_desc pfm_p6_pmc_desc[]={
@@ -120,6 +124,9 @@ static int pfm_p6_probe_pmu(void)
 		PFM_INFO("no Local APIC, try rebooting with lapic");
 		return -1;
 	}
+	__set_bit(0, cast_ulp(enable_mask));
+	__set_bit(1, cast_ulp(enable_mask));
+	max_enable = 1 + 1;
 	/*
 	 * force NMI interrupt?
 	 */
@@ -127,6 +134,137 @@ static int pfm_p6_probe_pmu(void)
 		pfm_p6_pmu_info.flags |= PFM_X86_FL_USE_NMI;
 
 	return 0;
+}
+
+/**
+ * pfm_p6_has_ovfls - check for pending overflow condition
+ * @ctx: context to work on
+ *
+ * detect if counters have overflowed.
+ * return:
+ * 	0 : no overflow
+ * 	1 : at least one overflow
+ */
+static int __kprobes pfm_p6_has_ovfls(struct pfm_context *ctx)
+{
+	u64 *cnt_mask;
+	u64 wmask, val;
+	u16 i, num;
+
+	cnt_mask = pfm_pmu_conf->regs.cnt_pmds;
+	num = pfm_pmu_conf->regs.num_counters;
+	wmask = 1ULL << pfm_pmu_conf->counter_width;
+
+	/*
+	 * we can leverage the fact that we know the mapping
+	 * to hardcode the MSR address and avoid accessing
+	 * more cachelines
+	 *
+	 * We need to check cnt_mask because not all registers
+	 * may be available.
+	 */
+	for (i = 0; num; i++) {
+		if (test_bit(i, cast_ulp(cnt_mask))) {
+			rdmsrl(MSR_P6_PERFCTR0+i, val);
+			if (!(val & wmask))
+				return 1;
+			num--;
+		}
+	}
+	return 0;
+}
+
+/**
+ * pfm_p6_stop_save -- stop monitoring and save PMD values
+ * @ctx: context to work on
+ * @set: current event set
+ *
+ * return value:
+ * 	0 - no need to save PMDs in caller
+ * 	1 - need to save PMDs in caller
+ */
+static int pfm_p6_stop_save(struct pfm_context *ctx, struct pfm_event_set *set)
+{
+	struct pfm_arch_pmu_info *pmu_info;
+	u64 used_mask[PFM_PMC_BV];
+	u64 *cnt_pmds;
+	u64 val, wmask, ovfl_mask;
+	u32 i, count;
+
+	pmu_info = pfm_pmu_info();
+
+	wmask = 1ULL << pfm_pmu_conf->counter_width;
+	bitmap_and(cast_ulp(used_mask),
+		   cast_ulp(set->used_pmcs),
+		   cast_ulp(enable_mask),
+		   max_enable);
+
+	count = bitmap_weight(cast_ulp(used_mask), pfm_pmu_conf->regs.max_pmc);
+
+	/*
+	 * stop monitoring
+	 * Unfortunately, this is very expensive!
+	 * wrmsrl() is serializing.
+	 */
+	for (i = 0; count; i++) {
+		if (test_bit(i, cast_ulp(used_mask))) {
+			wrmsrl(MSR_P6_EVNTSEL0+i, 0);
+			count--;
+		}
+	}
+
+	/*
+	 * if we already having a pending overflow condition, we simply
+	 * return to take care of this first.
+	 */
+	if (set->npend_ovfls)
+		return 1;
+
+	ovfl_mask = pfm_pmu_conf->ovfl_mask;
+	cnt_pmds = pfm_pmu_conf->regs.cnt_pmds;
+
+	/*
+	 * check for pending overflows and save PMDs (combo)
+	 * we employ used_pmds because we also need to save
+	 * and not just check for pending interrupts.
+	 *
+	 * Must check for counting PMDs because of virtual PMDs
+	 */
+	count = set->nused_pmds;
+	for (i = 0; count; i++) {
+		if (test_bit(i, cast_ulp(set->used_pmds))) {
+			val = pfm_arch_read_pmd(ctx, i);
+			if (likely(test_bit(i, cast_ulp(cnt_pmds)))) {
+				if (!(val & wmask)) {
+					__set_bit(i, cast_ulp(set->povfl_pmds));
+					set->npend_ovfls++;
+				}
+				val = (set->pmds[i].value & ~ovfl_mask) | (val & ovfl_mask);
+			}
+			set->pmds[i].value = val;
+			count--;
+		}
+	}
+	/* 0 means: no need to save PMDs at upper level */
+	return 0;
+}
+
+/**
+ * pfm_p6_quiesce_pmu -- stop monitoring without grabbing any lock
+ *
+ * called from NMI interrupt handler to immediately stop monitoring
+ * cannot grab any lock, including perfmon related locks
+ */
+static void __kprobes pfm_p6_quiesce(void)
+{
+	/*
+	 * quiesce PMU by clearing available registers that have
+	 * the start/stop capability
+	 *
+	 * P6 processors only have enable bit on PERFEVTSEL0
+	 */
+	if (test_bit(0, cast_ulp(pfm_pmu_conf->regs.pmcs)))
+		wrmsrl(MSR_P6_EVNTSEL0, 0);
 }
 
 /*
@@ -147,7 +285,7 @@ static struct pfm_pmu_config pfm_p6_pmu_conf={
 	.version = "1.0",
 	.flags = PFM_PMU_BUILTIN_FLAG,
 	.owner = THIS_MODULE,
-	.arch_info = &pfm_p6_pmu_info
+	.pmu_info = &pfm_p6_pmu_info
 };
 
 static int __init pfm_p6_pmu_init_module(void)

@@ -31,8 +31,9 @@
 static void pfm_stop_active(struct task_struct *task,
 			    struct pfm_context *ctx, struct pfm_event_set *set)
 {
-	struct pfm_arch_pmu_info *arch_info = pfm_pmu_conf->arch_info;
+	struct pfm_arch_pmu_info *arch_info;
 
+	arch_info = pfm_pmu_info();
 	BUG_ON(!arch_info->disable_counters || !arch_info->get_ovfl_pmds);
 
 	arch_info->disable_counters(ctx, set);
@@ -54,21 +55,21 @@ static void pfm_stop_active(struct task_struct *task,
  * 	non-zero : did not save PMDs (as part of stopping the PMU)
  * 	       0 : saved PMDs (no need to save them in caller)
  */
-int pfm_arch_ctxswout_thread(struct task_struct *task,
-			     struct pfm_context *ctx, struct pfm_event_set *set)
+int pfm_arch_ctxswout_thread(struct task_struct *task, struct pfm_context *ctx)
 {
-	struct pfm_arch_pmu_info *arch_info = pfm_pmu_conf->arch_info;
+	struct pfm_arch_pmu_info *arch_info;
 	int need_save_pmds = 1;
 
+	arch_info = pfm_pmu_info();
 	/*
 	 * disable lazy restore of PMC registers.
 	 */
-	set->priv_flags |= PFM_SETFL_PRIV_MOD_PMCS;
+	ctx->active_set->priv_flags |= PFM_SETFL_PRIV_MOD_PMCS;
 
-	pfm_stop_active(task, ctx, set);
+	pfm_stop_active(task, ctx, ctx->active_set);
 
 	if (arch_info->ctxswout_thread)
-		need_save_pmds = arch_info->ctxswout_thread(task, ctx, set);
+		need_save_pmds = arch_info->ctxswout_thread(task, ctx, ctx->active_set);
 
 	return (pfm_arch_is_active(ctx) && need_save_pmds);
 }
@@ -76,18 +77,18 @@ int pfm_arch_ctxswout_thread(struct task_struct *task,
 /*
  * Called from pfm_ctxsw
  */
-void pfm_arch_ctxswin_thread(struct task_struct *task,
-			     struct pfm_context *ctx, struct pfm_event_set *set)
+void pfm_arch_ctxswin_thread(struct task_struct *task, struct pfm_context *ctx)
 {
-	struct pfm_arch_pmu_info *arch_info = pfm_pmu_conf->arch_info;
+	struct pfm_arch_pmu_info *arch_info;
 
+	arch_info = pfm_pmu_info();
 	if (ctx->state != PFM_CTX_MASKED && ctx->flags.started == 1) {
 		BUG_ON(!arch_info->enable_counters);
-		arch_info->enable_counters(ctx, set);
+		arch_info->enable_counters(ctx, ctx->active_set);
 	}
 
 	if (arch_info->ctxswin_thread)
-		arch_info->ctxswin_thread(task, ctx, set);
+		arch_info->ctxswin_thread(task, ctx, ctx->active_set);
 }
 
 /*
@@ -106,8 +107,7 @@ void pfm_arch_ctxswin_thread(struct task_struct *task,
  *
  * must disable active monitoring. ctx cannot be NULL
  */
-void pfm_arch_stop(struct task_struct *task,
-		   struct pfm_context *ctx, struct pfm_event_set *set)
+void pfm_arch_stop(struct task_struct *task, struct pfm_context *ctx)
 {
 	/*
 	 * no need to go through stop_save()
@@ -120,7 +120,7 @@ void pfm_arch_stop(struct task_struct *task,
 	 * stop live registers and collect pending overflow
 	 */
 	if (task == current)
-		pfm_stop_active(task, ctx, set);
+		pfm_stop_active(task, ctx, ctx->active_set);
 }
 
 /*
@@ -137,17 +137,17 @@ void pfm_arch_stop(struct task_struct *task,
  * For system-wide:
  * 	Task is always current
  */
-void pfm_arch_start(struct task_struct *task,
-		    struct pfm_context *ctx, struct pfm_event_set *set)
+void pfm_arch_start(struct task_struct *task, struct pfm_context *ctx)
 {
-	struct pfm_arch_pmu_info *arch_info = pfm_pmu_conf->arch_info;
+	struct pfm_arch_pmu_info *arch_info;
 
+	arch_info = pfm_pmu_info();
 	if (task != current)
 		return;
 
 	BUG_ON(!arch_info->enable_counters);
 
-	arch_info->enable_counters(ctx, set);
+	arch_info->enable_counters(ctx, ctx->active_set);
 }
 
 /*
@@ -160,9 +160,11 @@ void pfm_arch_start(struct task_struct *task,
  */
 void pfm_arch_restore_pmds(struct pfm_context *ctx, struct pfm_event_set *set)
 {
-	struct pfm_arch_pmu_info *arch_info = pfm_pmu_conf->arch_info;
+	struct pfm_arch_pmu_info *arch_info;
 	u64 *used_pmds;
 	u16 i, num;
+
+	arch_info = pfm_pmu_info();
 
 	/* The model-specific module can override the default
 	 * restore-PMD method.
@@ -195,10 +197,10 @@ void pfm_arch_restore_pmcs(struct pfm_context *ctx, struct pfm_event_set *set)
 	u64 *impl_pmcs;
 	unsigned int i, max_pmc, reg;
 
+	arch_info = pfm_pmu_info();
 	/* The model-specific module can override the default
 	 * restore-PMC method.
 	 */
-	arch_info = pfm_pmu_conf->arch_info;
 	if (arch_info->restore_pmcs)
 		return arch_info->restore_pmcs(ctx, set);
 
@@ -308,9 +310,10 @@ void pfm_arch_init_percpu(void)
  **/
 void powerpc_irq_handler(struct pt_regs *regs)
 {
-	struct pfm_arch_pmu_info *arch_info = pfm_pmu_conf->arch_info;
+	struct pfm_arch_pmu_info *arch_info;
 	struct pfm_context *ctx;
 
+	arch_info = pfm_pmu_info();
 	if (arch_info->irq_handler) {
 		ctx = __get_cpu_var(pmu_ctx);
 		if (likely(ctx))

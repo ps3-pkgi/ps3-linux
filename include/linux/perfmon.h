@@ -24,11 +24,7 @@
  * This file contains all the user visible generic definitions for the
  * interface. Model-specific user-visible definitions are located in
  * the asm/perfmon.h file.
- *
- * All kernel only definitions are located in linux/perfmon_internal.h
- * and asm/perfmon_internal.h
  */
-#ifdef CONFIG_PERFMON
 
 /*
  * include arch-specific user interface definitions
@@ -56,16 +52,16 @@
  * 	- for counters: when the 64-bit counter overflows
  * 	- for others  : when the PMD generates an interrupt
  *
- * PFM_REGFL_NO_EMUL64: must be set of the PMC controlling the counting PMD
+ * PFM_REGFL_NO_EMUL64: must be set of the PMC controlling the PMD
  *
- * reg_flags layout:
+ * register flags (reg_flags)
  * bit 00-15 : generic flags
  * bit 16-23 : arch-specific flags
  * bit 24-31 : error codes
  */
 #define PFM_REGFL_OVFL_NOTIFY	0x1	/* PMD: send notification on event */
 #define PFM_REGFL_RANDOM	0x2	/* PMD: randomize value after event */
-#define PFM_REGFL_NO_EMUL64	0x4	/* PMC: no 64-bit emulation for counter */
+#define PFM_REGFL_NO_EMUL64	0x4	/* PMC: no 64-bit emulation */
 
 /*
  * event set flags layout:
@@ -87,7 +83,6 @@ struct pfarg_ctx {
 
 /*
  * context flags (ctx_flags)
- *
  * bits[00-15]: generic flags
  * bits[16-31]: arch-specific flags (see perfmon_const.h)
  */
@@ -172,7 +167,7 @@ struct pfarg_setinfo {
 	__u32	set_flags;		/* out: SETFL flags */
 	__u64 	set_ovfl_pmds[PFM_PMD_BV]; /* out: last ovfl PMDs */
 	__u64	set_runs;		/* out: #times the set was active */
-	__u64	set_timeout;		/* out: effective/leftover switch timeout in nsecs */
+	__u64	set_timeout;		/* out: eff/leftover timeout (nsecs) */
 	__u64	set_act_duration;	/* out: time set was active in nsecs */
 	__u64	set_avail_pmcs[PFM_PMC_BV];/* out: available PMCs */
 	__u64	set_avail_pmds[PFM_PMD_BV];/* out: available PMDs */
@@ -221,7 +216,5 @@ union pfarg_msg {
 				  (PFM_VERSION_MIN & 0xffff))
 #define PFM_VERSION_MAJOR(x)	 (((x)>>16) & 0xffff)
 #define PFM_VERSION_MINOR(x)	 ((x) & 0xffff)
-
-#endif /* CONFIG_PERFMON */
 
 #endif /* __LINUX_PERFMON_H__ */

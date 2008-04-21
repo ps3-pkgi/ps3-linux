@@ -300,13 +300,14 @@ static ssize_t pfm_read(struct file *filp, char __user *buf, size_t size,
 
 	non_block = filp->f_flags & O_NONBLOCK;
 
+#ifdef CONFIG_IA64_PERFMON_COMPAT
 	/*
 	 * detect IA-64 v2.0 context read (message size is different)
 	 * nops on all other architectures
 	 */
 	if (unlikely(ctx->flags.ia64_v20_compat))
 		return pfm_arch_compat_read(ctx,  buf, non_block, size);
-
+#endif
 	/*
 	 * cannot extract partial messages.
 	 * check even when there is no message
@@ -562,12 +563,12 @@ int __pfm_close(struct pfm_context *ctx, struct file *filp)
 		can_unload = can_free = 0;
 
 		/*
-		 * In the cell spe follow mode, the monitored task does not notice
-		 * ZOMBIE state because TIF_PERFMON_CTXSW is not set to the task and
-		 * pfm_ctxsw() is not called from the task scheduler.
-		 * So The context is unloaded and freed here.
+		 * If TIF_PERFMON_CTXSW is not set to the task,
+		 * the monitored task does not notice ZOMBIE state
+		 * because pfm_ctxsw() is not called from the task scheduler.
+		 * So the context is unloaded and freed here.
 		 */
-		if (ctx->flags.cell_spe_follow)
+		if (ctx->flags.not_dflt_ctxsw)
 			can_unload = can_free = 1;
 	}
 #endif
@@ -583,7 +584,7 @@ free_it:
 		pfm_session_release(is_system, cpu);
 
 	if (can_free)
-		pfm_context_free(ctx);
+		pfm_free_context(ctx);
 
 	return 0;
 }

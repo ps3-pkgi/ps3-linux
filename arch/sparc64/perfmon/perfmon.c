@@ -152,15 +152,14 @@ static void pfm_stop_active(struct task_struct *task, struct pfm_context *ctx,
  * 	non-zero : did not save PMDs (as part of stopping the PMU)
  * 	       0 : saved PMDs (no need to save them in caller)
  */
-int pfm_arch_ctxswout_thread(struct task_struct *task, struct pfm_context *ctx,
-			      struct pfm_event_set *set)
+int pfm_arch_ctxswout_thread(struct task_struct *task, struct pfm_context *ctx)
 {
 	/*
 	 * disable lazy restore of PMC registers.
 	 */
-	set->priv_flags |= PFM_SETFL_PRIV_MOD_PMCS;
+	ctx->active_set->priv_flags |= PFM_SETFL_PRIV_MOD_PMCS;
 
-	pfm_stop_active(task, ctx, set);
+	pfm_stop_active(task, ctx, ctx->active_set);
 
 	return 1;
 }
@@ -181,8 +180,7 @@ int pfm_arch_ctxswout_thread(struct task_struct *task, struct pfm_context *ctx,
  *
  * must disable active monitoring. ctx cannot be NULL
  */
-void pfm_arch_stop(struct task_struct *task, struct pfm_context *ctx,
-		   struct pfm_event_set *set)
+void pfm_arch_stop(struct task_struct *task, struct pfm_context *ctx)
 {
 	/*
 	 * no need to go through stop_save()
@@ -195,7 +193,7 @@ void pfm_arch_stop(struct task_struct *task, struct pfm_context *ctx,
 	 * stop live registers and collect pending overflow
 	 */
 	if (task == current)
-		pfm_stop_active(task, ctx, set);
+		pfm_stop_active(task, ctx, ctx->active_set);
 }
 
 /*
@@ -213,15 +211,16 @@ void pfm_arch_stop(struct task_struct *task, struct pfm_context *ctx,
  *
  * must enable active monitoring.
  */
-void pfm_arch_start(struct task_struct *task, struct pfm_context *ctx,
-	            struct pfm_event_set *set)
+void pfm_arch_start(struct task_struct *task, struct pfm_context *ctx)
 {
+	struct pfm_event_set *set;
 	unsigned int max_pmc = pfm_pmu_conf->regs.max_pmc;
 	unsigned int i;
 
 	if (task != current)
 		return;
 
+	set = ctx->active_set;
 	for (i = 0; i < max_pmc; i++) {
 		if (test_bit(i, set->used_pmcs))
 			pfm_arch_write_pmc(ctx, i, set->pmcs[i]);
