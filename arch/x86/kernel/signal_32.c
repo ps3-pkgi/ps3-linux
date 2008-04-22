@@ -18,14 +18,9 @@
 #include <linux/sched.h>
 #include <linux/wait.h>
 #include <linux/elf.h>
-<<<<<<< HEAD:arch/x86/kernel/signal_32.c
 #include <linux/smp.h>
 #include <linux/mm.h>
 
-=======
-#include <linux/binfmts.h>
-#include <linux/perfmon_kern.h>
->>>>>>> 8dfbcb00f75b74062a7e2a1a8172a766fac5c742:arch/x86/kernel/signal_32.c
 #include <asm/processor.h>
 #include <asm/ucontext.h>
 #include <asm/uaccess.h>
@@ -673,10 +668,6 @@ do_notify_resume(struct pt_regs *regs, void *unused, __u32 thread_info_flags)
 		regs->flags |= X86_EFLAGS_TF;
 		clear_thread_flag(TIF_SINGLESTEP);
 	}
-
-	/* process perfmon asynchronous work (e.g. block thread or reset) */
-	if (thread_info_flags & _TIF_PERFMON_WORK)
-		pfm_handle_work(regs);
 
 	/* deal with pending signal delivery */
 	if (thread_info_flags & (_TIF_SIGPENDING | _TIF_RESTORE_SIGMASK))

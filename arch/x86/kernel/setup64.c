@@ -11,11 +11,7 @@
 #include <linux/bootmem.h>
 #include <linux/bitops.h>
 #include <linux/module.h>
-<<<<<<< HEAD:arch/x86/kernel/setup64.c
 #include <linux/kgdb.h>
-=======
-#include <linux/perfmon_kern.h>
->>>>>>> 8dfbcb00f75b74062a7e2a1a8172a766fac5c742:arch/x86/kernel/setup64.c
 #include <asm/pda.h>
 #include <asm/pgtable.h>
 #include <asm/processor.h>
@@ -78,8 +74,8 @@ int force_personality32 = 0;
 Control non executable heap for 32bit processes.
 To control the stack too use noexec=off
 
-on	PROT_READ does not imply PROT_EXEC for 32bit processes
-off	PROT_READ implies PROT_EXEC (default)
+on	PROT_READ does not imply PROT_EXEC for 32bit processes (default)
+off	PROT_READ implies PROT_EXEC
 */
 static int __init nonx32_setup(char *str)
 {
@@ -286,10 +282,6 @@ void __cpuinit cpu_init (void)
 
 	raw_local_save_flags(kernel_eflags);
 
-<<<<<<< HEAD:arch/x86/kernel/setup64.c
 	if (is_uv_system())
 		uv_cpu_init();
-=======
-	pfm_init_percpu();
->>>>>>> 8dfbcb00f75b74062a7e2a1a8172a766fac5c742:arch/x86/kernel/setup64.c
 }

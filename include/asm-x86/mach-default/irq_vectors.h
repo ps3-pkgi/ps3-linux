@@ -56,7 +56,6 @@
  * sources per level' errata.
  */
 #define LOCAL_TIMER_VECTOR	0xef
-#define LOCAL_PERFMON_VECTOR	0xee
 
 /*
  * First APIC vector available to drivers: (vectors 0x30-0xee)
@@ -64,7 +63,7 @@
  * levels. (0x80 is the syscall vector)
  */
 #define FIRST_DEVICE_VECTOR	0x31
-#define FIRST_SYSTEM_VECTOR	0xee
+#define FIRST_SYSTEM_VECTOR	0xef
 
 #define TIMER_IRQ 0
 

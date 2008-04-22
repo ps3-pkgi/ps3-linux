@@ -36,7 +36,7 @@
 #include <linux/personality.h>
 #include <linux/tick.h>
 #include <linux/percpu.h>
-#include <linux/perfmon_kern.h>
+#include <linux/prctl.h>
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -46,7 +46,6 @@
 #include <asm/processor.h>
 #include <asm/i387.h>
 #include <asm/desc.h>
-#include <asm/vm86.h>
 #ifdef CONFIG_MATH_EMULATION
 #include <asm/math_emu.h>
 #endif
@@ -427,7 +426,6 @@ void exit_thread(void)
 		tss->x86_tss.io_bitmap_base = INVALID_IO_BITMAP_OFFSET;
 		put_cpu();
 	}
-	pfm_exit_thread();
 }
 
 void flush_thread(void)
@@ -484,8 +482,6 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 
 	savesegment(gs, p->thread.gs);
 
-	pfm_copy_thread(p);
-
 	tsk = current;
 	if (unlikely(test_tsk_thread_flag(tsk, TIF_IO_BITMAP))) {
 		p->thread.io_bitmap_ptr = kmemdup(tsk->thread.io_bitmap_ptr,
@@ -525,14 +521,18 @@ start_thread(struct pt_regs *regs, unsigned long new_ip, unsigned long new_sp)
 	regs->cs		= __USER_CS;
 	regs->ip		= new_ip;
 	regs->sp		= new_sp;
+	/*
+	 * Free the old FP and other extended state
+	 */
+	free_thread_xstate(current);
 }
 EXPORT_SYMBOL_GPL(start_thread);
 
-#ifdef CONFIG_SECCOMP
 static void hard_disable_TSC(void)
 {
 	write_cr4(read_cr4() | X86_CR4_TSD);
 }
+
 void disable_TSC(void)
 {
 	preempt_disable();
@@ -544,11 +544,47 @@ void disable_TSC(void)
 		hard_disable_TSC();
 	preempt_enable();
 }
+
 static void hard_enable_TSC(void)
 {
 	write_cr4(read_cr4() & ~X86_CR4_TSD);
 }
-#endif /* CONFIG_SECCOMP */
+
+void enable_TSC(void)
+{
+	preempt_disable();
+	if (test_and_clear_thread_flag(TIF_NOTSC))
+		/*
+		 * Must flip the CPU state synchronously with
+		 * TIF_NOTSC in the current running context.
+		 */
+		hard_enable_TSC();
+	preempt_enable();
+}
+
+int get_tsc_mode(unsigned long adr)
+{
+	unsigned int val;
+
+	if (test_thread_flag(TIF_NOTSC))
+		val = PR_TSC_SIGSEGV;
+	else
+		val = PR_TSC_ENABLE;
+
+	return put_user(val, (unsigned int __user *)adr);
+}
+
+int set_tsc_mode(unsigned int val)
+{
+	if (val == PR_TSC_SIGSEGV)
+		disable_TSC();
+	else if (val == PR_TSC_ENABLE)
+		enable_TSC();
+	else
+		return -EINVAL;
+
+	return 0;
+}
 
 static noinline void
 __switch_to_xtra(struct task_struct *prev_p, struct task_struct *next_p,
@@ -559,9 +595,6 @@ __switch_to_xtra(struct task_struct *prev_p, struct task_struct *next_p,
 
 	prev = &prev_p->thread;
 	next = &next_p->thread;
-
-	if (test_tsk_thread_flag(prev_p, TIF_PERFMON_CTXSW))
-		pfm_ctxsw_out(prev_p, next_p);
 
 	debugctl = prev->debugctlmsr;
 	if (next->ds_area_msr != prev->ds_area_msr) {
@@ -575,9 +608,6 @@ __switch_to_xtra(struct task_struct *prev_p, struct task_struct *next_p,
 	if (next->debugctlmsr != debugctl)
 		update_debugctlmsr(next->debugctlmsr);
 
-	if (test_tsk_thread_flag(next_p, TIF_PERFMON_CTXSW))
-		pfm_ctxsw_in(prev_p, next_p);
-
 	if (test_tsk_thread_flag(next_p, TIF_DEBUG)) {
 		set_debugreg(next->debugreg0, 0);
 		set_debugreg(next->debugreg1, 1);
@@ -588,7 +618,6 @@ __switch_to_xtra(struct task_struct *prev_p, struct task_struct *next_p,
 		set_debugreg(next->debugreg7, 7);
 	}
 
-#ifdef CONFIG_SECCOMP
 	if (test_tsk_thread_flag(prev_p, TIF_NOTSC) ^
 	    test_tsk_thread_flag(next_p, TIF_NOTSC)) {
 		/* prev and next are different */
@@ -597,8 +626,6 @@ __switch_to_xtra(struct task_struct *prev_p, struct task_struct *next_p,
 		else
 			hard_enable_TSC();
 	}
-#endif
-
 
 #ifdef X86_BTS
 	if (test_tsk_thread_flag(prev_p, TIF_BTS_TRACE_TS))
@@ -607,6 +634,7 @@ __switch_to_xtra(struct task_struct *prev_p, struct task_struct *next_p,
 	if (test_tsk_thread_flag(next_p, TIF_BTS_TRACE_TS))
 		ptrace_bts_take_timestamp(next_p, BTS_TASK_ARRIVES);
 #endif
+
 
 	if (!test_tsk_thread_flag(next_p, TIF_IO_BITMAP)) {
 		/*
@@ -679,7 +707,7 @@ struct task_struct * __switch_to(struct task_struct *prev_p, struct task_struct 
 
 	/* we're going to use this soon, after a few expensive things */
 	if (next_p->fpu_counter > 5)
-		prefetch(&next->i387.fxsave);
+		prefetch(next->xstate);
 
 	/*
 	 * Reload esp0.

@@ -350,7 +350,8 @@ static int gelic_wl_get_range(struct net_device *netdev,
 
 	/* encryption capability */
 	range->enc_capa = IW_ENC_CAPA_WPA |
-		IW_ENC_CAPA_CIPHER_TKIP | IW_ENC_CAPA_CIPHER_CCMP;
+		IW_ENC_CAPA_CIPHER_TKIP | IW_ENC_CAPA_CIPHER_CCMP |
+		IW_ENC_CAPA_4WAY_HANDSHAKE;
 	if (wpa2_capable())
 		range->enc_capa |= IW_ENC_CAPA_WPA2;
 	range->encoding_size[0] = 5;	/* 40bit WEP */
@@ -1256,42 +1257,48 @@ static int gelic_wl_set_encodeext(struct net_device *netdev,
 		set_bit(key_index, &wl->key_enabled);
 		/* remember wep info changed */
 		set_bit(GELIC_WL_STAT_CONFIGURED, &wl->stat);
-	} else if ((alg == IW_ENCODE_ALG_TKIP) || (alg == IW_ENCODE_ALG_CCMP)) {
-		pr_debug("%s: TKIP/CCMP requested alg=%d\n", __func__, alg);
-		/* check key length */
-		if (IW_ENCODING_TOKEN_MAX < ext->key_len) {
-			pr_info("%s: key is too long %d\n", __func__,
-				ext->key_len);
-			ret = -EINVAL;
-			goto done;
-		}
-		if (alg == IW_ENCODE_ALG_CCMP) {
-			pr_debug("%s: AES selected\n", __func__);
-			wl->group_cipher_method = GELIC_WL_CIPHER_AES;
-			wl->pairwise_cipher_method = GELIC_WL_CIPHER_AES;
-			wl->wpa_level = GELIC_WL_WPA_LEVEL_WPA2;
+	}
+	/*
+	 * PSK set
+	 */
+	if (ext->ext_flags & IW_ENCODE_EXT_PMK) {
+		if (ext->ext_flags & IW_ENCODE_EXT_WPA_PASSPHRASE) {
+			/* WPA pass phrase */
+			pr_debug("%s: PSK by passphrase\n", __func__);
+			if (!ext->key_len) {
+				pr_err("%s: zero length passphrase\n", __func__);
+				ret = -EINVAL;
+				goto done;
+			}
+			if (ext->key_len != strnlen(ext->key, ext->key_len)) {
+				pr_err("%s: passphrase includes zero\n", __func__);
+				ret = -EINVAL;
+				goto done;
+			}
+			if (sizeof(wl->psk) < ext->key_len) {
+				pr_err("%s: passphrase is too long\n", __func__);
+				ret = -EINVAL;
+				goto done;
+			}
+			memset(wl->psk, 0, sizeof(wl->psk));
+			memcpy(wl->psk, ext->key, ext->key_len);
+			wl->psk_len = ext->key_len;
+			wl->psk_type = GELIC_EURUS_WPA_PSK_PASSPHRASE;
 		} else {
-			pr_debug("%s: TKIP selected, WPA forced\n", __func__);
-			wl->group_cipher_method = GELIC_WL_CIPHER_TKIP;
-			wl->pairwise_cipher_method = GELIC_WL_CIPHER_TKIP;
-			/* FIXME: how do we do if WPA2 + TKIP? */
-			wl->wpa_level = GELIC_WL_WPA_LEVEL_WPA;
+			/* binary form */
+			pr_debug("%s: PSK by binary\n", __func__);
+			if (ext->key_len != WPA_PSK_LEN) {
+				pr_err("%s: PSK length wrong %d\n", __func__, ext->key_len);
+				ret = -EINVAL;
+				goto done;
+			}
+			memset(wl->psk, 0, sizeof(wl->psk));
+			memcpy(wl->psk, ext->key, ext->key_len);
+			wl->psk_len = ext->key_len;
+			wl->psk_type = GELIC_EURUS_WPA_PSK_BIN;
 		}
-		if (flags & IW_ENCODE_RESTRICTED)
-			BUG();
-		wl->auth_method = GELIC_EURUS_AUTH_OPEN;
-		/* We should use same key for both and unicast */
-		if (ext->ext_flags & IW_ENCODE_EXT_GROUP_KEY)
-			pr_debug("%s: group key \n", __func__);
-		else
-			pr_debug("%s: unicast key \n", __func__);
-		/* OK, update the key */
-		wl->key_len[key_index] = ext->key_len;
-		memset(wl->key[key_index], 0, IW_ENCODING_TOKEN_MAX);
-		memcpy(wl->key[key_index], ext->key, ext->key_len);
-		set_bit(key_index, &wl->key_enabled);
-		/* remember info changed */
-		set_bit(GELIC_WL_STAT_CONFIGURED, &wl->stat);
+		/* remember PSK configured */
+		set_bit(GELIC_WL_STAT_WPA_PSK_SET, &wl->stat);
 	}
 done:
 	spin_unlock_irqrestore(&wl->lock, irqflag);
@@ -1397,6 +1404,7 @@ static int gelic_wl_get_mode(struct net_device *netdev,
 	return 0;
 }
 
+#ifdef CONFIG_GELIC_WIRELESS_OLD_PSK_INTERFACE
 /* SIOCIWFIRSTPRIV */
 static int hex2bin(u8 *str, u8 *bin, unsigned int len)
 {
@@ -1501,6 +1509,7 @@ static int gelic_wl_priv_get_psk(struct net_device *net_dev,
 	pr_debug("%s:-> %d\n", __func__, data->data.length);
 	return 0;
 }
+#endif
 
 /* SIOCGIWNICKN */
 static int gelic_wl_get_nick(struct net_device *net_dev,
@@ -2351,6 +2360,7 @@ static const iw_handler gelic_wl_wext_handler[] =
 	IW_IOCTL(SIOCGIWNICKN)		= gelic_wl_get_nick,
 };
 
+#ifdef CONFIG_GELIC_WIRELESS_OLD_PSK_INTERFACE
 static struct iw_priv_args gelic_wl_private_args[] =
 {
 	{
@@ -2372,15 +2382,18 @@ static const iw_handler gelic_wl_private_handler[] =
 	gelic_wl_priv_set_psk,
 	gelic_wl_priv_get_psk,
 };
+#endif
 
 static const struct iw_handler_def gelic_wl_wext_handler_def = {
 	.num_standard		= ARRAY_SIZE(gelic_wl_wext_handler),
 	.standard		= gelic_wl_wext_handler,
 	.get_wireless_stats	= gelic_wl_get_wireless_stats,
+#ifdef CONFIG_GELIC_WIRELESS_OLD_PSK_INTERFACE
 	.num_private		= ARRAY_SIZE(gelic_wl_private_handler),
 	.num_private_args	= ARRAY_SIZE(gelic_wl_private_args),
 	.private		= gelic_wl_private_handler,
 	.private_args		= gelic_wl_private_args,
+#endif
 };
 
 static struct net_device *gelic_wl_alloc(struct gelic_card *card)

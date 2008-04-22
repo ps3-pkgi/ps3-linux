@@ -10,11 +10,7 @@ header-y += prctl.h
 header-y += ptrace-abi.h
 header-y += sigcontext32.h
 header-y += ucontext.h
-<<<<<<< HEAD:include/asm-x86/Kbuild
 header-y += processor-flags.h
-=======
-header-y += perfmon.h
->>>>>>> 8dfbcb00f75b74062a7e2a1a8172a766fac5c742:include/asm-x86/Kbuild
 
 unifdef-y += e820.h
 unifdef-y += ist.h

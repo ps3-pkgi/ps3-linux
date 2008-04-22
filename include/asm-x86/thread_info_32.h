@@ -102,8 +102,6 @@ static inline struct thread_info *current_thread_info(void)
 	__get_free_pages(GFP_KERNEL, get_order(THREAD_SIZE)))
 #endif
 
-#define free_thread_info(info)	free_pages((unsigned long)(info), get_order(THREAD_SIZE))
-
 #else /* !__ASSEMBLY__ */
 
 /* how to get the thread information struct from ASM */
@@ -135,7 +133,6 @@ static inline struct thread_info *current_thread_info(void)
 #define TIF_SECCOMP		7	/* secure computing */
 #define TIF_RESTORE_SIGMASK	8	/* restore signal mask in do_signal() */
 #define TIF_HRTICK_RESCHED	9	/* reprogram hrtick timer */
-#define TIF_PERFMON_WORK	10	/* work for pfm_handle_work() */
 #define TIF_MEMDIE		16
 #define TIF_DEBUG		17	/* uses debug registers */
 #define TIF_IO_BITMAP		18	/* uses I/O bitmap */
@@ -145,9 +142,7 @@ static inline struct thread_info *current_thread_info(void)
 #define TIF_DEBUGCTLMSR		22	/* uses thread_struct.debugctlmsr */
 #define TIF_DS_AREA_MSR 	23      /* uses thread_struct.ds_area_msr */
 #define TIF_BTS_TRACE_TS        24      /* record scheduling event timestamps */
-#define TIF_PERFMON_CTXSW	25	/* perfmon needs ctxsw calls */
 
-<<<<<<< HEAD:include/asm-x86/thread_info_32.h
 #define _TIF_SYSCALL_TRACE	(1 << TIF_SYSCALL_TRACE)
 #define _TIF_SIGPENDING		(1 << TIF_SIGPENDING)
 #define _TIF_NEED_RESCHED	(1 << TIF_NEED_RESCHED)
@@ -166,28 +161,6 @@ static inline struct thread_info *current_thread_info(void)
 #define _TIF_DEBUGCTLMSR	(1 << TIF_DEBUGCTLMSR)
 #define _TIF_DS_AREA_MSR	(1 << TIF_DS_AREA_MSR)
 #define _TIF_BTS_TRACE_TS	(1 << TIF_BTS_TRACE_TS)
-=======
-#define _TIF_SYSCALL_TRACE	(1<<TIF_SYSCALL_TRACE)
-#define _TIF_SIGPENDING		(1<<TIF_SIGPENDING)
-#define _TIF_NEED_RESCHED	(1<<TIF_NEED_RESCHED)
-#define _TIF_SINGLESTEP		(1<<TIF_SINGLESTEP)
-#define _TIF_IRET		(1<<TIF_IRET)
-#define _TIF_SYSCALL_EMU	(1<<TIF_SYSCALL_EMU)
-#define _TIF_SYSCALL_AUDIT	(1<<TIF_SYSCALL_AUDIT)
-#define _TIF_SECCOMP		(1<<TIF_SECCOMP)
-#define _TIF_RESTORE_SIGMASK	(1<<TIF_RESTORE_SIGMASK)
-#define _TIF_HRTICK_RESCHED	(1<<TIF_HRTICK_RESCHED)
-#define _TIF_DEBUG		(1<<TIF_DEBUG)
-#define _TIF_IO_BITMAP		(1<<TIF_IO_BITMAP)
-#define _TIF_FREEZE		(1<<TIF_FREEZE)
-#define _TIF_NOTSC		(1<<TIF_NOTSC)
-#define _TIF_FORCED_TF		(1<<TIF_FORCED_TF)
-#define _TIF_DEBUGCTLMSR	(1<<TIF_DEBUGCTLMSR)
-#define _TIF_DS_AREA_MSR	(1<<TIF_DS_AREA_MSR)
-#define _TIF_BTS_TRACE_TS	(1<<TIF_BTS_TRACE_TS)
-#define _TIF_PERFMON_WORK	(1<<TIF_PERFMON_WORK)
-#define _TIF_PERFMON_CTXSW	(1<<TIF_PERFMON_CTXSW)
->>>>>>> 8dfbcb00f75b74062a7e2a1a8172a766fac5c742:include/asm-x86/thread_info_32.h
 
 /* work to do on interrupt/exception return */
 #define _TIF_WORK_MASK							\
@@ -197,17 +170,12 @@ static inline struct thread_info *current_thread_info(void)
 #define _TIF_ALLWORK_MASK	(0x0000FFFF & ~_TIF_SECCOMP)
 
 /* flags to check in __switch_to() */
-<<<<<<< HEAD:include/asm-x86/thread_info_32.h
 #define _TIF_WORK_CTXSW						\
 	(_TIF_IO_BITMAP | _TIF_NOTSC | _TIF_DEBUGCTLMSR |	\
 	 _TIF_DS_AREA_MSR | _TIF_BTS_TRACE_TS)
-=======
-#define _TIF_WORK_CTXSW \
-    (_TIF_IO_BITMAP | _TIF_NOTSC | _TIF_DEBUGCTLMSR | \
-     _TIF_DS_AREA_MSR | _TIF_BTS_TRACE_TS | _TIF_PERFMON_CTXSW)
->>>>>>> 8dfbcb00f75b74062a7e2a1a8172a766fac5c742:include/asm-x86/thread_info_32.h
 #define _TIF_WORK_CTXSW_PREV _TIF_WORK_CTXSW
 #define _TIF_WORK_CTXSW_NEXT (_TIF_WORK_CTXSW | _TIF_DEBUG)
+
 
 /*
  * Thread-synchronous status.

@@ -1353,63 +1353,6 @@ breakpoint_trap:
 	ba,pt		%xcc, rtrap
 	 nop
 
-#if defined(CONFIG_SUNOS_EMUL) || defined(CONFIG_SOLARIS_EMUL) || \
-    defined(CONFIG_SOLARIS_EMUL_MODULE)
-	/* SunOS uses syscall zero as the 'indirect syscall' it looks
-	 * like indir_syscall(scall_num, arg0, arg1, arg2...);  etc.
-	 * This is complete brain damage.
-	 */
-	.globl	sunos_indir
-sunos_indir:
-	srl		%o0, 0, %o0
-	mov		%o7, %l4
-	cmp		%o0, NR_SYSCALLS
-	blu,a,pt	%icc, 1f
-	 sll		%o0, 0x2, %o0
-	sethi		%hi(sunos_nosys), %l6
-	b,pt		%xcc, 2f
-	 or		%l6, %lo(sunos_nosys), %l6
-1:	sethi		%hi(sunos_sys_table), %l7
-	or		%l7, %lo(sunos_sys_table), %l7
-	lduw		[%l7 + %o0], %l6
-2:	mov		%o1, %o0
-	mov		%o2, %o1
-	mov		%o3, %o2
-	mov		%o4, %o3
-	mov		%o5, %o4
-	call		%l6
-	 mov		%l4, %o7
-
-	.globl	sunos_getpid
-sunos_getpid:
-	call	sys_getppid
-	 nop
-	call	sys_getpid
-	 stx	%o0, [%sp + PTREGS_OFF + PT_V9_I1]
-	b,pt	%xcc, ret_sys_call
-	 stx	%o0, [%sp + PTREGS_OFF + PT_V9_I0]
-
-	/* SunOS getuid() returns uid in %o0 and euid in %o1 */
-	.globl	sunos_getuid
-sunos_getuid:
-	call	sys32_geteuid16
-	 nop
-	call	sys32_getuid16
-	 stx	%o0, [%sp + PTREGS_OFF + PT_V9_I1]
-	b,pt	%xcc, ret_sys_call
-	 stx	%o0, [%sp + PTREGS_OFF + PT_V9_I0]
-
-	/* SunOS getgid() returns gid in %o0 and egid in %o1 */
-	.globl	sunos_getgid
-sunos_getgid:
-	call	sys32_getegid16
-	 nop
-	call	sys32_getgid16
-	 stx	%o0, [%sp + PTREGS_OFF + PT_V9_I1]
-	b,pt	%xcc, ret_sys_call
-	 stx	%o0, [%sp + PTREGS_OFF + PT_V9_I0]
-#endif
-
 	/* SunOS's execv() call only specifies the argv argument, the
 	 * environment settings are the same as the calling processes.
 	 */
@@ -1533,8 +1476,24 @@ ret_from_syscall:
 		stb		%g0, [%g6 + TI_NEW_CHILD]
 		ldx		[%g6 + TI_FLAGS], %l0
 		call		schedule_tail
-		mov		%g7, %o0
-		ba,pt           %xcc, ret_sys_call
+		 mov		%g7, %o0
+		andcc		%l0, _TIF_PERFCTR, %g0
+		be,pt		%icc, 1f
+		 nop
+		ldx		[%g6 + TI_PCR], %o7
+		wr		%g0, %o7, %pcr
+
+		/* Blackbird errata workaround.  See commentary in
+		 * smp.c:smp_percpu_timer_interrupt() for more
+		 * information.
+		 */
+		ba,pt		%xcc, 99f
+		 nop
+		.align		64
+99:		wr		%g0, %g0, %pic
+		rd		%pic, %g0
+
+1:		b,pt		%xcc, ret_sys_call
 		 ldx		[%sp + PTREGS_OFF + PT_V9_I0], %o0
 sparc_exit:	rdpr		%pstate, %g2
 		wrpr		%g2, PSTATE_IE, %pstate
@@ -1575,7 +1534,7 @@ linux_syscall_trace:
 	 mov		%i4, %o4
 
 
-	/* Linux 32-bit and SunOS system calls enter here... */
+	/* Linux 32-bit system calls enter here... */
 	.align	32
 	.globl	linux_sparc_syscall32
 linux_sparc_syscall32:
@@ -1598,7 +1557,7 @@ linux_sparc_syscall32:
 	 srl		%i3, 0, %o3				! IEU0
 	ba,a,pt		%xcc, 3f
 
-	/* Linux native and SunOS system calls enter here... */
+	/* Linux native system calls enter here... */
 	.align	32
 	.globl	linux_sparc_syscall, ret_sys_call
 linux_sparc_syscall:
@@ -2615,44 +2574,3 @@ sun4v_mmu_demap_all:
 	retl
 	 nop
 	.size	sun4v_mmu_demap_all, .-sun4v_mmu_demap_all
-
-	.globl	sun4v_niagara_getperf
-	.type	sun4v_niagara_getperf,#function
-sun4v_niagara_getperf:
-	mov	%o0, %o4
-	mov	HV_FAST_GET_PERFREG, %o5
-	ta	HV_FAST_TRAP
-	stx	%o1, [%o4]
-	retl
-	 nop
-	.size	sun4v_niagara_getperf, .-sun4v_niagara_getperf
-
-	.globl	sun4v_niagara_setperf
-	.type	sun4v_niagara_setperf,#function
-sun4v_niagara_setperf:
-	mov	HV_FAST_SET_PERFREG, %o5
-	ta	HV_FAST_TRAP
-	retl
-	 nop
-	.size	sun4v_niagara_setperf, .-sun4v_niagara_setperf
-
-	.globl	sun4v_niagara2_getperf
-	.type	sun4v_niagara2_getperf,#function
-sun4v_niagara2_getperf:
-	mov	%o0, %o4
-	mov	HV_FAST_N2_GET_PERFREG, %o5
-	ta	HV_FAST_TRAP
-	stx	%o1, [%o4]
-	retl
-	 nop
-	.size	sun4v_niagara2_getperf, .-sun4v_niagara2_getperf
-
-	.globl	sun4v_niagara2_setperf
-	.type	sun4v_niagara2_setperf,#function
-sun4v_niagara2_setperf:
-	mov	HV_FAST_N2_SET_PERFREG, %o5
-	ta	HV_FAST_TRAP
-	retl
-	 nop
-	.size	sun4v_niagara2_setperf, .-sun4v_niagara2_setperf
-

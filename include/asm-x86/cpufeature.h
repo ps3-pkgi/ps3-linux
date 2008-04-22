@@ -185,12 +185,8 @@ extern const char * const x86_power_flags[32];
 #define cpu_has_clflush		boot_cpu_has(X86_FEATURE_CLFLSH)
 #define cpu_has_bts		boot_cpu_has(X86_FEATURE_BTS)
 #define cpu_has_gbpages		boot_cpu_has(X86_FEATURE_GBPAGES)
-<<<<<<< HEAD:include/asm-x86/cpufeature.h
 #define cpu_has_arch_perfmon	boot_cpu_has(X86_FEATURE_ARCH_PERFMON)
 #define cpu_has_pat		boot_cpu_has(X86_FEATURE_PAT)
-=======
-#define cpu_has_arch_perfmon 	boot_cpu_has(X86_FEATURE_ARCH_PERFMON)
->>>>>>> 8dfbcb00f75b74062a7e2a1a8172a766fac5c742:include/asm-x86/cpufeature.h
 
 #if defined(CONFIG_X86_INVLPG) || defined(CONFIG_X86_64)
 # define cpu_has_invlpg		1

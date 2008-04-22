@@ -174,7 +174,7 @@ cuboot*)
     *-mpc83*)
         platformo=$object/cuboot-83xx.o
         ;;
-    *-tqm8541|*-mpc8560*|*-tqm8560|*-tqm8555)
+    *-tqm8541|*-mpc8560*|*-tqm8560|*-tqm8555|*-ksi8560*)
         platformo=$object/cuboot-85xx-cpm2.o
         ;;
     *-mpc85*|*-tqm8540|*-sbc85*)
@@ -197,6 +197,10 @@ ep88xc|ep405|ep8248e)
     ;;
 adder875-redboot)
     platformo="$object/fixed-head.o $object/redboot-8xx.o"
+    binary=y
+    ;;
+simpleboot-virtex405-*)
+    platformo="$object/virtex405-head.o $object/simpleboot.o"
     binary=y
     ;;
 esac
@@ -226,10 +230,13 @@ if [ -n "$version" ]; then
     uboot_version="-n Linux-$version"
 fi
 
+# physical offset of kernel image
+membase=`${CROSS}objdump -p "$kernel" | grep -m 1 LOAD | awk '{print $7}'`
+
 case "$platform" in
 uboot)
     rm -f "$ofile"
-    mkimage -A ppc -O linux -T kernel -C gzip -a 00000000 -e 00000000 \
+    mkimage -A ppc -O linux -T kernel -C gzip -a $membase -e $membase \
 	$uboot_version -d "$vmz" "$ofile"
     if [ -z "$cacheit" ]; then
 	rm -f "$vmz"

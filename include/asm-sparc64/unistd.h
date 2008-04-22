@@ -334,32 +334,10 @@
 #define __NR_fallocate		314
 #define __NR_timerfd_settime	315
 #define __NR_timerfd_gettime	316
-#define __NR_pfm_create_context 317
-#define __NR_pfm_write_pmcs	318
-#define __NR_pfm_write_pmds	319
-#define __NR_pfm_read_pmds	310
-#define __NR_pfm_load_context	311
-#define __NR_pfm_start		322
-#define __NR_pfm_stop		323
-#define __NR_pfm_restart	324
-#define __NR_pfm_create_evtsets	325
-#define __NR_pfm_getinfo_evtsets 326
-#define __NR_pfm_delete_evtsets	327
-#define __NR_pfm_unload_context	328
 
-#define NR_SYSCALLS		329
+#define NR_SYSCALLS		317
 
 #ifdef __KERNEL__
-/* sysconf options, for SunOS compatibility */
-#define   _SC_ARG_MAX             1
-#define   _SC_CHILD_MAX           2
-#define   _SC_CLK_TCK             3
-#define   _SC_NGROUPS_MAX         4
-#define   _SC_OPEN_MAX            5
-#define   _SC_JOB_CONTROL         6
-#define   _SC_SAVED_IDS           7
-#define   _SC_VERSION             8
-
 #define __ARCH_WANT_IPC_PARSE_VERSION
 #define __ARCH_WANT_OLD_READDIR
 #define __ARCH_WANT_STAT64

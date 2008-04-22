@@ -22,11 +22,9 @@
 #include <linux/tty.h>
 #include <linux/binfmts.h>
 #include <linux/bitops.h>
-#include <linux/perfmon_kern.h>
 
 #include <asm/uaccess.h>
 #include <asm/ptrace.h>
-#include <asm/svr4.h>
 #include <asm/pgtable.h>
 #include <asm/fpumacro.h>
 #include <asm/uctx.h>
@@ -581,9 +579,6 @@ static void do_signal(struct pt_regs *regs, unsigned long orig_i0, int restart_s
 void do_notify_resume(struct pt_regs *regs, unsigned long orig_i0, int restart_syscall,
 		      unsigned long thread_info_flags)
 {
-	if (thread_info_flags & _TIF_PERFMON_WORK)
-		pfm_handle_work(regs);
-
 	if (thread_info_flags & (_TIF_SIGPENDING | _TIF_RESTORE_SIGMASK))
 		do_signal(regs, orig_i0, restart_syscall);
 }

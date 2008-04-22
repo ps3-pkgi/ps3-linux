@@ -621,6 +621,8 @@
 #define IW_ENCODE_EXT_RX_SEQ_VALID	0x00000002
 #define IW_ENCODE_EXT_GROUP_KEY		0x00000004
 #define IW_ENCODE_EXT_SET_TX_KEY	0x00000008
+#define IW_ENCODE_EXT_PMK		0x00000010
+#define IW_ENCODE_EXT_WPA_PASSPHRASE	0x00000020
 
 /* IWEVMICHAELMICFAILURE : struct iw_michaelmicfailure ->flags */
 #define IW_MICFAILURE_KEY_ID	0x00000003 /* Key ID 0..3 */
@@ -635,6 +637,7 @@
 #define IW_ENC_CAPA_WPA2	0x00000002
 #define IW_ENC_CAPA_CIPHER_TKIP	0x00000004
 #define IW_ENC_CAPA_CIPHER_CCMP	0x00000008
+#define IW_ENC_CAPA_4WAY_HANDSHAKE	0x00000010
 
 /* Event capability macros - in (struct iw_range *)->event_capa
  * Because we have more than 32 possible events, we use an array of
