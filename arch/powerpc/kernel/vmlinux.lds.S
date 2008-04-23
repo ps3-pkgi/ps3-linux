@@ -7,6 +7,8 @@
 #include <asm-generic/vmlinux.lds.h>
 #include <asm/cache.h>
 
+#define AT(_x)
+
 ENTRY(_stext)
 
 #ifdef CONFIG_PPC64
