@@ -1262,41 +1262,16 @@ static int gelic_wl_set_encodeext(struct net_device *netdev,
 	 * PSK set
 	 */
 	if (ext->ext_flags & IW_ENCODE_EXT_PMK) {
-		if (ext->ext_flags & IW_ENCODE_EXT_WPA_PASSPHRASE) {
-			/* WPA pass phrase */
-			pr_debug("%s: PSK by passphrase\n", __func__);
-			if (!ext->key_len) {
-				pr_err("%s: zero length passphrase\n", __func__);
-				ret = -EINVAL;
-				goto done;
-			}
-			if (ext->key_len != strnlen(ext->key, ext->key_len)) {
-				pr_err("%s: passphrase includes zero\n", __func__);
-				ret = -EINVAL;
-				goto done;
-			}
-			if (sizeof(wl->psk) < ext->key_len) {
-				pr_err("%s: passphrase is too long\n", __func__);
-				ret = -EINVAL;
-				goto done;
-			}
-			memset(wl->psk, 0, sizeof(wl->psk));
-			memcpy(wl->psk, ext->key, ext->key_len);
-			wl->psk_len = ext->key_len;
-			wl->psk_type = GELIC_EURUS_WPA_PSK_PASSPHRASE;
-		} else {
-			/* binary form */
-			pr_debug("%s: PSK by binary\n", __func__);
-			if (ext->key_len != WPA_PSK_LEN) {
-				pr_err("%s: PSK length wrong %d\n", __func__, ext->key_len);
-				ret = -EINVAL;
-				goto done;
-			}
-			memset(wl->psk, 0, sizeof(wl->psk));
-			memcpy(wl->psk, ext->key, ext->key_len);
-			wl->psk_len = ext->key_len;
-			wl->psk_type = GELIC_EURUS_WPA_PSK_BIN;
+		if (ext->key_len != WPA_PSK_LEN) {
+			pr_err("%s: PSK length wrong %d\n", __func__,
+			       ext->key_len);
+			ret = -EINVAL;
+			goto done;
 		}
+		memset(wl->psk, 0, sizeof(wl->psk));
+		memcpy(wl->psk, ext->key, ext->key_len);
+		wl->psk_len = ext->key_len;
+		wl->psk_type = GELIC_EURUS_WPA_PSK_BIN;
 		/* remember PSK configured */
 		set_bit(GELIC_WL_STAT_WPA_PSK_SET, &wl->stat);
 	}
