@@ -96,7 +96,7 @@ config MTD_PHRAM
 config MTD_PS3VRAM
 	tristate "PS3 video RAM"
 	help
-	  This driver allows you to use excess PS3 video RAM as non-volatile
+	  This driver allows you to use excess PS3 video RAM as volatile
 	  storage or system swap.
 
 config MTD_LART
