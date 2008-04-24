@@ -16,6 +16,7 @@
 #include <linux/version.h>
 #include <linux/gfp.h>
 #include <linux/delay.h>
+#include <linux/proc_fs.h>
 
 #include <asm/lv1call.h>
 #include <asm/ps3.h>
@@ -567,6 +568,52 @@ static struct ps3_system_bus_device fake_dev = {
 	.dev_type = PS3_DEVICE_TYPE_IOC0,
 };
 
+static int ps3vram_proc_read(char *buf, char **start, off_t offset,
+			     int count, int *eof, void *data)
+{
+	struct ps3vram_priv *priv = (struct ps3vram_priv *) data;
+	int len;
+	off_t end;
+	char tmp[256];
+
+	len = sprintf(tmp, "hit:%d\nmiss:%d\n",
+		      priv->cache.hit, priv->cache.miss);
+
+	*start = buf;
+
+	end = (off_t) count + offset;
+
+	if (end >= (off_t)len) {
+		*eof = 1;
+		count = ((off_t) len > offset) ?
+			(int) ((off_t) len - offset) : 0;
+	}
+
+	memcpy(buf, tmp + offset, count);
+
+	return count;
+}
+
+static void init_proc(void)
+{
+	struct proc_dir_entry *proc_file;
+
+	proc_file = create_proc_entry("ps3vram", 0644, NULL);
+	if (proc_file == NULL) {
+		printk(KERN_WARNING "failed to create /proc entry\n");
+		return;
+	}
+
+	proc_file->owner = THIS_MODULE;
+	proc_file->data = ps3vram_mtd.priv;
+	proc_file->read_proc = ps3vram_proc_read;
+}
+
+static void cleanup_proc(void)
+{
+	remove_proc_entry("ps3vram", NULL);
+}
+
 static void unregister_device(void)
 {
 	struct ps3vram_priv *priv;
@@ -575,6 +622,7 @@ static void unregister_device(void)
 	if (priv == NULL)
 		return;
 
+	cleanup_proc();
 	del_mtd_device(&ps3vram_mtd);
 	ps3vram_cache_cleanup(&ps3vram_mtd);
 	iounmap(priv->reports);
@@ -722,6 +770,7 @@ static int register_device(void)
 	}
 
 	ps3vram_cache_init(&ps3vram_mtd);
+	init_proc();
 
 	if (add_mtd_device(&ps3vram_mtd)) {
 		printk(KERN_ERR "ps3vram: failed to register device\n");
