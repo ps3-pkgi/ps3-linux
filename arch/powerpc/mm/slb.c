@@ -30,7 +30,7 @@
 #ifdef DEBUG
 #define DBG(fmt...) udbg_printf(fmt)
 #else
-#define DBG(fmt...) pr_debug(fmt)
+#define DBG pr_debug
 #endif
 
 extern void slb_allocate_realmode(unsigned long ea);
