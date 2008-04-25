@@ -616,12 +616,12 @@
 #define IW_ENCODE_ALG_WEP	1
 #define IW_ENCODE_ALG_TKIP	2
 #define IW_ENCODE_ALG_CCMP	3
+#define IW_ENCODE_ALG_PMK	4
 /* struct iw_encode_ext ->ext_flags */
 #define IW_ENCODE_EXT_TX_SEQ_VALID	0x00000001
 #define IW_ENCODE_EXT_RX_SEQ_VALID	0x00000002
 #define IW_ENCODE_EXT_GROUP_KEY		0x00000004
 #define IW_ENCODE_EXT_SET_TX_KEY	0x00000008
-#define IW_ENCODE_EXT_PMK		0x00000010
 
 /* IWEVMICHAELMICFAILURE : struct iw_michaelmicfailure ->flags */
 #define IW_MICFAILURE_KEY_ID	0x00000003 /* Key ID 0..3 */

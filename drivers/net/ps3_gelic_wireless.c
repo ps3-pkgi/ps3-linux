@@ -1257,11 +1257,7 @@ static int gelic_wl_set_encodeext(struct net_device *netdev,
 		set_bit(key_index, &wl->key_enabled);
 		/* remember wep info changed */
 		set_bit(GELIC_WL_STAT_CONFIGURED, &wl->stat);
-	}
-	/*
-	 * PSK set
-	 */
-	if (ext->ext_flags & IW_ENCODE_EXT_PMK) {
+	} else if (alg == IW_ENCODE_ALG_PMK) {
 		if (ext->key_len != WPA_PSK_LEN) {
 			pr_err("%s: PSK length wrong %d\n", __func__,
 			       ext->key_len);
