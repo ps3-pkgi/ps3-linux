@@ -4,20 +4,20 @@
  * Copyright (c) 2007-2008 Jim Paris <jim@jtan.com>
  * Added support RSX DMA Vivien Chappelier <vivien.chappelier@free.fr>
  */
-
-#include <asm/io.h>
+#define DEBUG
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/slab.h>
-#include <linux/mtd/mtd.h>
 #include <linux/version.h>
 #include <linux/gfp.h>
 #include <linux/delay.h>
+#include <linux/mtd/mtd.h>
 #include <linux/proc_fs.h>
 
+#include <asm/io.h>
 #include <asm/lv1call.h>
 #include <asm/ps3.h>
 
@@ -57,12 +57,7 @@ struct mtd_info ps3vram_mtd;
 #define CACHE_PAGE_PRESENT 1
 #define CACHE_PAGE_DIRTY   2
 
-#define dbg(fmt, args...)					\
-{								\
-	if(debug)						\
-		printk(KERN_INFO "%s:%d " fmt "\n",		\
-		       __FUNCTION__, __LINE__, ## args);	\
-} while(0)
+#define dbg(fmt, args...) pr_debug("%s:%d " fmt "\n", __func__, __LINE__, ## args)
 
 struct ps3vram_tag {
 	unsigned int address;
@@ -73,8 +68,8 @@ struct ps3vram_cache {
 	unsigned int page_count;
 	unsigned int page_size;
 	struct ps3vram_tag *tags;
-	int hit;
-	int miss;
+	unsigned int hit;
+	unsigned int miss;
 };
 
 struct ps3vram_priv {
@@ -104,10 +99,6 @@ struct ps3vram_priv {
 
 /* XXX: reserved space in GDDR RAM, used by framebuffer */
 #define SKIP_SIZE (16 * 1024 * 1024)
-
-int debug;
-module_param(debug, bool, 0);
-MODULE_PARM_DESC(debug, "debug mode");
 
 char *size = "256M";
 module_param(size, charp, 0);
@@ -145,11 +136,10 @@ static void ps3vram_dump_ring(struct mtd_info *mtd)
 	struct ps3vram_priv *priv = mtd->priv;
 	uint32_t *fifo;
 
-	printk("PUT = %08x GET = %08x\n",
-	       priv->ctrl[CTRL_PUT],
-	       priv->ctrl[CTRL_GET]);
+	pr_debug("PUT = %08x GET = %08x\n", priv->ctrl[CTRL_PUT],
+		priv->ctrl[CTRL_GET]);
 	for (fifo = priv->fifo_base; fifo < priv->fifo_ptr; fifo++) {
-		printk("%p: %08x\n", fifo, *fifo);
+		pr_debug("%p: %08x\n", fifo, *fifo);
 	}
 }
 
@@ -161,7 +151,7 @@ static void ps3vram_dump_reports(struct mtd_info *mtd)
 	for (i = 0; i < 16; i++) {
 		uint32_t *n = (uint32_t *) ((void *) priv->reports + 0x1000
 			+ 0x40 * i);
-		printk("%p: %08x\n", n, *n);
+		pr_debug("%p: %08x\n", n, *n);
 	}
 }
 
@@ -185,9 +175,9 @@ static int ps3vram_wait_ring(struct mtd_info *mtd, int timeout)
 		udelay(1);
 	}
 	if (timeout == 0) {
-		printk(KERN_ERR "FIFO timeout (%08x/%08x/%08x)\n",
-		       priv->ctrl[CTRL_PUT], priv->ctrl[CTRL_GET],
-				priv->ctrl[CTRL_TOP]);
+		pr_err("FIFO timeout (%08x/%08x/%08x)\n",
+			priv->ctrl[CTRL_PUT], priv->ctrl[CTRL_GET],
+			priv->ctrl[CTRL_TOP]);
 		return -ETIMEDOUT;
 	}
 
@@ -207,10 +197,8 @@ static void ps3vram_rewind_ring(struct mtd_info *mtd)
 	status = lv1_gpu_context_attribute(priv->context_handle,
 					   L1GPU_CONTEXT_ATTRIBUTE_FB_BLIT,
 					   0, 0, 0, 0);
-	if (status) {
-		printk(KERN_ERR
-		       "ps3vram: lv1_gpu_context_attribute FB_BLIT failed\n");
-	}
+	if (status)
+		pr_err("ps3vram: lv1_gpu_context_attribute FB_BLIT failed\n");
 
 	priv->fifo_ptr = priv->fifo_base;
 }
@@ -227,10 +215,8 @@ static void ps3vram_fire_ring(struct mtd_info *mtd)
 	status = lv1_gpu_context_attribute(priv->context_handle,
 					   L1GPU_CONTEXT_ATTRIBUTE_FB_BLIT,
 					   0, 0, 0, 0);
-	if (status) {
-		printk(KERN_ERR
-		       "ps3vram: lv1_gpu_context_attribute FB_BLIT failed\n");
-	}
+	if (status)
+		pr_err("ps3vram: lv1_gpu_context_attribute FB_BLIT failed\n");
 
 	if ((priv->fifo_ptr - priv->fifo_base) * 4 > FIFO_SIZE - 1024) {
 		dbg("fifo full, rewinding");
@@ -283,7 +269,7 @@ static int ps3vram_upload(struct mtd_info *mtd,
 	OUT_RING(0);
 	FIRE_RING();
 	if (ps3vram_notifier_wait(mtd, 200) < 0) {
-		printk(KERN_ERR "notifier timeout\n");
+		pr_err("notifier timeout\n");
 		ps3vram_dump_ring(mtd);
 		ps3vram_dump_reports(mtd);
 		return -1;
@@ -315,7 +301,7 @@ static int ps3vram_download(struct mtd_info *mtd,
 	OUT_RING(0);
 	FIRE_RING();
 	if (ps3vram_notifier_wait(mtd, 200) < 0) {
-		printk(KERN_ERR "notifier timeout\n");
+		pr_err("notifier timeout\n");
 		ps3vram_dump_ring(mtd);
 		ps3vram_dump_reports(mtd);
 		return -1;
@@ -337,8 +323,7 @@ static void ps3vram_cache_evict(struct mtd_info *mtd, int entry)
 				   priv->reserved + cache->tags[entry].address,
 				   DMA_PAGE_SIZE,
 				   cache->page_size / DMA_PAGE_SIZE) < 0) {
-			printk(KERN_ERR
-			       "failed to upload from 0x%x to 0x%x size 0x%x\n",
+			pr_err("failed to upload from 0x%x to 0x%x size 0x%x\n",
 			       entry * cache->page_size,
 			       priv->reserved + cache->tags[entry].address,
 			       cache->page_size);
@@ -359,8 +344,7 @@ static void ps3vram_cache_load(struct mtd_info *mtd, int entry,
 			     CACHE_OFFSET + entry * cache->page_size,
 			     DMA_PAGE_SIZE,
 			     cache->page_size / DMA_PAGE_SIZE) < 0) {
-		printk(KERN_ERR
-		       "failed to download from 0x%x to 0x%x size 0x%x\n",
+		pr_err("failed to download from 0x%x to 0x%x size 0x%x\n",
 		       priv->reserved + address,
 		       entry * cache->page_size,
 		       cache->page_size);
@@ -422,7 +406,7 @@ static int ps3vram_cache_init(struct mtd_info *mtd)
 {
 	struct ps3vram_priv *priv = mtd->priv;
 
-	printk(KERN_INFO "creating cache: %d entries, %d bytes pages\n",
+	pr_info("creating cache: %d entries, %d bytes pages\n",
 	       CACHE_PAGE_COUNT, CACHE_PAGE_SIZE);
 
 	priv->cache.page_count = CACHE_PAGE_COUNT;
@@ -576,17 +560,17 @@ static int ps3vram_proc_read(char *buf, char **start, off_t offset,
 	off_t end;
 	char tmp[256];
 
-	len = sprintf(tmp, "hit:%d\nmiss:%d\n",
+	len = sprintf(tmp, "hit:%u\nmiss:%u\n",
 		      priv->cache.hit, priv->cache.miss);
 
 	*start = buf;
 
-	end = (off_t) count + offset;
+	end = (off_t)count + offset;
 
 	if (end >= (off_t)len) {
 		*eof = 1;
-		count = ((off_t) len > offset) ?
-			(int) ((off_t) len - offset) : 0;
+		count = ((off_t)len > offset) ?
+			(int)((off_t)len - offset) : 0;
 	}
 
 	memcpy(buf, tmp + offset, count);
@@ -599,8 +583,9 @@ static void init_proc(void)
 	struct proc_dir_entry *proc_file;
 
 	proc_file = create_proc_entry("ps3vram", 0644, NULL);
-	if (proc_file == NULL) {
-		printk(KERN_WARNING "failed to create /proc entry\n");
+
+	if (!proc_file) {
+		pr_warning("failed to create /proc entry\n");
 		return;
 	}
 
@@ -634,7 +619,7 @@ static void unregister_device(void)
 	free_pages((unsigned long) priv->xdr_buf, get_order(XDR_BUF_SIZE));
 	kfree(priv);
 
-	printk(KERN_INFO "ps3vram mtd device unregistered\n");
+	pr_info("ps3vram mtd device unregistered\n");
 }
 
 static int register_device(void)
@@ -658,7 +643,7 @@ static int register_device(void)
 	priv->xdr_buf = (uint8_t *) __get_free_pages(GFP_KERNEL,
 						     get_order(XDR_BUF_SIZE));
 	if (priv->xdr_buf == NULL) {
-		printk(KERN_ERR "ps3vram: could not allocate XDR buffer\n");
+		pr_err("ps3vram: could not allocate XDR buffer\n");
 		ret = -ENOMEM;
 		goto out_free_priv;
 	}
@@ -669,7 +654,7 @@ static int register_device(void)
 
 	/* XXX: Need to open GPU, in case ps3fb or snd_ps3 aren't loaded */
 	if (ps3_open_hv_device(&fake_dev)) {
-		printk(KERN_ERR "ps3vram: ps3_open_hv_device failed\n");
+		pr_err("ps3vram: ps3_open_hv_device failed\n");
 		ret = -EAGAIN;
 		goto out_close_gpu;
 	}
@@ -689,11 +674,11 @@ static int register_device(void)
 		ddr_size -= 1024*1024;
 	}
 	if (status != 0 || ddr_size <= SKIP_SIZE) {
-		printk(KERN_ERR "ps3vram: lv1_gpu_memory_allocate failed\n");
+		pr_err("ps3vram: lv1_gpu_memory_allocate failed\n");
 		ret = -ENOMEM;
 		goto out_free_xdr_buf;
         }
-	printk(KERN_INFO "ps3vram: allocated %dMB of DDR memory\n",
+	pr_info("ps3vram: allocated %dMB of DDR memory\n",
 	       (unsigned int) (ddr_size / 1024 / 1024));
 
 	/* Request context */
@@ -705,7 +690,7 @@ static int register_device(void)
 					  &reports_lpar,
 					  &reports_size);
 	if (status) {
-		printk(KERN_ERR "ps3vram: lv1_gpu_context_allocate failed\n");
+		pr_err("ps3vram: lv1_gpu_context_allocate failed\n");
 		ret = -ENOMEM;
 		goto out_free_memory;
 	}
@@ -715,14 +700,14 @@ static int register_device(void)
 				       ps3_mm_phys_to_lpar(__pa(priv->xdr_buf)),
 				       XDR_BUF_SIZE, 0);
 	if (status) {
-		printk(KERN_ERR "ps3vram: lv1_gpu_context_iomap failed\n");
+		pr_err("ps3vram: lv1_gpu_context_iomap failed\n");
 		ret = -ENOMEM;
 		goto out_free_memory;
         }
 
 	priv->base = priv->real_base = ioremap(ddr_lpar, ddr_size);
 	if (!priv->real_base) {
-		printk(KERN_ERR "ps3vram: ioremap failed\n");
+		pr_err("ps3vram: ioremap failed\n");
 		ret = -ENOMEM;
 		goto out_free_context;
 	}
@@ -734,14 +719,14 @@ static int register_device(void)
 
 	priv->ctrl = ioremap(ctrl_lpar, 64 * 1024);
 	if (!priv->ctrl) {
-		printk(KERN_ERR "ps3vram: ioremap failed\n");
+		pr_err("ps3vram: ioremap failed\n");
 		ret = -ENOMEM;
 		goto out_unmap_vram;
 	}
 
 	priv->reports = ioremap(reports_lpar, reports_size);
 	if (!priv->reports) {
-		printk(KERN_ERR "ps3vram: ioremap failed\n");
+		pr_err("ps3vram: ioremap failed\n");
 		ret = -ENOMEM;
 		goto out_unmap_ctrl;
 	}
@@ -764,7 +749,7 @@ static int register_device(void)
 	ps3vram_bind(&ps3vram_mtd);
 
 	if (ps3vram_wait_ring(&ps3vram_mtd, 100) < 0) {
-		printk(KERN_ERR "failed to initialize channels\n");
+		pr_err("failed to initialize channels\n");
 		ret = -ETIMEDOUT;
 		goto out_unmap_reports;
 	}
@@ -773,12 +758,12 @@ static int register_device(void)
 	init_proc();
 
 	if (add_mtd_device(&ps3vram_mtd)) {
-		printk(KERN_ERR "ps3vram: failed to register device\n");
+		pr_err("ps3vram: failed to register device\n");
 		ret = -EAGAIN;
 		goto out_cache_cleanup;
 	}
 
-	printk(KERN_INFO "ps3vram mtd device registered, %ld bytes\n", ddr_size);
+	pr_info("ps3vram mtd device registered, %ld bytes\n", ddr_size);
 
 	return 0;
 
