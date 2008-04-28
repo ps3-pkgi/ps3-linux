@@ -5,6 +5,8 @@
  * Added support RSX DMA Vivien Chappelier <vivien.chappelier@free.fr>
  */
 #define DEBUG
+
+#include <linux/io.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
@@ -17,7 +19,6 @@
 #include <linux/mtd/mtd.h>
 #include <linux/proc_fs.h>
 
-#include <asm/io.h>
 #include <asm/lv1call.h>
 #include <asm/ps3.h>
 
@@ -39,11 +40,6 @@
 #define CTRL_GET 0x11
 #define CTRL_TOP 0x15
 
-#define BEGIN_RING(chan, tag, size) \
-	OUT_RING(((size) << 18) | ((chan) << 13) | (tag))
-#define OUT_RING(data) *(priv->fifo_ptr)++ = (data)
-#define FIRE_RING() ps3vram_fire_ring(mtd)
-
 #define UPLOAD_SUBCH	1
 #define DOWNLOAD_SUBCH	2
 
@@ -57,7 +53,8 @@ struct mtd_info ps3vram_mtd;
 #define CACHE_PAGE_PRESENT 1
 #define CACHE_PAGE_DIRTY   2
 
-#define dbg(fmt, args...) pr_debug("%s:%d " fmt "\n", __func__, __LINE__, ## args)
+#define dbg(fmt, args...)	\
+	pr_debug("%s:%d " fmt "\n", __func__, __LINE__, ## args)
 
 struct ps3vram_tag {
 	unsigned int address;
@@ -84,10 +81,12 @@ struct ps3vram_priv {
 	uint32_t *fifo_base;
 	uint32_t *fifo_ptr;
 
+	/* Amount of reserved RAM for framebuffer */
 	uint32_t reserved;
 
 	struct ps3vram_cache cache;
 
+	/* Used to serialize cache/DMA operations */
 	struct mutex lock;
 };
 
@@ -97,26 +96,30 @@ struct ps3vram_priv {
 
 #define NOTIFIER 8	/* notifier used for completion report */
 
-/* XXX: reserved space in GDDR RAM, used by framebuffer */
-#define SKIP_SIZE (16 * 1024 * 1024)
-
 char *size = "256M";
 module_param(size, charp, 0);
 MODULE_PARM_DESC(size, "memory size");
 
+static inline uint32_t *ps3vram_get_notifier(uint32_t *reports, int notifier)
+{
+	return (void *) reports +
+		DMA_NOTIFIER_OFFSET_BASE +
+		DMA_NOTIFIER_SIZE * notifier;
+}
+
 static void ps3vram_notifier_reset(struct mtd_info *mtd)
 {
+	int i;
 	struct ps3vram_priv *priv = mtd->priv;
-	uint32_t *notify = (uint32_t *) ((void *) priv->reports +
-		DMA_NOTIFIER_OFFSET_BASE + DMA_NOTIFIER_SIZE * NOTIFIER);
-	notify[0] = notify[1] = notify[2] = notify[3] = 0xffffffff;
+	uint32_t *notify = ps3vram_get_notifier(priv->reports, NOTIFIER);
+	for (i = 0; i < 4; i++)
+		notify[i] = 0xffffffff;
 }
 
 static int ps3vram_notifier_wait(struct mtd_info *mtd, int timeout_ms)
 {
 	struct ps3vram_priv *priv = mtd->priv;
-	uint32_t *notify = (uint32_t *) ((void *) priv->reports +
-		DMA_NOTIFIER_OFFSET_BASE + DMA_NOTIFIER_SIZE * NOTIFIER);
+	uint32_t *notify = ps3vram_get_notifier(priv->reports, NOTIFIER);
 
 	timeout_ms *= 1000;
 
@@ -126,7 +129,7 @@ static int ps3vram_notifier_wait(struct mtd_info *mtd, int timeout_ms)
 
 		if (timeout_ms)
 			udelay(1);
-	} while(timeout_ms--);
+	} while (timeout_ms--);
 
 	return -1;
 }
@@ -136,11 +139,10 @@ static void ps3vram_dump_ring(struct mtd_info *mtd)
 	struct ps3vram_priv *priv = mtd->priv;
 	uint32_t *fifo;
 
-	pr_debug("PUT = %08x GET = %08x\n", priv->ctrl[CTRL_PUT],
+	pr_info("PUT = %08x GET = %08x\n", priv->ctrl[CTRL_PUT],
 		priv->ctrl[CTRL_GET]);
-	for (fifo = priv->fifo_base; fifo < priv->fifo_ptr; fifo++) {
-		pr_debug("%p: %08x\n", fifo, *fifo);
-	}
+	for (fifo = priv->fifo_base; fifo < priv->fifo_ptr; fifo++)
+		pr_info("%p: %08x\n", fifo, *fifo);
 }
 
 static void ps3vram_dump_reports(struct mtd_info *mtd)
@@ -149,9 +151,8 @@ static void ps3vram_dump_reports(struct mtd_info *mtd)
 	int i;
 
 	for (i = 0; i < 16; i++) {
-		uint32_t *n = (uint32_t *) ((void *) priv->reports + 0x1000
-			+ 0x40 * i);
-		pr_debug("%p: %08x\n", n, *n);
+		uint32_t *n = ps3vram_get_notifier(priv->reports, i);
+		pr_info("%p: %08x\n", n, *n);
 	}
 }
 
@@ -175,13 +176,23 @@ static int ps3vram_wait_ring(struct mtd_info *mtd, int timeout)
 		udelay(1);
 	}
 	if (timeout == 0) {
-		pr_err("FIFO timeout (%08x/%08x/%08x)\n",
-			priv->ctrl[CTRL_PUT], priv->ctrl[CTRL_GET],
-			priv->ctrl[CTRL_TOP]);
+		pr_err("FIFO timeout (%08x/%08x/%08x)\n", priv->ctrl[CTRL_PUT],
+		       priv->ctrl[CTRL_GET], priv->ctrl[CTRL_TOP]);
 		return -ETIMEDOUT;
 	}
 
-        return 0;
+	return 0;
+}
+
+static inline void ps3vram_out_ring(struct ps3vram_priv *priv, uint32_t data)
+{
+	*(priv->fifo_ptr)++ = data;
+}
+
+static inline void ps3vram_begin_ring(struct ps3vram_priv *priv, uint32_t chan,
+				      uint32_t tag, uint32_t size)
+{
+	ps3vram_out_ring(priv, (size << 18) | (chan << 13) | tag);
 }
 
 static void ps3vram_rewind_ring(struct mtd_info *mtd)
@@ -189,7 +200,7 @@ static void ps3vram_rewind_ring(struct mtd_info *mtd)
 	struct ps3vram_priv *priv = mtd->priv;
 	u64 status;
 
-	OUT_RING(0x20000000 | (FIFO_BASE + FIFO_OFFSET));
+	ps3vram_out_ring(priv, 0x20000000 | (FIFO_BASE + FIFO_OFFSET));
 
 	priv->ctrl[CTRL_PUT] = FIFO_BASE + FIFO_OFFSET;
 
@@ -209,7 +220,7 @@ static void ps3vram_fire_ring(struct mtd_info *mtd)
 	u64 status;
 
 	priv->ctrl[CTRL_PUT] = FIFO_BASE + FIFO_OFFSET +
-		(priv->fifo_ptr - priv->fifo_base) * 4;
+		(priv->fifo_ptr - priv->fifo_base) * sizeof(uint32_t);
 
 	/* asking the HV for a blit will kick the fifo */
 	status = lv1_gpu_context_attribute(priv->context_handle,
@@ -218,7 +229,8 @@ static void ps3vram_fire_ring(struct mtd_info *mtd)
 	if (status)
 		pr_err("ps3vram: lv1_gpu_context_attribute FB_BLIT failed\n");
 
-	if ((priv->fifo_ptr - priv->fifo_base) * 4 > FIFO_SIZE - 1024) {
+	if ((priv->fifo_ptr - priv->fifo_base) * sizeof(uint32_t) >
+	    FIFO_SIZE - 1024) {
 		dbg("fifo full, rewinding");
 		ps3vram_wait_ring(mtd, 200);
 		ps3vram_rewind_ring(mtd);
@@ -229,45 +241,46 @@ static void ps3vram_bind(struct mtd_info *mtd)
 {
 	struct ps3vram_priv *priv = mtd->priv;
 
-	BEGIN_RING(UPLOAD_SUBCH, 0, 1);
-	OUT_RING(0x31337303);
-	BEGIN_RING(UPLOAD_SUBCH, 0x180, 3);
-	OUT_RING(DMA_NOTIFIER_HANDLE_BASE + NOTIFIER);      // DMA notifier
-	OUT_RING(0xfeed0001);      // DMA source from DMA system RAM instance
-	OUT_RING(0xfeed0000);      // DMA dest to DMA video RAM instance
+	ps3vram_begin_ring(priv, UPLOAD_SUBCH, 0, 1);
+	ps3vram_out_ring(priv, 0x31337303);
+	ps3vram_begin_ring(priv, UPLOAD_SUBCH, 0x180, 3);
+	ps3vram_out_ring(priv, DMA_NOTIFIER_HANDLE_BASE + NOTIFIER);
+	ps3vram_out_ring(priv, 0xfeed0001);	/* DMA system RAM instance */
+	ps3vram_out_ring(priv, 0xfeed0000);     /* DMA video RAM instance */
 
-	BEGIN_RING(DOWNLOAD_SUBCH, 0, 1);
-	OUT_RING(0x3137c0de);
-	BEGIN_RING(DOWNLOAD_SUBCH, 0x180, 3);
-	OUT_RING(DMA_NOTIFIER_HANDLE_BASE + NOTIFIER);      // DMA notifier
-	OUT_RING(0xfeed0000);      // DMA dest to DMA video RAM instance
-	OUT_RING(0xfeed0001);      // DMA source from DMA system RAM instance
+	ps3vram_begin_ring(priv, DOWNLOAD_SUBCH, 0, 1);
+	ps3vram_out_ring(priv, 0x3137c0de);
+	ps3vram_begin_ring(priv, DOWNLOAD_SUBCH, 0x180, 3);
+	ps3vram_out_ring(priv, DMA_NOTIFIER_HANDLE_BASE + NOTIFIER);
+	ps3vram_out_ring(priv, 0xfeed0000);	/* DMA video RAM instance */
+	ps3vram_out_ring(priv, 0xfeed0001);	/* DMA system RAM instance */
 
-	FIRE_RING();
+	ps3vram_fire_ring(mtd);
 }
 
-static int ps3vram_upload(struct mtd_info *mtd,
-			  unsigned int src_offset,
+static int ps3vram_upload(struct mtd_info *mtd, unsigned int src_offset,
 			  unsigned int dst_offset, int len, int count)
 {
 	struct ps3vram_priv *priv = mtd->priv;
 
-	BEGIN_RING(UPLOAD_SUBCH, NV_MEMORY_TO_MEMORY_FORMAT_OFFSET_IN, 8);
-	OUT_RING(XDR_IOIF + src_offset);
-	OUT_RING(dst_offset);
-	OUT_RING(len);
-	OUT_RING(len);
-	OUT_RING(len);
-	OUT_RING(count);
-	OUT_RING((1 << 8) | 1);
-	OUT_RING(0);
+	ps3vram_begin_ring(priv, UPLOAD_SUBCH,
+			   NV_MEMORY_TO_MEMORY_FORMAT_OFFSET_IN, 8);
+	ps3vram_out_ring(priv, XDR_IOIF + src_offset);
+	ps3vram_out_ring(priv, dst_offset);
+	ps3vram_out_ring(priv, len);
+	ps3vram_out_ring(priv, len);
+	ps3vram_out_ring(priv, len);
+	ps3vram_out_ring(priv, count);
+	ps3vram_out_ring(priv, (1 << 8) | 1);
+	ps3vram_out_ring(priv, 0);
 
 	ps3vram_notifier_reset(mtd);
-	BEGIN_RING(UPLOAD_SUBCH, NV_MEMORY_TO_MEMORY_FORMAT_NOTIFY, 1);
-	OUT_RING(0);
-	BEGIN_RING(UPLOAD_SUBCH, 0x100, 1);
-	OUT_RING(0);
-	FIRE_RING();
+	ps3vram_begin_ring(priv, UPLOAD_SUBCH,
+			   NV_MEMORY_TO_MEMORY_FORMAT_NOTIFY, 1);
+	ps3vram_out_ring(priv, 0);
+	ps3vram_begin_ring(priv, UPLOAD_SUBCH, 0x100, 1);
+	ps3vram_out_ring(priv, 0);
+	ps3vram_fire_ring(mtd);
 	if (ps3vram_notifier_wait(mtd, 200) < 0) {
 		pr_err("notifier timeout\n");
 		ps3vram_dump_ring(mtd);
@@ -278,28 +291,29 @@ static int ps3vram_upload(struct mtd_info *mtd,
 	return 0;
 }
 
-static int ps3vram_download(struct mtd_info *mtd,
-			    unsigned int src_offset,
+static int ps3vram_download(struct mtd_info *mtd, unsigned int src_offset,
 			    unsigned int dst_offset, int len, int count)
 {
 	struct ps3vram_priv *priv = mtd->priv;
 
-	BEGIN_RING(DOWNLOAD_SUBCH, NV_MEMORY_TO_MEMORY_FORMAT_OFFSET_IN, 8);
-	OUT_RING(src_offset);
-	OUT_RING(XDR_IOIF + dst_offset);
-	OUT_RING(len);
-	OUT_RING(len);
-	OUT_RING(len);
-	OUT_RING(count);
-	OUT_RING((1 << 8) | 1);
-	OUT_RING(0);
+	ps3vram_begin_ring(priv, DOWNLOAD_SUBCH,
+			   NV_MEMORY_TO_MEMORY_FORMAT_OFFSET_IN, 8);
+	ps3vram_out_ring(priv, src_offset);
+	ps3vram_out_ring(priv, XDR_IOIF + dst_offset);
+	ps3vram_out_ring(priv, len);
+	ps3vram_out_ring(priv, len);
+	ps3vram_out_ring(priv, len);
+	ps3vram_out_ring(priv, count);
+	ps3vram_out_ring(priv, (1 << 8) | 1);
+	ps3vram_out_ring(priv, 0);
 
 	ps3vram_notifier_reset(mtd);
-	BEGIN_RING(DOWNLOAD_SUBCH, NV_MEMORY_TO_MEMORY_FORMAT_NOTIFY, 1);
-	OUT_RING(0);
-	BEGIN_RING(DOWNLOAD_SUBCH, 0x100, 1);
-	OUT_RING(0);
-	FIRE_RING();
+	ps3vram_begin_ring(priv, DOWNLOAD_SUBCH,
+			   NV_MEMORY_TO_MEMORY_FORMAT_NOTIFY, 1);
+	ps3vram_out_ring(priv, 0);
+	ps3vram_begin_ring(priv, DOWNLOAD_SUBCH, 0x100, 1);
+	ps3vram_out_ring(priv, 0);
+	ps3vram_fire_ring(mtd);
 	if (ps3vram_notifier_wait(mtd, 200) < 0) {
 		pr_err("notifier timeout\n");
 		ps3vram_dump_ring(mtd);
@@ -316,8 +330,7 @@ static void ps3vram_cache_evict(struct mtd_info *mtd, int entry)
 	struct ps3vram_cache *cache = &priv->cache;
 
 	if (cache->tags[entry].flags & CACHE_PAGE_DIRTY) {
-		dbg("flushing %d : 0x%08x",
-		    entry, (unsigned int) cache->tags[entry].address);
+		dbg("flushing %d : 0x%08x", entry, cache->tags[entry].address);
 		if (ps3vram_upload(mtd,
 				   CACHE_OFFSET + entry * cache->page_size,
 				   priv->reserved + cache->tags[entry].address,
@@ -333,7 +346,7 @@ static void ps3vram_cache_evict(struct mtd_info *mtd, int entry)
 }
 
 static void ps3vram_cache_load(struct mtd_info *mtd, int entry,
-	unsigned int address)
+			       unsigned int address)
 {
 	struct ps3vram_priv *priv = mtd->priv;
 	struct ps3vram_cache *cache = &priv->cache;
@@ -375,7 +388,7 @@ static unsigned int ps3vram_cache_match(struct mtd_info *mtd, loff_t address)
 	unsigned int base;
 	unsigned int offset;
 	int i;
-	static int counter = 0;
+	static int counter;
 
 	offset = (unsigned int) (address & (cache->page_size - 1));
 	base = (unsigned int) (address - offset);
@@ -414,7 +427,7 @@ static int ps3vram_cache_init(struct mtd_info *mtd)
 	priv->cache.tags = kzalloc(sizeof(struct ps3vram_tag) *
 				   CACHE_PAGE_COUNT, GFP_KERNEL);
 	if (priv->cache.tags == NULL) {
-		printk(KERN_ERR "could not allocate cache tags\n");
+		pr_err("could not allocate cache tags\n");
 		return -ENOMEM;
 	}
 
@@ -433,33 +446,32 @@ static int ps3vram_erase(struct mtd_info *mtd, struct erase_info *instr)
 {
 	struct ps3vram_priv *priv = mtd->priv;
 
-        if (instr->addr + instr->len > mtd->size)
-                return -EINVAL;
+	if (instr->addr + instr->len > mtd->size)
+		return -EINVAL;
 
 	mutex_lock(&priv->lock);
 
 	ps3vram_cache_flush(mtd);
 
-        /* Set bytes to 0xFF */
-        memset(priv->base + instr->addr, 0xFF, instr->len);
+	/* Set bytes to 0xFF */
+	memset(priv->base + instr->addr, 0xFF, instr->len);
 
 	mutex_unlock(&priv->lock);
 
-        instr->state = MTD_ERASE_DONE;
-        mtd_erase_callback(instr);
+	instr->state = MTD_ERASE_DONE;
+	mtd_erase_callback(instr);
 
-        return 0;
+	return 0;
 }
 
 
 static int ps3vram_read(struct mtd_info *mtd, loff_t from, size_t len,
-                size_t *retlen, u_char *buf)
+			size_t *retlen, u_char *buf)
 {
 	struct ps3vram_priv *priv = mtd->priv;
 	unsigned int cached, count;
 
-	dbg("from = 0x%08x len = 0x%x",
-	    (unsigned int) from, (unsigned int) len);
+	dbg("from = 0x%08x len = 0x%zx", (unsigned int) from, len);
 
 	if (from >= mtd->size)
 		return -EINVAL;
@@ -467,7 +479,7 @@ static int ps3vram_read(struct mtd_info *mtd, loff_t from, size_t len,
 	if (len > mtd->size - from)
 		len = mtd->size - from;
 
-        /* Copy from vram to buf */
+	/* Copy from vram to buf */
 	count = len;
 	while (count) {
 		unsigned int offset, avail;
@@ -481,9 +493,8 @@ static int ps3vram_read(struct mtd_info *mtd, loff_t from, size_t len,
 		entry = ps3vram_cache_match(mtd, from);
 		cached = CACHE_OFFSET + entry * priv->cache.page_size + offset;
 
-		dbg("from=%08x cached=%08x offset=%08x avail=%08x "
-			"count=%08x", (unsigned ) from, cached, offset, avail,
-			(unsigned) count);
+		dbg("from=%08x cached=%08x offset=%08x avail=%08x count=%08x",
+		    (unsigned)from, cached, offset, avail, count);
 
 		if (avail > count)
 			avail = count;
@@ -496,12 +507,12 @@ static int ps3vram_read(struct mtd_info *mtd, loff_t from, size_t len,
 		from += avail;
 	}
 
-        *retlen = len;
-        return 0;
+	*retlen = len;
+	return 0;
 }
 
 static int ps3vram_write(struct mtd_info *mtd, loff_t to, size_t len,
-                size_t *retlen, const u_char *buf)
+			 size_t *retlen, const u_char *buf)
 {
 	struct ps3vram_priv *priv = mtd->priv;
 	unsigned int cached, count;
@@ -527,7 +538,7 @@ static int ps3vram_write(struct mtd_info *mtd, loff_t to, size_t len,
 		cached = CACHE_OFFSET + entry * priv->cache.page_size + offset;
 
 		dbg("to=%08x cached=%08x offset=%08x avail=%08x count=%08x",
-		    (unsigned ) to, cached, offset, avail, (unsigned) count);
+		    (unsigned) to, cached, offset, avail, count);
 
 		if (avail > count)
 			avail = count;
@@ -542,8 +553,8 @@ static int ps3vram_write(struct mtd_info *mtd, loff_t to, size_t len,
 		to += avail;
 	}
 
-        *retlen = len;
-        return 0;
+	*retlen = len;
+	return 0;
 }
 
 /* XXX: Fake structure so we can call ps3_{open,close}_hv_device */
@@ -594,35 +605,7 @@ static void init_proc(void)
 	proc_file->read_proc = ps3vram_proc_read;
 }
 
-static void cleanup_proc(void)
-{
-	remove_proc_entry("ps3vram", NULL);
-}
-
-static void unregister_device(void)
-{
-	struct ps3vram_priv *priv;
-
-	priv = ps3vram_mtd.priv;
-	if (priv == NULL)
-		return;
-
-	cleanup_proc();
-	del_mtd_device(&ps3vram_mtd);
-	ps3vram_cache_cleanup(&ps3vram_mtd);
-	iounmap(priv->reports);
-	iounmap(priv->ctrl);
-	iounmap(priv->real_base);
-	lv1_gpu_context_free(priv->context_handle);
-	lv1_gpu_memory_free(priv->memory_handle);
-	ps3_close_hv_device(&fake_dev);
-	free_pages((unsigned long) priv->xdr_buf, get_order(XDR_BUF_SIZE));
-	kfree(priv);
-
-	pr_info("ps3vram mtd device unregistered\n");
-}
-
-static int register_device(void)
+static int __init init_ps3vram(void)
 {
 	struct ps3vram_priv *priv;
 	uint64_t status;
@@ -649,8 +632,8 @@ static int register_device(void)
 	}
 
 	/* Put FIFO at begginning of XDR buffer */
-	priv->fifo_base = priv->fifo_ptr =
-		(uint32_t *) (priv->xdr_buf + FIFO_OFFSET);
+	priv->fifo_base = (uint32_t *) (priv->xdr_buf + FIFO_OFFSET);
+	priv->fifo_ptr = priv->fifo_base;
 
 	/* XXX: Need to open GPU, in case ps3fb or snd_ps3 aren't loaded */
 	if (ps3_open_hv_device(&fake_dev)) {
@@ -662,24 +645,25 @@ static int register_device(void)
 	/* Request memory */
 	status = -1;
 	ddr_size = memparse(size, &rest);
-	if (ddr_size < SKIP_SIZE)
-		ddr_size = SKIP_SIZE;
-	ddr_size = (ddr_size + 1024 * 1024 - 1) & ~(1024 * 1024 - 1);
+	if (ddr_size < ps3fb_videomemory.size)
+		ddr_size = ps3fb_videomemory.size;
+	ddr_size = ALIGN(ddr_size, 1024*1024);
 
-	while (ddr_size > SKIP_SIZE) {
+	while (ddr_size > ps3fb_videomemory.size) {
 		status = lv1_gpu_memory_allocate(ddr_size, 0, 0, 0, 0,
-					 &priv->memory_handle, &ddr_lpar);
+						 &priv->memory_handle,
+						 &ddr_lpar);
 		if (status == 0)
 			break;
 		ddr_size -= 1024*1024;
 	}
-	if (status != 0 || ddr_size <= SKIP_SIZE) {
+	if (status != 0 || ddr_size <= ps3fb_videomemory.size) {
 		pr_err("ps3vram: lv1_gpu_memory_allocate failed\n");
 		ret = -ENOMEM;
 		goto out_free_xdr_buf;
-        }
-	pr_info("ps3vram: allocated %dMB of DDR memory\n",
-	       (unsigned int) (ddr_size / 1024 / 1024));
+	}
+	pr_info("ps3vram: allocated %u MiB of DDR memory\n",
+		(unsigned int) (ddr_size / 1024 / 1024));
 
 	/* Request context */
 	status = lv1_gpu_context_allocate(priv->memory_handle,
@@ -703,9 +687,9 @@ static int register_device(void)
 		pr_err("ps3vram: lv1_gpu_context_iomap failed\n");
 		ret = -ENOMEM;
 		goto out_free_memory;
-        }
+	}
 
-	priv->base = priv->real_base = ioremap(ddr_lpar, ddr_size);
+	priv->real_base = ioremap(ddr_lpar, ddr_size);
 	if (!priv->real_base) {
 		pr_err("ps3vram: ioremap failed\n");
 		ret = -ENOMEM;
@@ -713,8 +697,8 @@ static int register_device(void)
 	}
 
 	/* XXX: Skip beginning GDDR ram that might belong to the framebuffer. */
-	priv->reserved = SKIP_SIZE;
-	priv->base += priv->reserved;
+	priv->reserved = ps3fb_videomemory.size;
+	priv->base = priv->real_base + priv->reserved;
 	ddr_size -= priv->reserved;
 
 	priv->ctrl = ioremap(ctrl_lpar, 64 * 1024);
@@ -763,8 +747,7 @@ static int register_device(void)
 		goto out_cache_cleanup;
 	}
 
-	pr_info("ps3vram mtd device registered, %ld bytes\n", ddr_size);
-
+	pr_info("ps3vram mtd device registered, %lu bytes\n", ddr_size);
 	return 0;
 
 out_cache_cleanup:
@@ -790,14 +773,27 @@ out:
 	return ret;
 }
 
-static int __init init_ps3vram(void)
-{
-	return register_device();
-}
-
 static void __exit cleanup_ps3vram(void)
 {
-	unregister_device();
+	struct ps3vram_priv *priv;
+
+	priv = ps3vram_mtd.priv;
+	if (priv == NULL)
+		return;
+
+	remove_proc_entry("ps3vram", NULL);
+	del_mtd_device(&ps3vram_mtd);
+	ps3vram_cache_cleanup(&ps3vram_mtd);
+	iounmap(priv->reports);
+	iounmap(priv->ctrl);
+	iounmap(priv->real_base);
+	lv1_gpu_context_free(priv->context_handle);
+	lv1_gpu_memory_free(priv->memory_handle);
+	ps3_close_hv_device(&fake_dev);
+	free_pages((unsigned long) priv->xdr_buf, get_order(XDR_BUF_SIZE));
+	kfree(priv);
+
+	pr_info("ps3vram mtd device unregistered\n");
 }
 
 module_init(init_ps3vram);
