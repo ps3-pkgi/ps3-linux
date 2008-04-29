@@ -574,8 +574,8 @@ static int smack_inode_getattr(struct vfsmount *mnt, struct dentry *dentry)
  *
  * Returns 0 if access is permitted, an error code otherwise
  */
-static int smack_inode_setxattr(struct dentry *dentry, char *name,
-				void *value, size_t size, int flags)
+static int smack_inode_setxattr(struct dentry *dentry, const char *name,
+				const void *value, size_t size, int flags)
 {
 	int rc = 0;
 
@@ -604,8 +604,8 @@ static int smack_inode_setxattr(struct dentry *dentry, char *name,
  * Set the pointer in the inode blob to the entry found
  * in the master label list.
  */
-static void smack_inode_post_setxattr(struct dentry *dentry, char *name,
-				      void *value, size_t size, int flags)
+static void smack_inode_post_setxattr(struct dentry *dentry, const char *name,
+				      const void *value, size_t size, int flags)
 {
 	struct inode_smack *isp;
 	char *nsp;
@@ -641,7 +641,7 @@ static void smack_inode_post_setxattr(struct dentry *dentry, char *name,
  *
  * Returns 0 if access is permitted, an error code otherwise
  */
-static int smack_inode_getxattr(struct dentry *dentry, char *name)
+static int smack_inode_getxattr(struct dentry *dentry, const char *name)
 {
 	return smk_curacc(smk_of_inode(dentry->d_inode), MAY_READ);
 }
@@ -655,7 +655,7 @@ static int smack_inode_getxattr(struct dentry *dentry, char *name)
  *
  * Returns 0 if access is permitted, an error code otherwise
  */
-static int smack_inode_removexattr(struct dentry *dentry, char *name)
+static int smack_inode_removexattr(struct dentry *dentry, const char *name)
 {
 	int rc = 0;
 
@@ -1242,7 +1242,7 @@ static void smack_set_catset(char *catset, struct netlbl_lsm_secattr *sap)
 	int rc;
 	int byte;
 
-	if (catset == 0)
+	if (!catset)
 		return;
 
 	sap->flags |= NETLBL_SECATTR_MLS_CAT;
@@ -2495,6 +2495,7 @@ struct security_operations smack_ops = {
 	.task_wait = 			smack_task_wait,
 	.task_reparent_to_init =	cap_task_reparent_to_init,
 	.task_to_inode = 		smack_task_to_inode,
+	.task_prctl =			cap_task_prctl,
 
 	.ipc_permission = 		smack_ipc_permission,
 
