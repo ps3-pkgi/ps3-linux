@@ -73,16 +73,12 @@ struct ps3vram_priv {
 	uint64_t memory_handle;
 	uint64_t context_handle;
 	uint8_t *base;
-	uint8_t *real_base;
 	uint32_t *ctrl;
 	uint32_t *reports;
 	uint8_t *xdr_buf;
 
 	uint32_t *fifo_base;
 	uint32_t *fifo_ptr;
-
-	/* Amount of reserved RAM for framebuffer */
-	uint32_t reserved;
 
 	struct ps3vram_cache cache;
 
@@ -96,7 +92,8 @@ struct ps3vram_priv {
 
 #define NOTIFIER 8	/* notifier used for completion report */
 
-char *size = "256M";
+/* A trailing '-' means to subtract off ps3fb_videomemory.size */
+char *size = "256M-";
 module_param(size, charp, 0);
 MODULE_PARM_DESC(size, "memory size");
 
@@ -333,12 +330,12 @@ static void ps3vram_cache_evict(struct mtd_info *mtd, int entry)
 		dbg("flushing %d : 0x%08x", entry, cache->tags[entry].address);
 		if (ps3vram_upload(mtd,
 				   CACHE_OFFSET + entry * cache->page_size,
-				   priv->reserved + cache->tags[entry].address,
+				   cache->tags[entry].address,
 				   DMA_PAGE_SIZE,
 				   cache->page_size / DMA_PAGE_SIZE) < 0) {
 			pr_err("failed to upload from 0x%x to 0x%x size 0x%x\n",
 			       entry * cache->page_size,
-			       priv->reserved + cache->tags[entry].address,
+			       cache->tags[entry].address,
 			       cache->page_size);
 		}
 		cache->tags[entry].flags &= ~CACHE_PAGE_DIRTY;
@@ -353,12 +350,12 @@ static void ps3vram_cache_load(struct mtd_info *mtd, int entry,
 
 	dbg("fetching %d : 0x%08x", entry, address);
 	if (ps3vram_download(mtd,
-			     priv->reserved + address,
+			     address,
 			     CACHE_OFFSET + entry * cache->page_size,
 			     DMA_PAGE_SIZE,
 			     cache->page_size / DMA_PAGE_SIZE) < 0) {
 		pr_err("failed to download from 0x%x to 0x%x size 0x%x\n",
-		       priv->reserved + address,
+		       address,
 		       entry * cache->page_size,
 		       cache->page_size);
 	}
@@ -609,7 +606,8 @@ static int __init init_ps3vram(void)
 {
 	struct ps3vram_priv *priv;
 	uint64_t status;
-	uint64_t ddr_lpar, ddr_size, ctrl_lpar, info_lpar, reports_lpar;
+	uint64_t ddr_lpar, ctrl_lpar, info_lpar, reports_lpar;
+	int64_t ddr_size;
 	uint64_t reports_size;
 	int ret = -ENOMEM;
 	char *rest;
@@ -645,11 +643,16 @@ static int __init init_ps3vram(void)
 	/* Request memory */
 	status = -1;
 	ddr_size = memparse(size, &rest);
-	if (ddr_size < ps3fb_videomemory.size)
-		ddr_size = ps3fb_videomemory.size;
+	if (*rest == '-')
+		ddr_size -= ps3fb_videomemory.size;
 	ddr_size = ALIGN(ddr_size, 1024*1024);
+	if (ddr_size <= 0) {
+		printk(KERN_ERR "ps3vram: specified size is too small\n");
+		ret = -EINVAL;
+		goto out_close_gpu;
+	}
 
-	while (ddr_size > ps3fb_videomemory.size) {
+	while (ddr_size > 0) {
 		status = lv1_gpu_memory_allocate(ddr_size, 0, 0, 0, 0,
 						 &priv->memory_handle,
 						 &ddr_lpar);
@@ -657,7 +660,7 @@ static int __init init_ps3vram(void)
 			break;
 		ddr_size -= 1024*1024;
 	}
-	if (status != 0 || ddr_size <= ps3fb_videomemory.size) {
+	if (status != 0 || ddr_size <= 0) {
 		pr_err("ps3vram: lv1_gpu_memory_allocate failed\n");
 		ret = -ENOMEM;
 		goto out_free_xdr_buf;
@@ -686,20 +689,15 @@ static int __init init_ps3vram(void)
 	if (status) {
 		pr_err("ps3vram: lv1_gpu_context_iomap failed\n");
 		ret = -ENOMEM;
-		goto out_free_memory;
+		goto out_free_context;
 	}
 
-	priv->real_base = ioremap(ddr_lpar, ddr_size);
-	if (!priv->real_base) {
+	priv->base = ioremap(ddr_lpar, ddr_size);
+	if (!priv->base) {
 		pr_err("ps3vram: ioremap failed\n");
 		ret = -ENOMEM;
 		goto out_free_context;
 	}
-
-	/* XXX: Skip beginning GDDR ram that might belong to the framebuffer. */
-	priv->reserved = ps3fb_videomemory.size;
-	priv->base = priv->real_base + priv->reserved;
-	ddr_size -= priv->reserved;
 
 	priv->ctrl = ioremap(ctrl_lpar, 64 * 1024);
 	if (!priv->ctrl) {
@@ -757,7 +755,7 @@ out_unmap_reports:
 out_unmap_ctrl:
 	iounmap(priv->ctrl);
 out_unmap_vram:
-	iounmap(priv->real_base);
+	iounmap(priv->base);
 out_free_context:
 	lv1_gpu_context_free(priv->context_handle);
 out_free_memory:
@@ -786,7 +784,7 @@ static void __exit cleanup_ps3vram(void)
 	ps3vram_cache_cleanup(&ps3vram_mtd);
 	iounmap(priv->reports);
 	iounmap(priv->ctrl);
-	iounmap(priv->real_base);
+	iounmap(priv->base);
 	lv1_gpu_context_free(priv->context_handle);
 	lv1_gpu_memory_free(priv->memory_handle);
 	ps3_close_hv_device(&fake_dev);
