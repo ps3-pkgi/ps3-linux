@@ -317,7 +317,7 @@ static int __init ps3_mm_add_memory(void)
 		return result;
 	}
 
-	lmb_add(start_addr, map.r1.size); // should add_memory do this???
+	lmb_add(start_addr, map.r1.size);
 
 	result = online_pages(start_pfn, nr_pages);
 
