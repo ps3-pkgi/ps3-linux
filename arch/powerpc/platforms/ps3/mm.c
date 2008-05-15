@@ -318,6 +318,7 @@ static int __init ps3_mm_add_memory(void)
 	}
 
 	lmb_add(start_addr, map.r1.size);
+	lmb_analyze();
 
 	result = online_pages(start_pfn, nr_pages);
 
