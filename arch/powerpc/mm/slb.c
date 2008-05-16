@@ -14,7 +14,7 @@
  *      2 of the License, or (at your option) any later version.
  */
 
-#define DEBUG
+#undef DEBUG
 
 #include <asm/pgtable.h>
 #include <asm/mmu.h>
