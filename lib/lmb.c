@@ -53,7 +53,8 @@ void lmb_dump_all(void)
 	}
 
 	pr_info("    reserved.cnt	  = 0x%lx\n", tmp.reserved.cnt);
-	pr_info("    reserved.size	  = 0x%lx\n", tmp.reserved.size);
+	pr_info("    reserved.size	  = 0x%llx\n",
+	    (unsigned long long)tmp.memory.size);
 	for (i=0; i < tmp.reserved.cnt ;i++) {
 		pr_info("    reserved.region[0x%lx].base       = 0x%llx\n",
 		    i, (unsigned long long)tmp.reserved.region[i].base);
