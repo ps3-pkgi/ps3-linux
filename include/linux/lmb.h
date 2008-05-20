@@ -30,6 +30,7 @@ struct lmb_region {
 };
 
 struct lmb {
+	spinlock_t lock;
 	unsigned long debug;
 	u64 rmo_size;
 	struct lmb_region memory;
