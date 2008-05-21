@@ -32,34 +32,29 @@ early_param("lmb", early_lmb);
 void lmb_dump_all(void)
 {
 	unsigned long i;
-	struct lmb tmp;
 
 	if (!lmb_debug)
 		return;
 
-	spin_lock(&lmb.lock);
-	tmp = lmb;
-	spin_unlock(&lmb.lock);
-
 	pr_info("lmb_dump_all:\n");
-	pr_info("    memory.cnt		  = 0x%lx\n", tmp.memory.cnt);
+	pr_info("    memory.cnt		  = 0x%lx\n", lmb.memory.cnt);
 	pr_info("    memory.size		  = 0x%llx\n",
-	    (unsigned long long)tmp.memory.size);
-	for (i=0; i < tmp.memory.cnt ;i++) {
+	    (unsigned long long)lmb.memory.size);
+	for (i=0; i < lmb.memory.cnt ;i++) {
 		pr_info("    memory.region[0x%lx].base       = 0x%llx\n",
-		    i, (unsigned long long)tmp.memory.region[i].base);
+		    i, (unsigned long long)lmb.memory.region[i].base);
 		pr_info("		      .size     = 0x%llx\n",
-		    (unsigned long long)tmp.memory.region[i].size);
+		    (unsigned long long)lmb.memory.region[i].size);
 	}
 
-	pr_info("    reserved.cnt	  = 0x%lx\n", tmp.reserved.cnt);
+	pr_info("    reserved.cnt	  = 0x%lx\n", lmb.reserved.cnt);
 	pr_info("    reserved.size	  = 0x%llx\n",
-	    (unsigned long long)tmp.memory.size);
-	for (i=0; i < tmp.reserved.cnt ;i++) {
+	    (unsigned long long)lmb.memory.size);
+	for (i=0; i < lmb.reserved.cnt ;i++) {
 		pr_info("    reserved.region[0x%lx].base       = 0x%llx\n",
-		    i, (unsigned long long)tmp.reserved.region[i].base);
+		    i, (unsigned long long)lmb.reserved.region[i].base);
 		pr_info("		      .size     = 0x%llx\n",
-		    (unsigned long long)tmp.reserved.region[i].size);
+		    (unsigned long long)lmb.reserved.region[i].size);
 	}
 }
 
@@ -111,8 +106,6 @@ static void lmb_coalesce_regions(struct lmb_region *rgn,
 
 void __init lmb_init(void)
 {
-	spin_lock_init(&lmb.lock);
-
 	/* Create a dummy zero size LMB which will get coalesced away later.
 	 * This simplifies the lmb_add() code below...
 	 */
@@ -130,14 +123,10 @@ void __init lmb_analyze(void)
 {
 	int i;
 
-	spin_lock(&lmb.lock);
-
 	lmb.memory.size = 0;
 
 	for (i = 0; i < lmb.memory.cnt; i++)
 		lmb.memory.size += lmb.memory.region[i].size;
-
-	spin_unlock(&lmb.lock);
 }
 
 static long lmb_add_region(struct lmb_region *rgn, u64 base, u64 size)
@@ -206,33 +195,24 @@ static long lmb_add_region(struct lmb_region *rgn, u64 base, u64 size)
 
 long lmb_add(u64 base, u64 size)
 {
-	long ret;
 	struct lmb_region *_rgn = &lmb.memory;
-
-	spin_lock(&lmb.lock);
 
 	/* On pSeries LPAR systems, the first LMB is our RMO region. */
 	if (base == 0)
 		lmb.rmo_size = size;
 
-	ret = lmb_add_region(_rgn, base, size);
-
-	spin_unlock(&lmb.lock);
-	return ret;
+	return lmb_add_region(_rgn, base, size);
 
 }
 
 long lmb_remove(u64 base, u64 size)
 {
-	long ret;
 	struct lmb_region *rgn = &(lmb.memory);
 	u64 rgnbegin, rgnend;
 	u64 end = base + size;
 	int i;
 
 	rgnbegin = rgnend = 0; /* supress gcc warnings */
-
-	spin_lock(&lmb.lock);
 
 	/* Find the region where (base, size) belongs to */
 	for (i=0; i < rgn->cnt; i++) {
@@ -244,15 +224,12 @@ long lmb_remove(u64 base, u64 size)
 	}
 
 	/* Didn't find the region */
-	if (i == rgn->cnt) {
-		spin_unlock(&lmb.lock);
+	if (i == rgn->cnt)
 		return -1;
-	}
 
 	/* Check to see if we are removing entire region */
 	if ((rgnbegin == base) && (rgnend == end)) {
 		lmb_remove_region(rgn, i);
-		spin_unlock(&lmb.lock);
 		return 0;
 	}
 
@@ -260,14 +237,12 @@ long lmb_remove(u64 base, u64 size)
 	if (rgnbegin == base) {
 		rgn->region[i].base = end;
 		rgn->region[i].size -= size;
-		spin_unlock(&lmb.lock);
 		return 0;
 	}
 
 	/* Check to see if the region is matching at the end */
 	if (rgnend == end) {
 		rgn->region[i].size -= size;
-		spin_unlock(&lmb.lock);
 		return 0;
 	}
 
@@ -276,10 +251,7 @@ long lmb_remove(u64 base, u64 size)
 	 * beginging of the hole and add the region after hole.
 	 */
 	rgn->region[i].size = base - rgn->region[i].base;
-	ret = lmb_add_region(rgn, end, rgnend - end);
-
-	spin_unlock(&lmb.lock);
-	return ret;
+	return lmb_add_region(rgn, end, rgnend - end);
 }
 
 long __init lmb_reserve(u64 base, u64 size)
@@ -438,12 +410,8 @@ u64 __init __lmb_alloc_base(u64 size, u64 align, u64 max_addr)
 			j = lmb_overlaps_region(&lmb.reserved, base, size);
 			if (j < 0) {
 				/* this area isn't reserved, take it */
-				if (lmb_add_region(&lmb.reserved, base,
-					size) < 0) {
-					spin_unlock(&lmb.lock);
+				if (lmb_add_region(&lmb.reserved, base, size) < 0)
 					return 0;
-				}
-				spin_unlock(&lmb.lock);
 				return base;
 			}
 			res_base = lmb.reserved.region[j].base;
@@ -452,7 +420,6 @@ u64 __init __lmb_alloc_base(u64 size, u64 align, u64 max_addr)
 			base = lmb_align_down(res_base - size, align);
 		}
 	}
-	spin_unlock(&lmb.lock);
 	return 0;
 }
 
@@ -464,16 +431,9 @@ u64 __init lmb_phys_mem_size(void)
 
 u64 __init lmb_end_of_DRAM(void)
 {
-	u64 ret;
-	int idx;
+	int idx = lmb.memory.cnt - 1;
 
-	spin_lock(&lmb.lock);
-
-	idx = lmb.memory.cnt - 1;
-	ret = (lmb.memory.region[idx].base + lmb.memory.region[idx].size);
-
-	spin_unlock(&lmb.lock);
-	return ret;
+	return (lmb.memory.region[idx].base + lmb.memory.region[idx].size);
 }
 
 /* You must call lmb_analyze() after this. */
@@ -488,9 +448,6 @@ void __init lmb_enforce_memory_limit(u64 memory_limit)
 
 	/* Truncate the lmb regions to satisfy the memory limit. */
 	limit = memory_limit;
-
-	spin_lock(&lmb.lock);
-
 	for (i = 0; i < lmb.memory.cnt; i++) {
 		if (limit > lmb.memory.region[i].size) {
 			limit -= lmb.memory.region[i].size;
@@ -519,25 +476,18 @@ void __init lmb_enforce_memory_limit(u64 memory_limit)
 			i--;
 		}
 	}
-	spin_unlock(&lmb.lock);
 }
 
 int __init lmb_is_reserved(u64 addr)
 {
 	int i;
 
-	spin_lock(&lmb.lock);
-
 	for (i = 0; i < lmb.reserved.cnt; i++) {
 		u64 upper = lmb.reserved.region[i].base +
 			lmb.reserved.region[i].size - 1;
-		if ((addr >= lmb.reserved.region[i].base) && (addr <= upper)) {
-			spin_unlock(&lmb.lock);
+		if ((addr >= lmb.reserved.region[i].base) && (addr <= upper))
 			return 1;
-		}
 	}
-
-	spin_unlock(&lmb.lock);
 	return 0;
 }
 
@@ -553,16 +503,12 @@ int lmb_find(struct lmb_property *res)
 	rstart = res->base;
 	rend = rstart + res->size - 1;
 
-	spin_lock(&lmb.lock);
-
 	for (i = 0; i < lmb.memory.cnt; i++) {
 		u64 start = lmb.memory.region[i].base;
 		u64 end = start + lmb.memory.region[i].size - 1;
 
-		if (start > rend) {
-			spin_unlock(&lmb.lock);
+		if (start > rend)
 			return -1;
-		}
 
 		if ((end >= rstart) && (start < rend)) {
 			/* adjust the request */
@@ -572,10 +518,8 @@ int lmb_find(struct lmb_property *res)
 				rend = end;
 			res->base = rstart;
 			res->size = rend - rstart + 1;
-			spin_unlock(&lmb.lock);
 			return 0;
 		}
 	}
-	spin_unlock(&lmb.lock);
 	return -1;
 }
