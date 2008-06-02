@@ -364,6 +364,9 @@ static int gelic_wl_get_range(struct net_device *netdev,
 	range->num_encoding_sizes = 3;
 	range->max_encoding_tokens = GELIC_WEP_KEYS;
 
+	/* scan capability */
+	range->scan_capa = IW_SCAN_CAPA_ESSID;
+
 	pr_debug("%s: ->\n", __func__);
 	return 0;
 
