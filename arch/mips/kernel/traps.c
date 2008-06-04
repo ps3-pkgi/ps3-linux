@@ -88,7 +88,7 @@ static void show_raw_backtrace(unsigned long reg29)
 #ifdef CONFIG_KALLSYMS
 	printk("\n");
 #endif
-#define IS_KVA01(a) ((((unsigned int)a) & 0xc0000000) == 0x80000000)
+#define IS_KVA01(a) ((((unsigned long)a) & 0xc0000000) == 0x80000000)
 	if (IS_KVA01(sp)) {
 		while (!kstack_end(sp)) {
 			addr = *sp++;

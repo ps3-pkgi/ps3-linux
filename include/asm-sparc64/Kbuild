@@ -18,6 +18,6 @@ header-y += reg.h
 header-y += uctx.h
 header-y += utrap.h
 header-y += watchdog.h
+header-y += perfmon.h
 
 unifdef-y += fbio.h
-unifdef-y += perfctr.h

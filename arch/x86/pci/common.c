@@ -76,6 +76,7 @@ int pcibios_scanned;
  * configuration space.
  */
 DEFINE_SPINLOCK(pci_config_lock);
+EXPORT_SYMBOL(pci_config_lock);
 
 static int __devinit can_skip_ioresource_align(const struct dmi_system_id *d)
 {

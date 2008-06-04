@@ -666,6 +666,18 @@ einval:	li	v0, -EINVAL
 	sys	sys_timerfd_create	2
 	sys	sys_timerfd_gettime	2
 	sys	sys_timerfd_settime	4
+	sys	sys_pfm_create_context	4
+	sys	sys_pfm_write_pmcs	3	/* 4325 */
+	sys	sys_pfm_write_pmds	4
+	sys	sys_pfm_read_pmds	3
+	sys	sys_pfm_load_context	2
+	sys	sys_pfm_start		2
+	sys	sys_pfm_stop		1	/* 4330 */
+	sys	sys_pfm_restart		1
+	sys	sys_pfm_create_evtsets	3
+	sys	sys_pfm_getinfo_evtsets 3
+	sys	sys_pfm_delete_evtsets	3
+	sys	sys_pfm_unload_context	1	/* 4335 */
 	.endm
 
 	/* We pre-compute the number of _instruction_ bytes needed to

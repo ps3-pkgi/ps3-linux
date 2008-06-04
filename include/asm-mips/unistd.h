@@ -344,11 +344,23 @@
 #define __NR_timerfd_create		(__NR_Linux + 321)
 #define __NR_timerfd_gettime		(__NR_Linux + 322)
 #define __NR_timerfd_settime		(__NR_Linux + 323)
+#define __NR_pfm_create_context         (__NR_Linux + 324)
+#define __NR_pfm_write_pmcs		(__NR_pfm_create_context+1)
+#define __NR_pfm_write_pmds		(__NR_pfm_create_context+2)
+#define __NR_pfm_read_pmds		(__NR_pfm_create_context+3)
+#define __NR_pfm_load_context		(__NR_pfm_create_context+4)
+#define __NR_pfm_start			(__NR_pfm_create_context+5)
+#define __NR_pfm_stop			(__NR_pfm_create_context+6)
+#define __NR_pfm_restart		(__NR_pfm_create_context+7)
+#define __NR_pfm_create_evtsets		(__NR_pfm_create_context+8)
+#define __NR_pfm_getinfo_evtsets 	(__NR_pfm_create_context+9)
+#define __NR_pfm_delete_evtsets 	(__NR_pfm_create_context+10)
+#define __NR_pfm_unload_context		(__NR_pfm_create_context+11)
 
 /*
  * Offset of the last Linux o32 flavoured syscall
  */
-#define __NR_Linux_syscalls		323
+#define __NR_Linux_syscalls		335
 
 #endif /* _MIPS_SIM == _MIPS_SIM_ABI32 */
 
@@ -644,16 +656,28 @@
 #define __NR_timerfd_create		(__NR_Linux + 280)
 #define __NR_timerfd_gettime		(__NR_Linux + 281)
 #define __NR_timerfd_settime		(__NR_Linux + 282)
+#define __NR_pfm_create_context         (__NR_Linux + 283)
+#define __NR_pfm_write_pmcs		(__NR_pfm_create_context+1)
+#define __NR_pfm_write_pmds		(__NR_pfm_create_context+2)
+#define __NR_pfm_read_pmds		(__NR_pfm_create_context+3)
+#define __NR_pfm_load_context		(__NR_pfm_create_context+4)
+#define __NR_pfm_start			(__NR_pfm_create_context+5)
+#define __NR_pfm_stop			(__NR_pfm_create_context+6)
+#define __NR_pfm_restart		(__NR_pfm_create_context+7)
+#define __NR_pfm_create_evtsets		(__NR_pfm_create_context+8)
+#define __NR_pfm_getinfo_evtsets 	(__NR_pfm_create_context+9)
+#define __NR_pfm_delete_evtsets 	(__NR_pfm_create_context+10)
+#define __NR_pfm_unload_context		(__NR_pfm_create_context+11)
 
 /*
  * Offset of the last Linux 64-bit flavoured syscall
  */
-#define __NR_Linux_syscalls		282
+#define __NR_Linux_syscalls		294
 
 #endif /* _MIPS_SIM == _MIPS_SIM_ABI64 */
 
 #define __NR_64_Linux			5000
-#define __NR_64_Linux_syscalls		282
+#define __NR_64_Linux_syscalls		294
 
 #if _MIPS_SIM == _MIPS_SIM_NABI32
 
@@ -948,16 +972,28 @@
 #define __NR_timerfd_create		(__NR_Linux + 284)
 #define __NR_timerfd_gettime		(__NR_Linux + 285)
 #define __NR_timerfd_settime		(__NR_Linux + 286)
+#define __NR_pfm_create_context         (__NR_Linux + 287)
+#define __NR_pfm_write_pmcs		(__NR_pfm_create_context+1)
+#define __NR_pfm_write_pmds		(__NR_pfm_create_context+2)
+#define __NR_pfm_read_pmds		(__NR_pfm_create_context+3)
+#define __NR_pfm_load_context		(__NR_pfm_create_context+4)
+#define __NR_pfm_start			(__NR_pfm_create_context+5)
+#define __NR_pfm_stop			(__NR_pfm_create_context+6)
+#define __NR_pfm_restart		(__NR_pfm_create_context+7)
+#define __NR_pfm_create_evtsets		(__NR_pfm_create_context+8)
+#define __NR_pfm_getinfo_evtsets 	(__NR_pfm_create_context+9)
+#define __NR_pfm_delete_evtsets 	(__NR_pfm_create_context+10)
+#define __NR_pfm_unload_context		(__NR_pfm_create_context+11)
 
 /*
  * Offset of the last N32 flavoured syscall
  */
-#define __NR_Linux_syscalls		286
+#define __NR_Linux_syscalls		298
 
 #endif /* _MIPS_SIM == _MIPS_SIM_NABI32 */
 
 #define __NR_N32_Linux			6000
-#define __NR_N32_Linux_syscalls		286
+#define __NR_N32_Linux_syscalls		298
 
 #ifdef __KERNEL__
 

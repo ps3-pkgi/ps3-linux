@@ -11,6 +11,7 @@
 #include <linux/bootmem.h>
 #include <linux/bitops.h>
 #include <linux/module.h>
+#include <linux/perfmon_kern.h>
 #include <linux/kgdb.h>
 #include <asm/pda.h>
 #include <asm/pgtable.h>
@@ -284,4 +285,6 @@ void __cpuinit cpu_init (void)
 
 	if (is_uv_system())
 		uv_cpu_init();
+
+	pfm_init_percpu();
 }
