@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
-# Linux kernel version: 2.6.26-rc4
-# Wed Jun  4 09:14:27 2008
+# Linux kernel version: 2.6.26-rc5
+# Thu Jun  5 11:30:44 2008
 #
 CONFIG_PPC64=y
 
@@ -277,7 +277,9 @@ CONFIG_FORCE_MAX_ZONEORDER=13
 CONFIG_SCHED_SMT=y
 CONFIG_PROC_DEVICETREE=y
 # CONFIG_CMDLINE_BOOL is not set
-# CONFIG_PM is not set
+CONFIG_PM=y
+CONFIG_PM_DEBUG=y
+# CONFIG_PM_VERBOSE is not set
 # CONFIG_SECCOMP is not set
 CONFIG_ISA_DMA_API=y
 
@@ -936,6 +938,7 @@ CONFIG_USB=m
 CONFIG_USB_DEVICEFS=y
 # CONFIG_USB_DEVICE_CLASS is not set
 # CONFIG_USB_DYNAMIC_MINORS is not set
+CONFIG_USB_SUSPEND=y
 # CONFIG_USB_OTG is not set
 
 #
