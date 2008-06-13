@@ -13,6 +13,10 @@
 #include <linux/interrupt.h>
 #include <linux/slab.h>
 
+#ifdef CONFIG_PPC_PS3
+#include <asm/firmware.h>
+#endif
+
 #include "internals.h"
 
 #ifdef CONFIG_SMP
@@ -453,10 +457,14 @@ void free_irq(unsigned int irq, void *dev_id)
 
 			p = &action->next;
 			if (action->dev_id != dev_id) {
+#ifdef CONFIG_PPC_PS3
+			    if (firmware_has_feature(FW_FEATURE_PS3_LV1)) {
 				pr_debug("%s:%d: irq %u bad dev_id: request_irq(%p) != "
 					"free_irq(%p)\n" , __func__, __LINE__, irq, action->dev_id,
 					 dev_id);
 				BUG();
+			    }
+#endif
 				continue;
 			}
 

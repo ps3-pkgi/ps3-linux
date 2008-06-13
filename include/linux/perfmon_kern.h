@@ -502,11 +502,6 @@ void pfm_cpu_disable(void);
 #define pfm_session_allcpus_release()	do { } while (0)
 #define pfm_session_allcpus_acquire()	(0)
 
-/*
- * include arch-specific kernel level definitions
- */
-#include <asm/perfmon_kern.h>
-
 #endif /* CONFIG_PERFMON */
 
 #endif /* __KERNEL__*/
