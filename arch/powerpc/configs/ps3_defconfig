@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
-# Linux kernel version: 2.6.26-rc5
-# Thu Jun  5 11:30:44 2008
+# Linux kernel version: 2.6.26-rc8
+# Tue Jul  1 08:19:18 2008
 #
 CONFIG_PPC64=y
 
@@ -635,7 +635,6 @@ CONFIG_RT2X00_LIB_USB=m
 CONFIG_RT2X00_LIB_FIRMWARE=y
 # CONFIG_RT2500USB is not set
 CONFIG_RT73USB=m
-# CONFIG_RT73USB_LEDS is not set
 # CONFIG_RT2X00_DEBUG is not set
 
 #
@@ -753,6 +752,7 @@ CONFIG_LEGACY_PTY_COUNT=16
 # CONFIG_POWER_SUPPLY is not set
 # CONFIG_HWMON is not set
 # CONFIG_THERMAL is not set
+# CONFIG_THERMAL_HWMON is not set
 # CONFIG_WATCHDOG is not set
 
 #
