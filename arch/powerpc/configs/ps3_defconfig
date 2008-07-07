@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
-# Linux kernel version: 2.6.26-rc8
-# Tue Jul  1 08:19:18 2008
+# Linux kernel version: 2.6.26-rc9
+# Mon Jul  7 12:30:41 2008
 #
 CONFIG_PPC64=y
 
@@ -656,8 +656,18 @@ CONFIG_USB_NET_MCS7830=m
 # CONFIG_USB_NET_CDC_SUBSET is not set
 # CONFIG_USB_NET_ZAURUS is not set
 # CONFIG_WAN is not set
-# CONFIG_PPP is not set
+CONFIG_PPP=m
+CONFIG_PPP_MULTILINK=y
+# CONFIG_PPP_FILTER is not set
+# CONFIG_PPP_ASYNC is not set
+# CONFIG_PPP_SYNC_TTY is not set
+CONFIG_PPP_DEFLATE=m
+# CONFIG_PPP_BSDCOMP is not set
+# CONFIG_PPP_MPPE is not set
+CONFIG_PPPOE=m
+# CONFIG_PPPOL2TP is not set
 # CONFIG_SLIP is not set
+CONFIG_SLHC=m
 # CONFIG_NETCONSOLE is not set
 # CONFIG_NETPOLL is not set
 # CONFIG_NET_POLL_CONTROLLER is not set
@@ -1235,6 +1245,8 @@ CONFIG_CRC_ITU_T=m
 CONFIG_CRC32=y
 # CONFIG_CRC7 is not set
 # CONFIG_LIBCRC32C is not set
+CONFIG_ZLIB_INFLATE=m
+CONFIG_ZLIB_DEFLATE=m
 CONFIG_LZO_COMPRESS=m
 CONFIG_LZO_DECOMPRESS=m
 CONFIG_PLIST=y
