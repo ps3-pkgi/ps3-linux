@@ -314,7 +314,7 @@ unlock:
 		/*
 		 * (re)initialize PMU on each PMU now that we have a description
 		 */
-		on_each_cpu(__pfm_init_percpu, cfg, 0, 0);
+		on_each_cpu(__pfm_init_percpu, cfg, 0);
 	}
 	return ret;
 }

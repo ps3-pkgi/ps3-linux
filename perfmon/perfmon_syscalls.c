@@ -161,7 +161,7 @@ static int pfm_get_task(struct pfm_context *ctx, pid_t pid,
 	/*
 	 * returns 0 if cannot attach
 	 */
-	ret1 = ptrace_may_attach(p);
+	ret1 = ptrace_may_access(p, PTRACE_MODE_ATTACH);
 	if (ret1)
 		ret = ptrace_check_attach(p, 0);
 

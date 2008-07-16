@@ -748,7 +748,7 @@ static void pfm_cell_write_pmd_smp(struct pfm_context *ctx,
 		req.pmd = value;
 		smp_call_function_single(target_cpu,
 					 pfm_cell_write_pmd_remote,
-					 &req, 0, 1);
+					 &req, 1);
 	} else {
 		pfm_cell_write_pmd(ctx, cnum, value);
 	}
@@ -811,7 +811,7 @@ static u64 pfm_cell_read_pmd_smp(struct pfm_context *ctx, unsigned int cnum)
 		req.pmd = 0;
 		smp_call_function_single(target_cpu,
 					 pfm_cell_read_pmd_remote,
-					 &req, 0, 1);
+					 &req, 1);
 		return req.pmd;
 	} else {
 		return pfm_cell_read_pmd(ctx, cnum);
@@ -872,7 +872,7 @@ static void pfm_cell_enable_counters_smp(struct pfm_context *ctx,
 		req.set = set;
 		smp_call_function_single(target_cpu,
 					 pfm_cell_enable_counters_remote,
-					 &req, 0, 1);
+					 &req, 1);
 	} else {
 		pfm_cell_enable_counters(ctx, set);
 	}
@@ -934,7 +934,7 @@ static void pfm_cell_disable_counters_smp(struct pfm_context *ctx,
 		req.set = set;
 		smp_call_function_single(target_cpu,
 					 pfm_cell_disable_counters_remote,
-					 &req, 0, 1);
+					 &req, 1);
 	} else {
 		pfm_cell_disable_counters(ctx, set);
 	}
@@ -1111,7 +1111,7 @@ static void pfm_cell_restore_pmcs_smp(struct pfm_context *ctx,
 		req.set = set;
 		smp_call_function_single(target_cpu,
 					 pfm_cell_restore_pmcs_remote,
-					 &req, 0, 1);
+					 &req, 1);
 	} else {
 		pfm_cell_restore_pmcs(ctx, set);
 	}
@@ -1187,7 +1187,7 @@ static void pfm_cell_restore_pmds_smp(struct pfm_context *ctx,
 		req.set = set;
 		smp_call_function_single(target_cpu,
 					 pfm_cell_restore_pmds_remote,
-					 &req, 0, 1);
+					 &req, 1);
 	} else {
 		pfm_cell_restore_pmds(ctx, set);
 	}
@@ -1551,7 +1551,7 @@ static int pfm_cell_ctxswout_thread_smp(struct task_struct *task,
 		req.set = set;
 		smp_call_function_single(target_cpu,
 					 pfm_cell_ctxswout_thread_remote,
-					 &req, 0, 1);
+					 &req, 1);
 		return req.result;
 	} else {
 		return pfm_cell_ctxswout_thread(task, ctx, set);
@@ -1643,7 +1643,7 @@ static void pfm_cell_get_ovfl_pmds_smp(struct pfm_context *ctx,
 		req.set = set;
 		smp_call_function_single(target_cpu,
 					 pfm_cell_get_ovfl_pmds_remote,
-					 &req, 0, 1);
+					 &req, 1);
 	} else {
 		pfm_cell_get_ovfl_pmds(ctx, set);
 	}

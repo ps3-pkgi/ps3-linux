@@ -486,7 +486,7 @@ static void __pfm_close_remote_cpu(void *info)
 static int pfm_close_remote_cpu(u32 cpu, struct pfm_context *ctx)
 {
 	BUG_ON(irqs_disabled());
-	return smp_call_function_single(cpu, __pfm_close_remote_cpu, ctx, 0, 1);
+	return smp_call_function_single(cpu, __pfm_close_remote_cpu, ctx, 1);
 }
 #endif /* CONFIG_SMP */
 
