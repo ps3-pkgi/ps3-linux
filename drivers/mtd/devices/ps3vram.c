@@ -21,6 +21,8 @@
 #include <asm/lv1call.h>
 #include <asm/ps3.h>
 
+#define DEVICE_NAME		"ps3vram"
+
 #define XDR_BUF_SIZE (2 * 1024 * 1024) /* XDR buffer (must be 1MB aligned) */
 #define XDR_IOIF 0x0c000000
 
@@ -553,12 +555,6 @@ static int ps3vram_write(struct mtd_info *mtd, loff_t to, size_t len,
 	return 0;
 }
 
-/* XXX: Fake structure so we can call ps3_{open,close}_hv_device */
-static struct ps3_system_bus_device fake_dev = {
-	.match_id = PS3_MATCH_ID_GRAPHICS,
-	.dev_type = PS3_DEVICE_TYPE_IOC0,
-};
-
 static int ps3vram_proc_read(char *buf, char **start, off_t offset,
 			     int count, int *eof, void *data)
 {
@@ -585,7 +581,7 @@ static int ps3vram_proc_read(char *buf, char **start, off_t offset,
 	return count;
 }
 
-static void init_proc(void)
+static void __devinit init_proc(void)
 {
 	struct proc_dir_entry *proc_file;
 
@@ -601,7 +597,7 @@ static void init_proc(void)
 	proc_file->read_proc = ps3vram_proc_read;
 }
 
-static int __init init_ps3vram(void)
+static int __devinit ps3vram_probe(struct ps3_system_bus_device *dev)
 {
 	struct ps3vram_priv *priv;
 	uint64_t status;
@@ -633,7 +629,7 @@ static int __init init_ps3vram(void)
 	priv->fifo_ptr = priv->fifo_base;
 
 	/* XXX: Need to open GPU, in case ps3fb or snd_ps3 aren't loaded */
-	if (ps3_open_hv_device(&fake_dev)) {
+	if (ps3_open_hv_device(dev)) {
 		pr_err("ps3vram: ps3_open_hv_device failed\n");
 		ret = -EAGAIN;
 		goto out_close_gpu;
@@ -760,7 +756,7 @@ out_free_context:
 out_free_memory:
 	lv1_gpu_memory_free(priv->memory_handle);
 out_close_gpu:
-	ps3_close_hv_device(&fake_dev);
+	ps3_close_hv_device(dev);
 out_free_xdr_buf:
 	free_pages((unsigned long) priv->xdr_buf, get_order(XDR_BUF_SIZE));
 out_free_priv:
@@ -770,13 +766,11 @@ out:
 	return ret;
 }
 
-static void __exit cleanup_ps3vram(void)
+static int ps3vram_shutdown(struct ps3_system_bus_device *dev)
 {
 	struct ps3vram_priv *priv;
 
 	priv = ps3vram_mtd.priv;
-	if (priv == NULL)
-		return;
 
 	remove_proc_entry("ps3vram", NULL);
 	del_mtd_device(&ps3vram_mtd);
@@ -786,15 +780,34 @@ static void __exit cleanup_ps3vram(void)
 	iounmap(priv->base);
 	lv1_gpu_context_free(priv->context_handle);
 	lv1_gpu_memory_free(priv->memory_handle);
-	ps3_close_hv_device(&fake_dev);
+	ps3_close_hv_device(dev);
 	free_pages((unsigned long) priv->xdr_buf, get_order(XDR_BUF_SIZE));
 	kfree(priv);
-
-	pr_info("ps3vram mtd device unregistered\n");
+	return 0;
 }
 
-module_init(init_ps3vram);
-module_exit(cleanup_ps3vram);
+static struct ps3_system_bus_driver ps3vram_driver = {
+	.match_id	= PS3_MATCH_ID_GRAPHICS,
+	.match_sub_id	= PS3_MATCH_SUB_ID_RAMDISK,
+	.core.name	= DEVICE_NAME,
+	.core.owner	= THIS_MODULE,
+	.probe		= ps3vram_probe,
+	.remove		= ps3vram_shutdown,
+	.shutdown	= ps3vram_shutdown,
+};
+
+static int __init ps3vram_init(void)
+{
+	return ps3_system_bus_driver_register(&ps3vram_driver);
+}
+
+static void __exit ps3vram_exit(void)
+{
+	ps3_system_bus_driver_unregister(&ps3vram_driver);
+}
+
+module_init(ps3vram_init);
+module_exit(ps3vram_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Jim Paris <jim@jtan.com>");

@@ -486,6 +486,35 @@ static int __init ps3_register_graphics_devices(void)
 		return -ENOMEM;
 
 	p->dev.match_id = PS3_MATCH_ID_GRAPHICS;
+	p->dev.match_sub_id = PS3_MATCH_SUB_ID_FB;
+	p->dev.dev_type = PS3_DEVICE_TYPE_IOC0;
+
+	result = ps3_system_bus_device_register(&p->dev);
+
+	if (result)
+		pr_debug("%s:%d ps3_system_bus_device_register failed\n",
+			__func__, __LINE__);
+
+	pr_debug(" <- %s:%d\n", __func__, __LINE__);
+	return result;
+}
+
+static int __init ps3_register_ramdisk_device(void)
+{
+	int result;
+	struct layout {
+		struct ps3_system_bus_device dev;
+	} *p;
+
+	pr_debug(" -> %s:%d\n", __func__, __LINE__);
+
+	p = kzalloc(sizeof(struct layout), GFP_KERNEL);
+
+	if (!p)
+		return -ENOMEM;
+
+	p->dev.match_id = PS3_MATCH_ID_GRAPHICS;
+	p->dev.match_sub_id = PS3_MATCH_SUB_ID_RAMDISK;
 	p->dev.dev_type = PS3_DEVICE_TYPE_IOC0;
 
 	result = ps3_system_bus_device_register(&p->dev);
@@ -925,6 +954,8 @@ static int __init ps3_register_devices(void)
 	ps3_register_sound_devices();
 
 	ps3_register_lpm_devices();
+
+	ps3_register_ramdisk_device();
 
 	pr_debug(" <- %s:%d\n", __func__, __LINE__);
 	return 0;
