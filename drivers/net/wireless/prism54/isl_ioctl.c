@@ -650,7 +650,7 @@ prism54_translate_bss(struct net_device *ndev, struct iw_request_info *info,
 	}
 	/* Do the bitrates */
 	{
-		char *	current_val = current_ev + iwe_stream_lcp_len(info);
+		char *current_val = current_ev + iwe_stream_lcp_len(info);
 		int i;
 		int mask;
 

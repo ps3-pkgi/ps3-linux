@@ -161,8 +161,6 @@ header-y += video_decoder.h
 header-y += video_encoder.h
 header-y += videotext.h
 header-y += x25.h
-header-y += perfmon.h
-header-y += perfmon_dfl_smpl.h
 
 unifdef-y += acct.h
 unifdef-y += adb.h
@@ -191,7 +189,6 @@ unifdef-y += connector.h
 unifdef-y += cuda.h
 unifdef-y += cyclades.h
 unifdef-y += dccp.h
-unifdef-y += dirent.h
 unifdef-y += dlm.h
 unifdef-y += dlm_plock.h
 unifdef-y += edd.h

@@ -887,7 +887,7 @@ static inline char *lbs_translate_scan(struct lbs_private *priv,
 						   stop, &iwe, IW_EV_PARAM_LEN);
 	}
 	/* Check if we added any event */
-	if((current_val - start) > iwe_stream_lcp_len(info))
+	if ((current_val - start) > iwe_stream_lcp_len(info))
 		start = current_val;
 
 	memset(&iwe, 0, sizeof(iwe));

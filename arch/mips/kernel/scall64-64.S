@@ -219,7 +219,7 @@ sys_call_table:
 	PTR	sys_readv
 	PTR	sys_writev
 	PTR	sys_access			/* 5020 */
-	PTR	sys_pipe
+	PTR	sysm_pipe
 	PTR	sys_select
 	PTR	sys_sched_yield
 	PTR	sys_mremap
@@ -481,16 +481,4 @@ sys_call_table:
 	PTR	sys_timerfd_create		/* 5280 */
 	PTR	sys_timerfd_gettime
 	PTR	sys_timerfd_settime
-	PTR	sys_pfm_create_context
-	PTR	sys_pfm_write_pmcs
-	PTR	sys_pfm_write_pmds		/* 5285 */
-	PTR	sys_pfm_read_pmds
-	PTR	sys_pfm_load_context
-	PTR	sys_pfm_start
-	PTR	sys_pfm_stop
-	PTR	sys_pfm_restart			/* 5290 */
-	PTR	sys_pfm_create_evtsets
-	PTR	sys_pfm_getinfo_evtsets
-	PTR	sys_pfm_delete_evtsets
-	PTR	sys_pfm_unload_context
 	.size	sys_call_table,.-sys_call_table

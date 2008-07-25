@@ -1180,8 +1180,8 @@ static int zd1201_get_scan(struct net_device *dev,
 		iwe.u.bitrate.disabled = 0;
 		for (j=0; j<10; j++) if (zd->rxdata[i+50+j]) {
 			iwe.u.bitrate.value = (zd->rxdata[i+50+j]&0x7f)*500000;
-			cev=iwe_stream_add_event(info, cev, end_buf,
-						 &iwe, IW_EV_PARAM_LEN);
+			cev = iwe_stream_add_event(info, cev, end_buf,
+						   &iwe, IW_EV_PARAM_LEN);
 		}
 		
 		iwe.cmd = SIOCGIWENCODE;

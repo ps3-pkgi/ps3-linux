@@ -9,7 +9,9 @@
 
 CHECKFLAGS	+= -D__sparc__ -D__sparc_v9__ -m64
 
-CPPFLAGS_vmlinux.lds += -Usparc
+# Undefine sparc when processing vmlinux.lds - it is used
+# And teach CPP we are doing 64 bit builds (for this case)
+CPPFLAGS_vmlinux.lds += -m64 -Usparc
 
 LDFLAGS		:= -m elf64_sparc
 
@@ -29,8 +31,6 @@ core-y				+= arch/sparc64/kernel/ arch/sparc64/mm/
 core-y				+= arch/sparc64/math-emu/
 libs-y				+= arch/sparc64/prom/ arch/sparc64/lib/
 drivers-$(CONFIG_OPROFILE)	+= arch/sparc64/oprofile/
-
-core-$(CONFIG_PERFMON)		+= arch/sparc64/perfmon/
 
 boot := arch/sparc64/boot
 

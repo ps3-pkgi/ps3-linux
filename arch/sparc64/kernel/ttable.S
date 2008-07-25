@@ -58,10 +58,15 @@ tl0_irq3:	BTRAP(0x43)
 tl0_irq4:	BTRAP(0x44)
 #endif
 tl0_irq5:	TRAP_IRQ(handler_irq, 5)
-tl0_irq6:	BTRAP(0x46) BTRAP(0x47) BTRAP(0x48) BTRAP(0x49)
+#ifdef CONFIG_SMP
+tl0_irq6:	TRAP_IRQ(smp_call_function_single_client, 6)
+#else
+tl0_irq6:	BTRAP(0x46)
+#endif
+tl0_irq7:	BTRAP(0x47) BTRAP(0x48) BTRAP(0x49)
 tl0_irq10:	BTRAP(0x4a) BTRAP(0x4b) BTRAP(0x4c) BTRAP(0x4d)
 tl0_irq14:	TRAP_IRQ(timer_interrupt, 14)
-tl0_irq15:	TRAP_IRQ(perfctr_irq, 15)
+tl0_irq15:	TRAP_IRQ(handler_irq, 15)
 tl0_resv050:	BTRAP(0x50) BTRAP(0x51) BTRAP(0x52) BTRAP(0x53) BTRAP(0x54) BTRAP(0x55)
 tl0_resv056:	BTRAP(0x56) BTRAP(0x57) BTRAP(0x58) BTRAP(0x59) BTRAP(0x5a) BTRAP(0x5b)
 tl0_resv05c:	BTRAP(0x5c) BTRAP(0x5d) BTRAP(0x5e) BTRAP(0x5f)

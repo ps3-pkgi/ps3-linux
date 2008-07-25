@@ -335,22 +335,16 @@
 #define __NR_subpage_prot	310
 #define __NR_timerfd_settime	311
 #define __NR_timerfd_gettime	312
-#define __NR_pfm_create_context	313
-#define __NR_pfm_write_pmcs	314
-#define __NR_pfm_write_pmds	315
-#define __NR_pfm_read_pmds	316
-#define __NR_pfm_load_context	317
-#define __NR_pfm_start		318
-#define __NR_pfm_stop		319
-#define __NR_pfm_restart	320
-#define __NR_pfm_create_evtsets	321
-#define __NR_pfm_getinfo_evtsets 322
-#define __NR_pfm_delete_evtsets 323
-#define __NR_pfm_unload_context	324
+#define __NR_signalfd4		313
+#define __NR_eventfd2		314
+#define __NR_epoll_create1	315
+#define __NR_dup3		316
+#define __NR_pipe2		317
+#define __NR_inotify_init1	318
 
 #ifdef __KERNEL__
 
-#define __NR_syscalls		325
+#define __NR_syscalls		319
 
 #define __NR__exit __NR_exit
 #define NR_syscalls	__NR_syscalls

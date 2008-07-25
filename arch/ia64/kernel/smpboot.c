@@ -39,7 +39,6 @@
 #include <linux/efi.h>
 #include <linux/percpu.h>
 #include <linux/bitops.h>
-#include <linux/perfmon_kern.h>
 
 #include <asm/atomic.h>
 #include <asm/cache.h>
@@ -51,6 +50,7 @@
 #include <asm/machvec.h>
 #include <asm/mca.h>
 #include <asm/page.h>
+#include <asm/paravirt.h>
 #include <asm/pgalloc.h>
 #include <asm/pgtable.h>
 #include <asm/processor.h>
@@ -380,6 +380,10 @@ smp_callin (void)
 	extern void ia64_init_itm(void);
 	extern volatile int time_keeper_id;
 
+#ifdef CONFIG_PERFMON
+	extern void pfm_init_percpu(void);
+#endif
+
 	cpuid = smp_processor_id();
 	phys_id = hard_smp_processor_id();
 	itc_master = time_keeper_id;
@@ -404,6 +408,10 @@ smp_callin (void)
 	smp_setup_percpu_timer();
 
 	ia64_mca_cmc_vector_setup();	/* Setup vector on AP */
+
+#ifdef CONFIG_PERFMON
+	pfm_init_percpu();
+#endif
 
 	local_irq_enable();
 
@@ -635,6 +643,7 @@ void __devinit smp_prepare_boot_cpu(void)
 	cpu_set(smp_processor_id(), cpu_online_map);
 	cpu_set(smp_processor_id(), cpu_callin_map);
 	per_cpu(cpu_state, smp_processor_id()) = CPU_ONLINE;
+	paravirt_post_smp_prepare_boot_cpu();
 }
 
 #ifdef CONFIG_HOTPLUG_CPU
@@ -741,7 +750,6 @@ int __cpu_disable(void)
 	fixup_irqs();
 	local_flush_tlb_all();
 	cpu_clear(cpu, cpu_callin_map);
-	pfm_cpu_disable();
 	return 0;
 }
 

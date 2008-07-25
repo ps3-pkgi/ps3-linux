@@ -832,7 +832,7 @@ out:
  * user space and kernel space.
  */
 static int ioctl_standard_call(struct net_device *	dev,
-			       struct iwreq *		iwr,
+			       struct iwreq		*iwr,
 			       unsigned int		cmd,
 			       struct iw_request_info	*info,
 			       iw_handler		handler)
@@ -1109,8 +1109,8 @@ int wext_handle_ioctl(struct net *net, struct ifreq *ifr, unsigned int cmd,
 }
 
 #ifdef CONFIG_COMPAT
-static int compat_standard_call(struct net_device *	dev,
-				struct iwreq *		iwr,
+static int compat_standard_call(struct net_device	*dev,
+				struct iwreq		*iwr,
 				unsigned int		cmd,
 				struct iw_request_info	*info,
 				iw_handler		handler)
@@ -1299,7 +1299,7 @@ static void rtmsg_iwinfo(struct net_device *dev, char *event, int event_len)
 	struct sk_buff *skb;
 	int err;
 
-	if (dev_net(dev) != &init_net)
+	if (!net_eq(dev_net(dev), &init_net))
 		return;
 
 	skb = nlmsg_new(NLMSG_DEFAULT_SIZE, GFP_ATOMIC);

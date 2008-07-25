@@ -154,12 +154,6 @@ endif
 endif
 
 #
-# Perfmon support
-#
-
-core-$(CONFIG_PERFMON)		+= arch/mips/perfmon/
-
-#
 # Firmware support
 #
 libs-$(CONFIG_ARC)		+= arch/mips/fw/arc/
@@ -564,6 +558,13 @@ load-$(CONFIG_MACH_TX49XX)	+= 0xffffffff80100000
 # Toshiba JMR-TX3927 board
 #
 core-$(CONFIG_TOSHIBA_JMR3927)	+= arch/mips/txx9/jmr3927/
+
+#
+# Routerboard 532 board
+#
+core-$(CONFIG_MIKROTIK_RB532)	+= arch/mips/rb532/
+cflags-$(CONFIG_MIKROTIK_RB532) += -Iinclude/asm-mips/mach-rc32434
+load-$(CONFIG_MIKROTIK_RB532)	+= 0xffffffff80101000
 
 #
 # Toshiba RBTX4927 board or

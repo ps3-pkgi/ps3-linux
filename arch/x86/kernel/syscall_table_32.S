@@ -326,15 +326,9 @@ ENTRY(sys_call_table)
 	.long sys_fallocate
 	.long sys_timerfd_settime	/* 325 */
 	.long sys_timerfd_gettime
-	.long sys_pfm_create_context
-	.long sys_pfm_write_pmcs
-	.long sys_pfm_write_pmds
-	.long sys_pfm_read_pmds		/* 330 */
-	.long sys_pfm_load_context
-	.long sys_pfm_start
-	.long sys_pfm_stop
-	.long sys_pfm_restart
-	.long sys_pfm_create_evtsets	/* 335 */
-	.long sys_pfm_getinfo_evtsets
-	.long sys_pfm_delete_evtsets
-	.long sys_pfm_unload_context
+	.long sys_signalfd4
+	.long sys_eventfd2
+	.long sys_epoll_create1
+	.long sys_dup3			/* 330 */
+	.long sys_pipe2
+	.long sys_inotify_init1

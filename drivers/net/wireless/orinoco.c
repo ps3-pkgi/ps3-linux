@@ -4063,7 +4063,8 @@ static inline char *orinoco_translate_scan(struct net_device *dev,
 	iwe.cmd = SIOCGIWAP;
 	iwe.u.ap_addr.sa_family = ARPHRD_ETHER;
 	memcpy(iwe.u.ap_addr.sa_data, bss->a.bssid, ETH_ALEN);
-	current_ev = iwe_stream_add_event(info, current_ev, end_buf, &iwe, IW_EV_ADDR_LEN);
+	current_ev = iwe_stream_add_event(info, current_ev, end_buf,
+					  &iwe, IW_EV_ADDR_LEN);
 
 	/* Other entries will be displayed in the order we give them */
 
@@ -4073,7 +4074,8 @@ static inline char *orinoco_translate_scan(struct net_device *dev,
 		iwe.u.data.length = 32;
 	iwe.cmd = SIOCGIWESSID;
 	iwe.u.data.flags = 1;
-	current_ev = iwe_stream_add_point(info, current_ev, end_buf, &iwe, bss->a.essid);
+	current_ev = iwe_stream_add_point(info, current_ev, end_buf,
+					  &iwe, bss->a.essid);
 
 	/* Add mode */
 	iwe.cmd = SIOCGIWMODE;
@@ -4083,7 +4085,8 @@ static inline char *orinoco_translate_scan(struct net_device *dev,
 			iwe.u.mode = IW_MODE_MASTER;
 		else
 			iwe.u.mode = IW_MODE_ADHOC;
-		current_ev = iwe_stream_add_event(info, current_ev, end_buf, &iwe, IW_EV_UINT_LEN);
+		current_ev = iwe_stream_add_event(info, current_ev, end_buf,
+						  &iwe, IW_EV_UINT_LEN);
 	}
 
 	channel = bss->s.channel;
@@ -4107,7 +4110,8 @@ static inline char *orinoco_translate_scan(struct net_device *dev,
 		iwe.u.qual.qual = iwe.u.qual.level - iwe.u.qual.noise;
 	else
 		iwe.u.qual.qual = 0;
-	current_ev = iwe_stream_add_event(info, current_ev, end_buf, &iwe, IW_EV_QUAL_LEN);
+	current_ev = iwe_stream_add_event(info, current_ev, end_buf,
+					  &iwe, IW_EV_QUAL_LEN);
 
 	/* Add encryption capability */
 	iwe.cmd = SIOCGIWENCODE;
@@ -4116,7 +4120,8 @@ static inline char *orinoco_translate_scan(struct net_device *dev,
 	else
 		iwe.u.data.flags = IW_ENCODE_DISABLED;
 	iwe.u.data.length = 0;
-	current_ev = iwe_stream_add_point(info, current_ev, end_buf, &iwe, bss->a.essid);
+	current_ev = iwe_stream_add_point(info, current_ev, end_buf,
+					  &iwe, bss->a.essid);
 
 	/* Add EXTRA: Age to display seconds since last beacon/probe response
 	 * for given network. */
@@ -4127,7 +4132,8 @@ static inline char *orinoco_translate_scan(struct net_device *dev,
 		      jiffies_to_msecs(jiffies - last_scanned));
 	iwe.u.data.length = p - custom;
 	if (iwe.u.data.length)
-		current_ev = iwe_stream_add_point(info, current_ev, end_buf, &iwe, custom);
+		current_ev = iwe_stream_add_point(info, current_ev, end_buf,
+						  &iwe, custom);
 
 	/* Bit rate is not available in Lucent/Agere firmwares */
 	if (priv->firmware_type != FIRMWARE_TYPE_AGERE) {
@@ -4150,7 +4156,8 @@ static inline char *orinoco_translate_scan(struct net_device *dev,
 				break;
 			/* Bit rate given in 500 kb/s units (+ 0x80) */
 			iwe.u.bitrate.value = ((bss->p.rates[i] & 0x7f) * 500000);
-			current_val = iwe_stream_add_value(info, current_ev, current_val,
+			current_val = iwe_stream_add_value(info, current_ev,
+							   current_val,
 							   end_buf, &iwe,
 							   IW_EV_PARAM_LEN);
 		}

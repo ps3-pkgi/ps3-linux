@@ -8,6 +8,7 @@ config PPC_PS3
 	select USB_ARCH_HAS_EHCI
 	select USB_EHCI_BIG_ENDIAN_MMIO
 	select MEMORY_HOTPLUG
+	select PPC_PCI_CHOICE
 	help
 	  This option enables support for the Sony PS3 game console
 	  and other platforms using the PS3 hypervisor.  Enabling this
@@ -126,11 +127,6 @@ config PS3_FLASH
 	  As this driver needs a fixed buffer of 256 KiB of memory, it can
 	  be disabled on the kernel command line using "ps3flash=off", to
 	  not allocate this fixed buffer.
-
-config OPROFILE_PS3
-	def_bool y
-	depends on PPC_PS3 && (OPROFILE = m || OPROFILE = y)
-	select PS3_LPM
 
 config PS3_LPM
 	tristate "PS3 Logical Performance Monitor support"

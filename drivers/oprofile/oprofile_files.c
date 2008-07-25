@@ -117,7 +117,7 @@ static ssize_t dump_write(struct file * file, char const __user * buf, size_t co
 static const struct file_operations dump_fops = {
 	.write		= dump_write,
 };
-
+ 
 void oprofile_create_files(struct super_block * sb, struct dentry * root)
 {
 	oprofilefs_create_file(sb, root, "enable", &enable_fops);

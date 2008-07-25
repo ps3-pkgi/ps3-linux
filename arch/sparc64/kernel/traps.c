@@ -1,6 +1,6 @@
 /* arch/sparc64/kernel/traps.c
  *
- * Copyright (C) 1995,1997 David S. Miller (davem@davemloft.net)
+ * Copyright (C) 1995,1997,2008 David S. Miller (davem@davemloft.net)
  * Copyright (C) 1997,1999,2000 Jakub Jelinek (jakub@redhat.com)
  */
 
@@ -11,7 +11,6 @@
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
-#include <linux/kallsyms.h>
 #include <linux/signal.h>
 #include <linux/smp.h>
 #include <linux/mm.h>
@@ -37,9 +36,6 @@
 #include <asm/processor.h>
 #include <asm/timer.h>
 #include <asm/head.h>
-#ifdef CONFIG_KMOD
-#include <linux/kmod.h>
-#endif
 #include <asm/prom.h>
 
 #include "entry.h"
@@ -74,7 +70,7 @@ static void dump_tl1_traplog(struct tl1_traplog *p)
 		       i + 1,
 		       p->trapstack[i].tstate, p->trapstack[i].tpc,
 		       p->trapstack[i].tnpc, p->trapstack[i].tt);
-		print_symbol("TRAPLOG: TPC<%s>\n", p->trapstack[i].tpc);
+		printk("TRAPLOG: TPC<%pS>\n", (void *) p->trapstack[i].tpc);
 	}
 }
 
@@ -1081,7 +1077,7 @@ static void cheetah_log_errors(struct pt_regs *regs, struct cheetah_err_info *in
 	       regs->tpc, regs->tnpc, regs->u_regs[UREG_I7], regs->tstate);
 	printk("%s" "ERROR(%d): ",
 	       (recoverable ? KERN_WARNING : KERN_CRIT), smp_processor_id());
-	print_symbol("TPC<%s>\n", regs->tpc);
+	printk("TPC<%pS>\n", (void *) regs->tpc);
 	printk("%s" "ERROR(%d): M_SYND(%lx),  E_SYND(%lx)%s%s\n",
 	       (recoverable ? KERN_WARNING : KERN_CRIT), smp_processor_id(),
 	       (afsr & CHAFSR_M_SYNDROME) >> CHAFSR_M_SYNDROME_SHIFT,
@@ -1689,7 +1685,7 @@ void cheetah_plus_parity_error(int type, struct pt_regs *regs)
 		       smp_processor_id(),
 		       (type & 0x1) ? 'I' : 'D',
 		       regs->tpc);
-		print_symbol(KERN_EMERG "TPC<%s>\n", regs->tpc);
+		printk(KERN_EMERG "TPC<%pS>\n", (void *) regs->tpc);
 		panic("Irrecoverable Cheetah+ parity error.");
 	}
 
@@ -1697,7 +1693,7 @@ void cheetah_plus_parity_error(int type, struct pt_regs *regs)
 	       smp_processor_id(),
 	       (type & 0x1) ? 'I' : 'D',
 	       regs->tpc);
-	print_symbol(KERN_WARNING "TPC<%s>\n", regs->tpc);
+	printk(KERN_WARNING "TPC<%pS>\n", (void *) regs->tpc);
 }
 
 struct sun4v_error_entry {
@@ -1904,9 +1900,10 @@ void sun4v_itlb_error_report(struct pt_regs *regs, int tl)
 
 	printk(KERN_EMERG "SUN4V-ITLB: Error at TPC[%lx], tl %d\n",
 	       regs->tpc, tl);
-	print_symbol(KERN_EMERG "SUN4V-ITLB: TPC<%s>\n", regs->tpc);
+	printk(KERN_EMERG "SUN4V-ITLB: TPC<%pS>\n", (void *) regs->tpc);
 	printk(KERN_EMERG "SUN4V-ITLB: O7[%lx]\n", regs->u_regs[UREG_I7]);
-	print_symbol(KERN_EMERG "SUN4V-ITLB: O7<%s>\n", regs->u_regs[UREG_I7]);
+	printk(KERN_EMERG "SUN4V-ITLB: O7<%pS>\n",
+	       (void *) regs->u_regs[UREG_I7]);
 	printk(KERN_EMERG "SUN4V-ITLB: vaddr[%lx] ctx[%lx] "
 	       "pte[%lx] error[%lx]\n",
 	       sun4v_err_itlb_vaddr, sun4v_err_itlb_ctx,
@@ -1927,9 +1924,10 @@ void sun4v_dtlb_error_report(struct pt_regs *regs, int tl)
 
 	printk(KERN_EMERG "SUN4V-DTLB: Error at TPC[%lx], tl %d\n",
 	       regs->tpc, tl);
-	print_symbol(KERN_EMERG "SUN4V-DTLB: TPC<%s>\n", regs->tpc);
+	printk(KERN_EMERG "SUN4V-DTLB: TPC<%pS>\n", (void *) regs->tpc);
 	printk(KERN_EMERG "SUN4V-DTLB: O7[%lx]\n", regs->u_regs[UREG_I7]);
-	print_symbol(KERN_EMERG "SUN4V-DTLB: O7<%s>\n", regs->u_regs[UREG_I7]);
+	printk(KERN_EMERG "SUN4V-DTLB: O7<%pS>\n",
+	       (void *) regs->u_regs[UREG_I7]);
 	printk(KERN_EMERG "SUN4V-DTLB: vaddr[%lx] ctx[%lx] "
 	       "pte[%lx] error[%lx]\n",
 	       sun4v_err_dtlb_vaddr, sun4v_err_dtlb_ctx,
@@ -2111,10 +2109,7 @@ void show_stack(struct task_struct *tsk, unsigned long *_ksp)
 	fp = ksp + STACK_BIAS;
 	thread_base = (unsigned long) tp;
 
-	printk("Call Trace:");
-#ifdef CONFIG_KALLSYMS
-	printk("\n");
-#endif
+	printk("Call Trace:\n");
 	do {
 		struct sparc_stackf *sf;
 		struct pt_regs *regs;
@@ -2137,12 +2132,8 @@ void show_stack(struct task_struct *tsk, unsigned long *_ksp)
 			fp = (unsigned long)sf->fp + STACK_BIAS;
 		}
 
-		printk(" [%016lx] ", pc);
-		print_symbol("%s\n", pc);
+		printk(" [%016lx] %pS\n", pc, (void *) pc);
 	} while (++count < 16);
-#ifndef CONFIG_KALLSYMS
-	printk("\n");
-#endif
 }
 
 void dump_stack(void)
@@ -2211,9 +2202,8 @@ void die_if_kernel(char *str, struct pt_regs *regs)
 		while (rw &&
 		       count++ < 30&&
 		       is_kernel_stack(current, rw)) {
-			printk("Caller[%016lx]", rw->ins[7]);
-			print_symbol(": %s", rw->ins[7]);
-			printk("\n");
+			printk("Caller[%016lx]: %pS\n", rw->ins[7],
+			       (void *) rw->ins[7]);
 
 			rw = kernel_stack_up(rw);
 		}
@@ -2486,90 +2476,86 @@ extern void tsb_config_offsets_are_bolixed_dave(void);
 /* Only invoked on boot processor. */
 void __init trap_init(void)
 {
-	BUILD_BUG_ON(TI_TASK != offsetof(struct thread_info, task));
-	BUILD_BUG_ON(TI_FLAGS != offsetof(struct thread_info, flags));
-	BUILD_BUG_ON(TI_CPU != offsetof(struct thread_info, cpu));
-	BUILD_BUG_ON(TI_FPSAVED != offsetof(struct thread_info, fpsaved));
-	BUILD_BUG_ON(TI_KSP != offsetof(struct thread_info, ksp));
-	BUILD_BUG_ON(TI_FAULT_ADDR !=
-		     offsetof(struct thread_info, fault_address));
-	BUILD_BUG_ON(TI_KREGS != offsetof(struct thread_info, kregs));
-	BUILD_BUG_ON(TI_UTRAPS != offsetof(struct thread_info, utraps));
-	BUILD_BUG_ON(TI_EXEC_DOMAIN !=
-		     offsetof(struct thread_info, exec_domain));
-	BUILD_BUG_ON(TI_REG_WINDOW !=
-		     offsetof(struct thread_info, reg_window));
-	BUILD_BUG_ON(TI_RWIN_SPTRS !=
-		     offsetof(struct thread_info, rwbuf_stkptrs));
-	BUILD_BUG_ON(TI_GSR != offsetof(struct thread_info, gsr));
-	BUILD_BUG_ON(TI_XFSR != offsetof(struct thread_info, xfsr));
-	BUILD_BUG_ON(TI_PRE_COUNT !=
-		     offsetof(struct thread_info, preempt_count));
-	BUILD_BUG_ON(TI_NEW_CHILD !=
-		     offsetof(struct thread_info, new_child));
-	BUILD_BUG_ON(TI_SYS_NOERROR !=
-		     offsetof(struct thread_info, syscall_noerror));
-	BUILD_BUG_ON(TI_RESTART_BLOCK !=
-		     offsetof(struct thread_info, restart_block));
-	BUILD_BUG_ON(TI_KUNA_REGS !=
-		     offsetof(struct thread_info, kern_una_regs));
-	BUILD_BUG_ON(TI_KUNA_INSN !=
-		     offsetof(struct thread_info, kern_una_insn));
-	BUILD_BUG_ON(TI_FPREGS != offsetof(struct thread_info, fpregs));
-	BUILD_BUG_ON((TI_FPREGS & (64 - 1)));
- 
-	BUILD_BUG_ON(TRAP_PER_CPU_THREAD !=
-		     offsetof(struct trap_per_cpu, thread));
-	BUILD_BUG_ON(TRAP_PER_CPU_PGD_PADDR !=
-		     offsetof(struct trap_per_cpu, pgd_paddr));
-	BUILD_BUG_ON(TRAP_PER_CPU_CPU_MONDO_PA !=
-		     offsetof(struct trap_per_cpu, cpu_mondo_pa));
-	BUILD_BUG_ON(TRAP_PER_CPU_DEV_MONDO_PA !=
-		     offsetof(struct trap_per_cpu, dev_mondo_pa));
-	BUILD_BUG_ON(TRAP_PER_CPU_RESUM_MONDO_PA !=
-		     offsetof(struct trap_per_cpu, resum_mondo_pa));
-	BUILD_BUG_ON(TRAP_PER_CPU_RESUM_KBUF_PA !=
-		     offsetof(struct trap_per_cpu, resum_kernel_buf_pa));
-	BUILD_BUG_ON(TRAP_PER_CPU_NONRESUM_MONDO_PA !=
-		     offsetof(struct trap_per_cpu, nonresum_mondo_pa));
-	BUILD_BUG_ON(TRAP_PER_CPU_NONRESUM_KBUF_PA !=
-		     offsetof(struct trap_per_cpu, nonresum_kernel_buf_pa));
-	BUILD_BUG_ON(TRAP_PER_CPU_FAULT_INFO !=
-		     offsetof(struct trap_per_cpu, fault_info));
-	BUILD_BUG_ON(TRAP_PER_CPU_CPU_MONDO_BLOCK_PA !=
-		     offsetof(struct trap_per_cpu, cpu_mondo_block_pa));
-	BUILD_BUG_ON(TRAP_PER_CPU_CPU_LIST_PA !=
-		     offsetof(struct trap_per_cpu, cpu_list_pa));
-	BUILD_BUG_ON(TRAP_PER_CPU_TSB_HUGE !=
-		     offsetof(struct trap_per_cpu, tsb_huge));
-	BUILD_BUG_ON(TRAP_PER_CPU_TSB_HUGE_TEMP !=
-		     offsetof(struct trap_per_cpu, tsb_huge_temp));
-#if 0
-	BUILD_BUG_ON(TRAP_PER_CPU_IRQ_WORKLIST !=
-		     offsetof(struct trap_per_cpu, irq_worklist));
-#endif
-	BUILD_BUG_ON(TRAP_PER_CPU_CPU_MONDO_QMASK !=
-		     offsetof(struct trap_per_cpu, cpu_mondo_qmask));
-	BUILD_BUG_ON(TRAP_PER_CPU_DEV_MONDO_QMASK !=
-		     offsetof(struct trap_per_cpu, dev_mondo_qmask));
-	BUILD_BUG_ON(TRAP_PER_CPU_RESUM_QMASK !=
-		     offsetof(struct trap_per_cpu, resum_qmask));
-	BUILD_BUG_ON(TRAP_PER_CPU_NONRESUM_QMASK !=
-		     offsetof(struct trap_per_cpu, nonresum_qmask));
- 
-	BUILD_BUG_ON(TSB_CONFIG_TSB !=
-		      offsetof(struct tsb_config, tsb));
-	BUILD_BUG_ON(TSB_CONFIG_RSS_LIMIT !=
-		     offsetof(struct tsb_config, tsb_rss_limit));
-	BUILD_BUG_ON(TSB_CONFIG_NENTRIES !=
-		     offsetof(struct tsb_config, tsb_nentries));
-	BUILD_BUG_ON(TSB_CONFIG_REG_VAL !=
-		     offsetof(struct tsb_config, tsb_reg_val));
-	BUILD_BUG_ON(TSB_CONFIG_MAP_VADDR !=
-		     offsetof(struct tsb_config, tsb_map_vaddr));
-	BUILD_BUG_ON(TSB_CONFIG_MAP_PTE !=
-		     offsetof(struct tsb_config, tsb_map_pte));
- 
+	/* Compile time sanity check. */
+	if (TI_TASK != offsetof(struct thread_info, task) ||
+	    TI_FLAGS != offsetof(struct thread_info, flags) ||
+	    TI_CPU != offsetof(struct thread_info, cpu) ||
+	    TI_FPSAVED != offsetof(struct thread_info, fpsaved) ||
+	    TI_KSP != offsetof(struct thread_info, ksp) ||
+	    TI_FAULT_ADDR != offsetof(struct thread_info, fault_address) ||
+	    TI_KREGS != offsetof(struct thread_info, kregs) ||
+	    TI_UTRAPS != offsetof(struct thread_info, utraps) ||
+	    TI_EXEC_DOMAIN != offsetof(struct thread_info, exec_domain) ||
+	    TI_REG_WINDOW != offsetof(struct thread_info, reg_window) ||
+	    TI_RWIN_SPTRS != offsetof(struct thread_info, rwbuf_stkptrs) ||
+	    TI_GSR != offsetof(struct thread_info, gsr) ||
+	    TI_XFSR != offsetof(struct thread_info, xfsr) ||
+	    TI_USER_CNTD0 != offsetof(struct thread_info, user_cntd0) ||
+	    TI_USER_CNTD1 != offsetof(struct thread_info, user_cntd1) ||
+	    TI_KERN_CNTD0 != offsetof(struct thread_info, kernel_cntd0) ||
+	    TI_KERN_CNTD1 != offsetof(struct thread_info, kernel_cntd1) ||
+	    TI_PCR != offsetof(struct thread_info, pcr_reg) ||
+	    TI_PRE_COUNT != offsetof(struct thread_info, preempt_count) ||
+	    TI_NEW_CHILD != offsetof(struct thread_info, new_child) ||
+	    TI_SYS_NOERROR != offsetof(struct thread_info, syscall_noerror) ||
+	    TI_RESTART_BLOCK != offsetof(struct thread_info, restart_block) ||
+	    TI_KUNA_REGS != offsetof(struct thread_info, kern_una_regs) ||
+	    TI_KUNA_INSN != offsetof(struct thread_info, kern_una_insn) ||
+	    TI_FPREGS != offsetof(struct thread_info, fpregs) ||
+	    (TI_FPREGS & (64 - 1)))
+		thread_info_offsets_are_bolixed_dave();
+
+	if (TRAP_PER_CPU_THREAD != offsetof(struct trap_per_cpu, thread) ||
+	    (TRAP_PER_CPU_PGD_PADDR !=
+	     offsetof(struct trap_per_cpu, pgd_paddr)) ||
+	    (TRAP_PER_CPU_CPU_MONDO_PA !=
+	     offsetof(struct trap_per_cpu, cpu_mondo_pa)) ||
+	    (TRAP_PER_CPU_DEV_MONDO_PA !=
+	     offsetof(struct trap_per_cpu, dev_mondo_pa)) ||
+	    (TRAP_PER_CPU_RESUM_MONDO_PA !=
+	     offsetof(struct trap_per_cpu, resum_mondo_pa)) ||
+	    (TRAP_PER_CPU_RESUM_KBUF_PA !=
+	     offsetof(struct trap_per_cpu, resum_kernel_buf_pa)) ||
+	    (TRAP_PER_CPU_NONRESUM_MONDO_PA !=
+	     offsetof(struct trap_per_cpu, nonresum_mondo_pa)) ||
+	    (TRAP_PER_CPU_NONRESUM_KBUF_PA !=
+	     offsetof(struct trap_per_cpu, nonresum_kernel_buf_pa)) ||
+	    (TRAP_PER_CPU_FAULT_INFO !=
+	     offsetof(struct trap_per_cpu, fault_info)) ||
+	    (TRAP_PER_CPU_CPU_MONDO_BLOCK_PA !=
+	     offsetof(struct trap_per_cpu, cpu_mondo_block_pa)) ||
+	    (TRAP_PER_CPU_CPU_LIST_PA !=
+	     offsetof(struct trap_per_cpu, cpu_list_pa)) ||
+	    (TRAP_PER_CPU_TSB_HUGE !=
+	     offsetof(struct trap_per_cpu, tsb_huge)) ||
+	    (TRAP_PER_CPU_TSB_HUGE_TEMP !=
+	     offsetof(struct trap_per_cpu, tsb_huge_temp)) ||
+	    (TRAP_PER_CPU_IRQ_WORKLIST_PA !=
+	     offsetof(struct trap_per_cpu, irq_worklist_pa)) ||
+	    (TRAP_PER_CPU_CPU_MONDO_QMASK !=
+	     offsetof(struct trap_per_cpu, cpu_mondo_qmask)) ||
+	    (TRAP_PER_CPU_DEV_MONDO_QMASK !=
+	     offsetof(struct trap_per_cpu, dev_mondo_qmask)) ||
+	    (TRAP_PER_CPU_RESUM_QMASK !=
+	     offsetof(struct trap_per_cpu, resum_qmask)) ||
+	    (TRAP_PER_CPU_NONRESUM_QMASK !=
+	     offsetof(struct trap_per_cpu, nonresum_qmask)))
+		trap_per_cpu_offsets_are_bolixed_dave();
+
+	if ((TSB_CONFIG_TSB !=
+	     offsetof(struct tsb_config, tsb)) ||
+	    (TSB_CONFIG_RSS_LIMIT !=
+	     offsetof(struct tsb_config, tsb_rss_limit)) ||
+	    (TSB_CONFIG_NENTRIES !=
+	     offsetof(struct tsb_config, tsb_nentries)) ||
+	    (TSB_CONFIG_REG_VAL !=
+	     offsetof(struct tsb_config, tsb_reg_val)) ||
+	    (TSB_CONFIG_MAP_VADDR !=
+	     offsetof(struct tsb_config, tsb_map_vaddr)) ||
+	    (TSB_CONFIG_MAP_PTE !=
+	     offsetof(struct tsb_config, tsb_map_pte)))
+		tsb_config_offsets_are_bolixed_dave();
+
 	/* Attach to the address space of init_task.  On SMP we
 	 * do this in smp.c:smp_callin for other cpus.
 	 */

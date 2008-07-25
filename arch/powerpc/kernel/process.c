@@ -33,7 +33,6 @@
 #include <linux/mqueue.h>
 #include <linux/hardirq.h>
 #include <linux/utsname.h>
-#include <linux/perfmon_kern.h>
 
 #include <asm/pgtable.h>
 #include <asm/uaccess.h>
@@ -48,6 +47,8 @@
 #ifdef CONFIG_PPC64
 #include <asm/firmware.h>
 #endif
+#include <linux/kprobes.h>
+#include <linux/kdebug.h>
 
 extern unsigned long _get_SP(void);
 
@@ -240,6 +241,35 @@ void discard_lazy_cpu_state(void)
 }
 #endif /* CONFIG_SMP */
 
+void do_dabr(struct pt_regs *regs, unsigned long address,
+		    unsigned long error_code)
+{
+	siginfo_t info;
+
+	if (notify_die(DIE_DABR_MATCH, "dabr_match", regs, error_code,
+			11, SIGSEGV) == NOTIFY_STOP)
+		return;
+
+	if (debugger_dabr_match(regs))
+		return;
+
+	/* Clear the DAC and struct entries.  One shot trigger */
+#if (defined(CONFIG_44x) || defined(CONFIG_BOOKE))
+	mtspr(SPRN_DBCR0, mfspr(SPRN_DBCR0) & ~(DBSR_DAC1R | DBSR_DAC1W
+							| DBCR0_IDM));
+#endif
+
+	/* Clear the DABR */
+	set_dabr(0);
+
+	/* Deliver the signal to userspace */
+	info.si_signo = SIGTRAP;
+	info.si_errno = 0;
+	info.si_code = TRAP_HWBKPT;
+	info.si_addr = (void __user *)address;
+	force_sig_info(SIGTRAP, &info, current);
+}
+
 static DEFINE_PER_CPU(unsigned long, current_dabr);
 
 int set_dabr(unsigned long dabr)
@@ -255,6 +285,11 @@ int set_dabr(unsigned long dabr)
 #if defined(CONFIG_PPC64) || defined(CONFIG_6xx)
 	mtspr(SPRN_DABR, dabr);
 #endif
+
+#if defined(CONFIG_44x) || defined(CONFIG_BOOKE)
+	mtspr(SPRN_DAC1, dabr);
+#endif
+
 	return 0;
 }
 
@@ -338,6 +373,12 @@ struct task_struct *__switch_to(struct task_struct *prev,
 	if (unlikely(__get_cpu_var(current_dabr) != new->thread.dabr))
 		set_dabr(new->thread.dabr);
 
+#if defined(CONFIG_44x) || defined(CONFIG_BOOKE)
+	/* If new thread DAC (HW breakpoint) is the same then leave it */
+	if (new->thread.dabr)
+		set_dabr(new->thread.dabr);
+#endif
+
 	new_thread = &new->thread;
 	old_thread = &current->thread;
 
@@ -354,11 +395,6 @@ struct task_struct *__switch_to(struct task_struct *prev,
 		new_thread->start_tb = current_tb;
 	}
 #endif
-	if (test_tsk_thread_flag(prev, TIF_PERFMON_CTXSW))
-		pfm_ctxsw_out(prev, new);
-
-	if (test_tsk_thread_flag(new, TIF_PERFMON_CTXSW))
-		pfm_ctxsw_in(prev, new);
 
 	local_irq_save(flags);
 
@@ -510,7 +546,6 @@ void show_regs(struct pt_regs * regs)
 void exit_thread(void)
 {
 	discard_lazy_cpu_state();
-	pfm_exit_thread();
 }
 
 void flush_thread(void)
@@ -532,6 +567,10 @@ void flush_thread(void)
 	if (current->thread.dabr) {
 		current->thread.dabr = 0;
 		set_dabr(0);
+
+#if defined(CONFIG_44x) || defined(CONFIG_BOOKE)
+		current->thread.dbcr0 &= ~(DBSR_DAC1R | DBSR_DAC1W);
+#endif
 	}
 }
 
@@ -632,7 +671,6 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 #else
 	kregs->nip = (unsigned long)ret_from_fork;
 #endif
-	pfm_copy_thread(p);
 
 	return 0;
 }

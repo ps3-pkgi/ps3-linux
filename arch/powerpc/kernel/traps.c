@@ -53,7 +53,6 @@
 #include <asm/processor.h>
 #endif
 #include <asm/kexec.h>
-#include <asm/emulated_ops.h>
 
 #if defined(CONFIG_DEBUGGER) || defined(CONFIG_KEXEC)
 int (*__debugger)(struct pt_regs *regs);
@@ -764,13 +763,6 @@ static int emulate_isel(struct pt_regs *regs, u32 instword)
 	return 0;
 }
 
-void do_warn_emulate(const char *type)
-{
-	if (printk_ratelimit())
-		pr_warning("%s used emulated %s instruction\n", current->comm,
-			   type);
-}
-
 static int emulate_instruction(struct pt_regs *regs)
 {
 	u32 instword;
@@ -785,38 +777,31 @@ static int emulate_instruction(struct pt_regs *regs)
 
 	/* Emulate the mfspr rD, PVR. */
 	if ((instword & INST_MFSPR_PVR_MASK) == INST_MFSPR_PVR) {
-		WARN_EMULATE(mfpvr);
 		rd = (instword >> 21) & 0x1f;
 		regs->gpr[rd] = mfspr(SPRN_PVR);
 		return 0;
 	}
 
 	/* Emulating the dcba insn is just a no-op.  */
-	if ((instword & INST_DCBA_MASK) == INST_DCBA) {
-		WARN_EMULATE(dcba);
+	if ((instword & INST_DCBA_MASK) == INST_DCBA)
 		return 0;
-	}
 
 	/* Emulate the mcrxr insn.  */
 	if ((instword & INST_MCRXR_MASK) == INST_MCRXR) {
 		int shift = (instword >> 21) & 0x1c;
 		unsigned long msk = 0xf0000000UL >> shift;
 
-		WARN_EMULATE(mcrxr);
 		regs->ccr = (regs->ccr & ~msk) | ((regs->xer >> shift) & msk);
 		regs->xer &= ~0xf0000000UL;
 		return 0;
 	}
 
 	/* Emulate load/store string insn. */
-	if ((instword & INST_STRING_GEN_MASK) == INST_STRING) {
-		WARN_EMULATE(string);
+	if ((instword & INST_STRING_GEN_MASK) == INST_STRING)
 		return emulate_string_inst(regs, instword);
-	}
 
 	/* Emulate the popcntb (Population Count Bytes) instruction. */
 	if ((instword & INST_POPCNTB_MASK) == INST_POPCNTB) {
-		WARN_EMULATE(popcntb);
 		return emulate_popcntb_inst(regs, instword);
 	}
 
@@ -1019,8 +1004,6 @@ void SoftwareEmulation(struct pt_regs *regs)
 
 #ifdef CONFIG_MATH_EMULATION
 	errcode = do_mathemu(regs);
-	if (errcode >= 0)
-		WARN_EMULATE(math);
 
 	switch (errcode) {
 	case 0:
@@ -1042,9 +1025,6 @@ void SoftwareEmulation(struct pt_regs *regs)
 
 #elif defined(CONFIG_8XX_MINIMAL_FPEMU)
 	errcode = Soft_emulate_8xx(regs);
-	if (errcode >= 0)
-		WARN_EMULATE(8xx);
-
 	switch (errcode) {
 	case 0:
 		emulate_single_step(regs);
@@ -1087,6 +1067,22 @@ void __kprobes DebugException(struct pt_regs *regs, unsigned long debug_status)
 		}
 
 		_exception(SIGTRAP, regs, TRAP_TRACE, regs->nip);
+	} else if (debug_status & (DBSR_DAC1R | DBSR_DAC1W)) {
+		regs->msr &= ~MSR_DE;
+
+		if (user_mode(regs)) {
+			current->thread.dbcr0 &= ~(DBSR_DAC1R | DBSR_DAC1W |
+								DBCR0_IDM);
+		} else {
+			/* Disable DAC interupts */
+			mtspr(SPRN_DBCR0, mfspr(SPRN_DBCR0) & ~(DBSR_DAC1R |
+						DBSR_DAC1W | DBCR0_IDM));
+
+			/* Clear the DAC event */
+			mtspr(SPRN_DBSR, (DBSR_DAC1R | DBSR_DAC1W));
+		}
+		/* Setup and send the trap to the handler */
+		do_dabr(regs, mfspr(SPRN_DAC1), debug_status);
 	}
 }
 #endif /* CONFIG_4xx || CONFIG_BOOKE */
