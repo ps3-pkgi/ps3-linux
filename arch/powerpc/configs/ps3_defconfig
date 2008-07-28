@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.26
-# Wed Jul 16 13:59:24 2008
+# Wed Jul 16 13:06:44 2008
 #
 CONFIG_PPC64=y
 
@@ -179,6 +179,7 @@ CONFIG_PS3_STORAGE=y
 CONFIG_PS3_DISK=y
 CONFIG_PS3_ROM=y
 CONFIG_PS3_FLASH=y
+CONFIG_OPROFILE_PS3=y
 CONFIG_PS3_LPM=m
 CONFIG_PPC_CELL=y
 # CONFIG_PPC_CELL_NATIVE is not set
@@ -205,6 +206,17 @@ CONFIG_SPU_BASE=y
 # CONFIG_GENERIC_IOMAP is not set
 # CONFIG_CPU_FREQ is not set
 # CONFIG_FSL_ULI1575 is not set
+
+#
+# Hardware Performance Monitoring support
+#
+CONFIG_PERFMON=y
+# CONFIG_PERFMON_DEBUG is not set
+CONFIG_PERFMON_DEBUG_FS=y
+# CONFIG_PERFMON_POWER4 is not set
+# CONFIG_PERFMON_POWER5 is not set
+# CONFIG_PERFMON_POWER6 is not set
+CONFIG_PERFMON_CELL=m
 
 #
 # Kernel options
@@ -366,6 +378,7 @@ CONFIG_IPV6_NDISC_NODETYPE=y
 # CONFIG_ECONET is not set
 # CONFIG_WAN_ROUTER is not set
 # CONFIG_NET_SCHED is not set
+CONFIG_NET_SCH_FIFO=y
 
 #
 # Network testing
@@ -399,9 +412,31 @@ CONFIG_BT_HCIUSB_SCO=y
 #
 # Wireless
 #
-# CONFIG_CFG80211 is not set
+CONFIG_CFG80211=m
+CONFIG_NL80211=y
 CONFIG_WIRELESS_EXT=y
-# CONFIG_MAC80211 is not set
+CONFIG_MAC80211=m
+
+#
+# Rate control algorithm selection
+#
+CONFIG_MAC80211_RC_DEFAULT_PID=y
+# CONFIG_MAC80211_RC_DEFAULT_NONE is not set
+
+#
+# Selecting 'y' for an algorithm will
+#
+
+#
+# build the algorithm into mac80211.
+#
+CONFIG_MAC80211_RC_DEFAULT="pid"
+CONFIG_MAC80211_RC_PID=y
+# CONFIG_MAC80211_MESH is not set
+# CONFIG_MAC80211_LEDS is not set
+# CONFIG_MAC80211_DEBUGFS is not set
+# CONFIG_MAC80211_DEBUG_PACKET_ALIGNMENT is not set
+# CONFIG_MAC80211_DEBUG is not set
 CONFIG_IEEE80211=m
 # CONFIG_IEEE80211_DEBUG is not set
 CONFIG_IEEE80211_CRYPT_WEP=m
@@ -427,7 +462,72 @@ CONFIG_EXTRA_FIRMWARE=""
 # CONFIG_DEBUG_DEVRES is not set
 # CONFIG_SYS_HYPERVISOR is not set
 # CONFIG_CONNECTOR is not set
-# CONFIG_MTD is not set
+CONFIG_MTD=y
+CONFIG_MTD_DEBUG=y
+CONFIG_MTD_DEBUG_VERBOSE=0
+# CONFIG_MTD_CONCAT is not set
+# CONFIG_MTD_PARTITIONS is not set
+
+#
+# User Modules And Translation Layers
+#
+# CONFIG_MTD_CHAR is not set
+CONFIG_MTD_BLKDEVS=y
+CONFIG_MTD_BLOCK=y
+# CONFIG_FTL is not set
+# CONFIG_NFTL is not set
+# CONFIG_INFTL is not set
+# CONFIG_RFD_FTL is not set
+# CONFIG_SSFDC is not set
+# CONFIG_MTD_OOPS is not set
+
+#
+# RAM/ROM/Flash chip drivers
+#
+# CONFIG_MTD_CFI is not set
+# CONFIG_MTD_JEDECPROBE is not set
+CONFIG_MTD_MAP_BANK_WIDTH_1=y
+CONFIG_MTD_MAP_BANK_WIDTH_2=y
+CONFIG_MTD_MAP_BANK_WIDTH_4=y
+# CONFIG_MTD_MAP_BANK_WIDTH_8 is not set
+# CONFIG_MTD_MAP_BANK_WIDTH_16 is not set
+# CONFIG_MTD_MAP_BANK_WIDTH_32 is not set
+CONFIG_MTD_CFI_I1=y
+CONFIG_MTD_CFI_I2=y
+# CONFIG_MTD_CFI_I4 is not set
+# CONFIG_MTD_CFI_I8 is not set
+# CONFIG_MTD_RAM is not set
+# CONFIG_MTD_ROM is not set
+# CONFIG_MTD_ABSENT is not set
+
+#
+# Mapping drivers for chip access
+#
+# CONFIG_MTD_COMPLEX_MAPPINGS is not set
+# CONFIG_MTD_PLATRAM is not set
+
+#
+# Self-contained MTD device drivers
+#
+# CONFIG_MTD_SLRAM is not set
+# CONFIG_MTD_PHRAM is not set
+CONFIG_MTD_PS3VRAM=y
+# CONFIG_MTD_MTDRAM is not set
+# CONFIG_MTD_BLOCK2MTD is not set
+
+#
+# Disk-On-Chip Device Drivers
+#
+# CONFIG_MTD_DOC2000 is not set
+# CONFIG_MTD_DOC2001 is not set
+# CONFIG_MTD_DOC2001PLUS is not set
+# CONFIG_MTD_NAND is not set
+# CONFIG_MTD_ONENAND is not set
+
+#
+# UBI - Unsorted block images
+#
+# CONFIG_MTD_UBI is not set
 CONFIG_OF_DEVICE=y
 # CONFIG_PARPORT is not set
 CONFIG_BLK_DEV=y
@@ -513,6 +613,7 @@ CONFIG_NETDEV_1000=y
 # CONFIG_E1000E_ENABLED is not set
 CONFIG_GELIC_NET=y
 CONFIG_GELIC_WIRELESS=y
+CONFIG_GELIC_WIRELESS_OLD_PSK_INTERFACE=y
 # CONFIG_NETDEV_10000 is not set
 
 #
@@ -523,8 +624,21 @@ CONFIG_WLAN_80211=y
 # CONFIG_LIBERTAS is not set
 # CONFIG_USB_ZD1201 is not set
 # CONFIG_USB_NET_RNDIS_WLAN is not set
+# CONFIG_RTL8187 is not set
+# CONFIG_P54_COMMON is not set
 # CONFIG_IWLWIFI_LEDS is not set
 # CONFIG_HOSTAP is not set
+# CONFIG_B43 is not set
+# CONFIG_B43LEGACY is not set
+CONFIG_ZD1211RW=m
+# CONFIG_ZD1211RW_DEBUG is not set
+CONFIG_RT2X00=m
+CONFIG_RT2X00_LIB=m
+CONFIG_RT2X00_LIB_USB=m
+CONFIG_RT2X00_LIB_FIRMWARE=y
+# CONFIG_RT2500USB is not set
+CONFIG_RT73USB=m
+# CONFIG_RT2X00_DEBUG is not set
 
 #
 # USB Network Adapters
@@ -998,6 +1112,7 @@ CONFIG_HUGETLB_PAGE=y
 # CONFIG_BEFS_FS is not set
 # CONFIG_BFS_FS is not set
 # CONFIG_EFS_FS is not set
+# CONFIG_JFFS2_FS is not set
 # CONFIG_CRAMFS is not set
 # CONFIG_VXFS_FS is not set
 # CONFIG_MINIX_FS is not set
