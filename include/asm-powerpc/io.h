@@ -617,8 +617,7 @@ static inline void iosync(void)
  *   and can be hooked by the platform via ppc_md
  *
  * * ioremap_flags allows to specify the page flags as an argument and can
- *   also be hooked by the platform via ppc_md. ioremap_prot is the exact
- *   same thing as ioremap_flags.
+ *   also be hooked by the platform via ppc_md
  *
  * * ioremap_nocache is identical to ioremap
  *
@@ -640,8 +639,6 @@ extern void __iomem *ioremap(phys_addr_t address, unsigned long size);
 extern void __iomem *ioremap_flags(phys_addr_t address, unsigned long size,
 				   unsigned long flags);
 #define ioremap_nocache(addr, size)	ioremap((addr), (size))
-#define ioremap_prot(addr, size, prot)	ioremap_flags((addr), (size), (prot))
-
 extern void iounmap(volatile void __iomem *addr);
 
 extern void __iomem *__ioremap(phys_addr_t, unsigned long size,

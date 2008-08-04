@@ -586,6 +586,7 @@ static void __cpuinit create_cache_info(struct sys_device *sysdev)
 #define SYSFS_EMULATED_SETUP(type)					\
 DEFINE_PER_CPU(atomic_long_t, emulated_ ## type);			\
 static ssize_t show_emulated_ ## type (struct sys_device *dev,		\
+				       struct sysdev_attribute *attr,	\
 				       char *buf)			\
 {									\
 	struct cpu *cpu = container_of(dev, struct cpu, sysdev);	\
