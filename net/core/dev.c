@@ -2100,7 +2100,7 @@ static int ing_filter(struct sk_buff *skb)
 	rxq = &dev->rx_queue;
 
 	q = rxq->qdisc;
-	if (q) {
+	if (q != &noop_qdisc) {
 		spin_lock(qdisc_lock(q));
 		result = qdisc_enqueue_root(skb, q);
 		spin_unlock(qdisc_lock(q));
@@ -2113,7 +2113,7 @@ static inline struct sk_buff *handle_ing(struct sk_buff *skb,
 					 struct packet_type **pt_prev,
 					 int *ret, struct net_device *orig_dev)
 {
-	if (!skb->dev->rx_queue.qdisc)
+	if (skb->dev->rx_queue.qdisc == &noop_qdisc)
 		goto out;
 
 	if (*pt_prev) {
@@ -4200,6 +4200,7 @@ static void netdev_init_queues(struct net_device *dev)
 {
 	netdev_init_one_queue(dev, &dev->rx_queue, NULL);
 	netdev_for_each_tx_queue(dev, netdev_init_one_queue, NULL);
+	spin_lock_init(&dev->tx_global_lock);
 }
 
 /**

@@ -522,7 +522,7 @@ config CC_OPTIMIZE_FOR_SIZE
 	  Enabling this option will pass "-Os" instead of "-O2" to gcc
 	  resulting in a smaller kernel.
 
-	  If unsure, say N.
+	  If unsure, say Y.
 
 config SYSCTL
 	bool
@@ -801,6 +801,10 @@ config PROC_PAGE_MONITOR
           interfaces will reduce the size of the kernel by approximately 4kb.
 
 endmenu		# General setup
+
+config HAVE_GENERIC_DMA_COHERENT
+	bool
+	default n
 
 config SLABINFO
 	bool
