@@ -34,6 +34,7 @@
 #include <linux/backlight.h>
 #include <linux/bug.h>
 #include <linux/kdebug.h>
+#include <linux/sysctl.h>
 
 #include <asm/pgtable.h>
 #include <asm/uaccess.h>
@@ -1260,3 +1261,37 @@ void kernel_bad_stack(struct pt_regs *regs)
 void __init trap_init(void)
 {
 }
+
+#ifdef CONFIG_SYSCTL
+int sysctl_warn_emulated;
+
+static ctl_table warn_emulated_ctl_table[]={
+	{
+		.procname	= "cpu_emulation_warnings",
+		.data		= &sysctl_warn_emulated,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= &proc_dointvec,
+	},
+	{}
+};
+
+static ctl_table warn_emulated_sysctl_root[] = {
+	{
+		.ctl_name	= CTL_KERN,
+		.procname	= "kernel",
+		.mode		= 0555,
+		.child		= warn_emulated_ctl_table,
+	},
+	{}
+};
+
+static inline int __init warn_emulated_sysctl_register(void)
+{
+	register_sysctl_table(warn_emulated_sysctl_root);
+
+	return 0;
+}
+
+__initcall(warn_emulated_sysctl_register);
+#endif /* !CONFIG_SYSCTL */

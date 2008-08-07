@@ -8,7 +8,6 @@
 #include <linux/nodemask.h>
 #include <linux/cpumask.h>
 #include <linux/notifier.h>
-#include <linux/sysctl.h>
 
 #include <asm/current.h>
 #include <asm/processor.h>
@@ -639,38 +638,6 @@ static struct attribute_group emulated_attr_group = {
 	.name = "emulated"
 };
 
-int sysctl_warn_emulated;
-
-#ifdef CONFIG_SYSCTL
-static ctl_table warn_emulated_ctl_table[]={
-	{
-		.procname	= "cpu_emulation_warnings",
-		.data		= &sysctl_warn_emulated,
-		.maxlen		= sizeof(int),
-		.mode		= 0644,
-		.proc_handler	= &proc_dointvec,
-	},
-	{}
-};
-
-static ctl_table warn_emulated_sysctl_root[] = {
-	{
-		.ctl_name	= CTL_KERN,
-		.procname	= "kernel",
-		.mode		= 0555,
-		.child		= warn_emulated_ctl_table,
-	},
-	{}
-};
-
-static inline void warn_emulated_sysctl_register(void)
-{
-	register_sysctl_table(warn_emulated_sysctl_root);
-}
-#else /* !CONFIG_SYSCTL */
-static inline void warn_emulated_sysctl_register(void) {}
-#endif /* !CONFIG_SYSCTL */
-
 static void __cpuinit register_cpu_online(unsigned int cpu)
 {
 	struct cpu *c = &per_cpu(cpu_devices, cpu);
@@ -972,8 +939,6 @@ static int __init topology_init(void)
 		if (cpu_online(cpu))
 			register_cpu_online(cpu);
 	}
-
-	warn_emulated_sysctl_register();
 
 	return 0;
 }
