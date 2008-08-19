@@ -2,7 +2,7 @@
  *  PS3 platform declarations.
  *
  *  Copyright (C) 2006 Sony Computer Entertainment Inc.
- *  Copyright 2006, 2008 Sony Corp.
+ *  Copyright 2006 Sony Corp.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -243,17 +243,5 @@ int ps3_repository_read_vuart_sysmgr_port(unsigned int *port);
 #define IOPTE_RPN_Mask		0x07fffffffffff000ul /* RPN */
 #define IOPTE_H			0x0000000000000800ul /* cache hint */
 #define IOPTE_IOID_Mask		0x00000000000007fful /* ioid */
-
-/**
- * enum lpar_vas_id - id of LPAR virtual address space.
- * @lpar_vas_id_current: Current selected virtual address space
- *
- * Identify the target LPAR address space.
- */
-
-enum ps3_lpar_vas_id {
-	PS3_LPAR_VAS_ID_CURRENT = 0,
-};
-
 
 #endif
