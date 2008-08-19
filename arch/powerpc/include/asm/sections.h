@@ -7,6 +7,7 @@
 #ifdef __powerpc64__
 
 extern char _end[];
+extern char __start_interrupts[], __end_interrupts[];
 
 static inline int in_kernel_text(unsigned long addr)
 {
@@ -14,6 +15,12 @@ static inline int in_kernel_text(unsigned long addr)
 		return 1;
 
 	return 0;
+}
+
+static inline int overlaps_kernel_text(unsigned long start, unsigned long end)
+{
+	return start < (unsigned long)__init_end &&
+		(unsigned long)_stext < end;
 }
 
 #endif

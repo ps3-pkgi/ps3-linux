@@ -186,6 +186,21 @@ SECTIONS
 		*(.machine.desc)
 		__machine_desc_end = . ;
 	}
+	. = ALIGN(8);
+	.dynsym : { *(.dynsym) }
+	.dynstr : { *(.dynstr) }
+	.dynamic :
+	{
+		__dynamic_start = .;
+		*(.dynamic)
+	}
+	.hash : { *(.hash) }
+	.interp : { *(.interp) }
+	.rela.dyn :
+	{
+		__rela_dyn_start = .;
+		*(.rela*)
+	}
 
 	/* freed after init ends here */
 	. = ALIGN(PAGE_SIZE);
