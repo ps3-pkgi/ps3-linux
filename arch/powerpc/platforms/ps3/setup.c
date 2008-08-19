@@ -2,7 +2,7 @@
  *  PS3 platform setup routines.
  *
  *  Copyright (C) 2006 Sony Computer Entertainment Inc.
- *  Copyright 2006 Sony Corp.
+ *  Copyright 2006, 2007 Sony Corp.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -201,7 +201,6 @@ static void __init ps3_setup_arch(void)
 	       ps3_firmware_version.rev);
 
 	ps3_spu_set_platform();
-	ps3_map_htab();
 
 #ifdef CONFIG_SMP
 	smp_init_ps3();

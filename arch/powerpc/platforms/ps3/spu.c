@@ -2,7 +2,7 @@
  *  PS3 Platform spu routines.
  *
  *  Copyright (C) 2006 Sony Computer Entertainment Inc.
- *  Copyright 2006 Sony Corp.
+ *  Copyright 2006, 2008 Sony Corp.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -190,10 +190,10 @@ static int __init setup_areas(struct spu *spu)
 {
 	struct table {char* name; unsigned long addr; unsigned long size;};
 
-	spu_pdata(spu)->shadow = ioremap_flags(spu_pdata(spu)->shadow_addr,
-					       sizeof(struct spe_shadow),
-					       pgprot_val(PAGE_READONLY) |
-					       _PAGE_NO_CACHE);
+	spu_pdata(spu)->shadow = __ioremap(spu_pdata(spu)->shadow_addr,
+					   sizeof(struct spe_shadow),
+					   pgprot_val(PAGE_READONLY) |
+					   _PAGE_NO_CACHE);
 	if (!spu_pdata(spu)->shadow) {
 		pr_debug("%s:%d: ioremap shadow failed\n", __func__, __LINE__);
 		goto fail_ioremap;
