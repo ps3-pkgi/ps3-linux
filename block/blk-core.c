@@ -439,6 +439,24 @@ void blk_put_queue(struct request_queue *q)
 	kobject_put(&q->kobj);
 }
 
+/**
+ * blk_cleanup_queue: - release a &struct request_queue when it is no longer needed
+ * @q: the request queue to be released
+ *
+ * Description:
+ *     blk_cleanup_queue is the pair to blk_init_queue() or
+ *     blk_queue_make_request().  It should be called when a request queue is
+ *     being released; typically when a block device is being de-registered.
+ *     Currently, its primary task it to free all the &struct request
+ *     structures that were allocated to the queue and the queue itself
+ *     when the reference count of the queue's kobject reaches zero.
+ *     The low level cleanup is of the queue is done by blk_release_queue()
+ *     via the queue's kobject release function.
+ *
+ * Caveat:
+ *     Hopefully the low level driver will have finished any
+ *     outstanding requests first...
+ **/
 void blk_cleanup_queue(struct request_queue *q)
 {
 	mutex_lock(&q->sysfs_lock);
