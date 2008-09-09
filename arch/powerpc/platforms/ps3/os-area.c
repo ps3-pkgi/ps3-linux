@@ -588,10 +588,15 @@ static void update_flash_db(void)
 	static const unsigned int buf_len = 8 * OS_AREA_SEGMENT_SIZE;
 	const struct os_area_header *header;
 	struct os_area_db* db;
+	mm_segment_t old_fs = get_fs();
+
+	WARN_ON(!segment_eq(get_fs(), KERNEL_DS)); // for test only!!!
 
 	/* Read in header and db from flash. */
 
+	set_fs(KERNEL_DS);
 	file = sys_open("/dev/ps3flash", O_RDWR, 0);
+	set_fs(old_fs);
 
 	if (file < 0) {
 		pr_debug("%s:%d sys_open failed\n", __func__, __LINE__);
@@ -605,14 +610,18 @@ static void update_flash_db(void)
 		goto fail_malloc;
 	}
 
+	set_fs(KERNEL_DS);
 	offset = sys_lseek(file, 0, SEEK_SET);
+	set_fs(old_fs);
 
 	if (offset != 0) {
 		pr_debug("%s:%d sys_lseek failed\n", __func__, __LINE__);
 		goto fail_header_seek;
 	}
 
+	set_fs(KERNEL_DS);
 	count = sys_read(file, (char __user *)header, buf_len);
+	set_fs(old_fs);
 
 	result = count < OS_AREA_SEGMENT_SIZE || verify_header(header)
 		|| count < header->db_area_offset * OS_AREA_SEGMENT_SIZE;
@@ -640,16 +649,20 @@ static void update_flash_db(void)
 
 	db_set_64(db, &os_area_db_id_rtc_diff, saved_params.rtc_diff);
 
+	set_fs(KERNEL_DS);
 	offset = sys_lseek(file, header->db_area_offset * OS_AREA_SEGMENT_SIZE,
 		SEEK_SET);
+	set_fs(old_fs);
 
 	if (offset != header->db_area_offset * OS_AREA_SEGMENT_SIZE) {
 		pr_debug("%s:%d sys_lseek failed\n", __func__, __LINE__);
 		goto fail_db_seek;
 	}
 
+	set_fs(KERNEL_DS);
 	count = sys_write(file, (const char __user *)db,
 		sizeof(struct os_area_db));
+	set_fs(old_fs);
 
 	if (count < sizeof(struct os_area_db)) {
 		pr_debug("%s:%d sys_write failed\n", __func__, __LINE__);
@@ -660,7 +673,9 @@ fail_header:
 fail_header_seek:
 	kfree(header);
 fail_malloc:
+	set_fs(KERNEL_DS);
 	sys_close(file);
+	set_fs(old_fs);
 fail_open:
 	return;
 }
