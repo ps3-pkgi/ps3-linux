@@ -23,6 +23,9 @@ static inline int overlaps_kernel_text(unsigned long start, unsigned long end)
 		(unsigned long)_stext < end;
 }
 
+#undef dereference_function_descriptor
+void *dereference_function_descriptor(void *);
+
 #endif
 
 #endif /* __KERNEL__ */
