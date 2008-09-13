@@ -394,12 +394,19 @@ static void fbcon_update_softback(struct vc_data *vc)
 
 static void fb_flashcursor(struct work_struct *work)
 {
-	struct fb_info *info = container_of(work, struct fb_info, queue);
-	struct fbcon_ops *ops = info->fbcon_par;
+	struct fb_info *info;
+	struct fbcon_ops *ops;
 	struct display *p;
 	struct vc_data *vc = NULL;
 	int c;
 	int mode;
+
+	WARN_ON(fbcon_has_exited);
+	if (fbcon_has_exited)
+		return;
+
+	info = container_of(work, struct fb_info, queue);
+	ops = info->fbcon_par;
 
 	acquire_console_sem();
 	if (ops && ops->currcon != -1)
@@ -3549,11 +3556,17 @@ static void fbcon_exit(void)
 	softback_buf = 0UL;
 
 	for (i = 0; i < FB_MAX; i++) {
+		int pending;
+
 		mapped = 0;
 		info = registered_fb[i];
 
 		if (info == NULL)
 			continue;
+
+		pending = cancel_work_sync(&info->queue);
+		DPRINTK("fbcon: %s pending work\n", (pending ? "canceled" :
+			"no"));
 
 		for (j = first_fb_vc; j <= last_fb_vc; j++) {
 			if (con2fb_map[j] == i)
@@ -3573,9 +3586,6 @@ static void fbcon_exit(void)
 				kfree(info->fbcon_par);
 				info->fbcon_par = NULL;
 			}
-
-			if (info->queue.func == fb_flashcursor)
-				info->queue.func = NULL;
 		}
 	}
 
