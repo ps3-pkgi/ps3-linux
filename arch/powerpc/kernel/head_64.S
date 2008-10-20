@@ -211,6 +211,9 @@ data_access_slb_pSeries:
 	mfspr	r10,SPRN_SPRG1
 	std	r10,PACA_EXSLB+EX_R13(r13)
 	mfspr	r12,SPRN_SRR1		/* and SRR1 */
+#ifndef CONFIG_RELOCATABLE
+	b	.slb_miss_realmode
+#else
 	/*
 	 * We can't just use a direct branch to .slb_miss_realmode
 	 * because the distance from here to there depends on where
@@ -221,6 +224,7 @@ data_access_slb_pSeries:
 	LOAD_HANDLER(r10, .slb_miss_realmode)
 	mtctr	r10
 	bctr
+#endif
 
 	STD_EXCEPTION_PSERIES(0x400, instruction_access)
 
@@ -245,12 +249,15 @@ instruction_access_slb_pSeries:
 	mfspr	r10,SPRN_SPRG1
 	std	r10,PACA_EXSLB+EX_R13(r13)
 	mfspr	r12,SPRN_SRR1		/* and SRR1 */
+#ifndef CONFIG_RELOCATABLE
+	b	.slb_miss_realmode
+#else
 	mfctr	r11
 	ld	r10,PACAKBASE(r13)
 	LOAD_HANDLER(r10, .slb_miss_realmode)
 	mtctr	r10
 	bctr
-
+#endif
 
 	MASKABLE_EXCEPTION_PSERIES(0x500, hardware_interrupt)
 	STD_EXCEPTION_PSERIES(0x600, alignment)
@@ -405,9 +412,7 @@ __end_interrupts:
  * exception prologs above.  Because the prologs assemble the
  * addresses of these handlers using the LOAD_HANDLER macro,
  * which uses an addi instruction, these handlers must be in
- * the first 32k of the kernel image.  (This restriction could
- * be lifted if we used an addis + addi in LOAD_HANDLER instead
- * of just an addi.)
+ * the first 32k of the kernel image.
  */
 
 /*** Common interrupt handlers ***/
@@ -594,7 +599,9 @@ unrecov_user_slb:
  */
 _GLOBAL(slb_miss_realmode)
 	mflr	r10
+#ifdef CONFIG_RELOCATABLE
 	mtctr	r11
+#endif
 
 	stw	r9,PACA_EXSLB+EX_CCR(r13)	/* save CR in exc. frame */
 	std	r10,PACA_EXSLB+EX_LR(r13)	/* save LR */
@@ -1653,7 +1660,7 @@ _INIT_STATIC(start_here_multiplatform)
 
 	/* Restore parameters passed from prom_init/kexec */
 	mr	r3,r31
- 	bl	.early_setup		/* also sets r13 and SPRG3 */
+	bl	.early_setup		/* also sets r13 and SPRG3 */
 
 	LOAD_REG_ADDR(r3, .start_here_common)
 	ld	r4,PACAKMSR(r13)

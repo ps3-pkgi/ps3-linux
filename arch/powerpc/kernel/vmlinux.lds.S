@@ -188,20 +188,23 @@ SECTIONS
 		__machine_desc_end = . ;
 	}
 	. = ALIGN(8);
-	.dynsym : { *(.dynsym) }
-	.dynstr : { *(.dynstr) }
-	.dynamic :
+	.dynsym : AT(ADDR(.dynsym) - LOAD_OFFSET) { *(.dynsym) }
+	.dynstr : AT(ADDR(.dynstr) - LOAD_OFFSET) { *(.dynstr) }
+	.dynamic : AT(ADDR(.dynamic) - LOAD_OFFSET)
 	{
 		__dynamic_start = .;
 		*(.dynamic)
 	}
-	.hash : { *(.hash) }
-	.interp : { *(.interp) }
-	.rela.dyn :
+	.hash : AT(ADDR(.hash) - LOAD_OFFSET) { *(.hash) }
+	.interp : AT(ADDR(.interp) - LOAD_OFFSET) { *(.interp) }
+	.rela.dyn : AT(ADDR(.rela.dyn) - LOAD_OFFSET)
 	{
 		__rela_dyn_start = .;
 		*(.rela*)
 	}
+
+	/* Fake ELF header containing RPA note; for addnote */
+	.fakeelf : AT(ADDR(.fakeelf) - LOAD_OFFSET) { *(.fakeelf) }
 
 	/* freed after init ends here */
 	. = ALIGN(PAGE_SIZE);
