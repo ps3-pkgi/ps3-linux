@@ -496,4 +496,7 @@ int ps3_set_signal(u64 rtas_signal_group, u8 signal_bit, u16 sub_unit,
 u32 ps3_get_hw_thread_id(int cpu);
 u64 ps3_get_spe_id(void *arg);
 
+/* mutex synchronizing GPU accesses and video mode changes */
+extern struct mutex ps3_gpu_mutex;
+
 #endif
