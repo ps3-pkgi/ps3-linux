@@ -378,8 +378,9 @@ T:	git://git.kernel.org/pub/scm/linux/kernel/git/joro/linux-2.6-iommu.git
 S:	Supported
 
 AMD MICROCODE UPDATE SUPPORT
-P:      Peter Oruba
-M:      peter.oruba@amd.com
+P:      Andreas Herrmann
+M:      andeas.herrmann3@amd.com
+L:      amd64-microcode@amd64.org
 S:      Supported
 
 AMS (Apple Motion Sensor) DRIVER
@@ -1433,8 +1434,8 @@ M:	rdunlap@xenotime.net
 S:	Maintained
 
 DOCKING STATION DRIVER
-P:	Kristen Carlson Accardi
-M:	kristen.c.accardi@intel.com
+P:	Shaohua Li
+M:	shaohua.li@intel.com
 L:	linux-acpi@vger.kernel.org
 S:	Supported
 
@@ -2109,6 +2110,12 @@ L:	linux-ide@vger.kernel.org
 L:	linux-scsi@vger.kernel.org
 S:	Orphan
 
+IDLE-I7300
+P:	Andy Henroid
+M:	andrew.d.henroid@intel.com
+L:	linux-pm@lists.linux-foundation.org
+S:	Supported
+
 IEEE 1394 SUBSYSTEM (drivers/ieee1394)
 P:	Ben Collins
 M:	ben.collins@ubuntu.com
@@ -2180,6 +2187,13 @@ INTEL I/OAT DMA DRIVER
 P:	Maciej Sosnowski
 M:	maciej.sosnowski@intel.com
 L:	linux-kernel@vger.kernel.org
+S:	Supported
+
+INTEL IOMMU (VT-d)
+P:	David Woodhouse
+M:	dwmw2@infradead.org
+L:	iommu@lists.linux-foundation.org
+T:	git://git.infradead.org/iommu-2.6.git
 S:	Supported
 
 INTEL IOP-ADMA DMA DRIVER
@@ -3179,6 +3193,11 @@ M:	olof@lixom.net
 L:	i2c@lm-sensors.org
 S:	Maintained
 
+PANASONIC LAPTOP ACPI EXTRAS DRIVER
+P:	Harald Welte
+M:	laforge@gnumonks.org
+S:	Maintained
+
 PANASONIC MN10300/AM33 PORT
 P:	David Howells
 M:	dhowells@redhat.com
@@ -3248,11 +3267,6 @@ M:	jbarnes@virtuousgeek.org
 L:	linux-kernel@vger.kernel.org
 L:	linux-pci@vger.kernel.org
 T:	git kernel.org:/pub/scm/linux/kernel/git/jbarnes/pci-2.6.git
-S:	Supported
-
-PCI HOTPLUG CORE
-P:	Kristen Carlson Accardi
-M:	kristen.c.accardi@intel.com
 S:	Supported
 
 PCIE HOTPLUG DRIVER
