@@ -238,10 +238,14 @@ static int ps3_ohci_shutdown(struct ps3_system_bus_device *dev)
 
 	tmp = hcd->irq;
 
+	hcd->state = HC_STATE_HALT;
+
 	if (hcd->driver->shutdown)
 		hcd->driver->shutdown(hcd);
 
 	ps3_system_bus_set_driver_data(dev, NULL);
+
+	/* Release HV resources. */
 
 	ps3_io_irq_destroy(tmp);
 	ps3_free_mmio_region(dev->m_region);
