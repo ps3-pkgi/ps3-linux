@@ -192,7 +192,7 @@ fail_start:
 	return result;
 }
 
-static int ps3_ohci_remove (struct ps3_system_bus_device *dev)
+static int ps3_ohci_remove(struct ps3_system_bus_device *dev)
 {
 	unsigned int tmp;
 	struct usb_hcd *hcd =
@@ -212,8 +212,36 @@ static int ps3_ohci_remove (struct ps3_system_bus_device *dev)
 	BUG_ON(!hcd->regs);
 	iounmap(hcd->regs);
 
+	irq_dispose_mapping(hcd->irq);
 	release_mem_region(hcd->rsrc_start, hcd->rsrc_len);
 	usb_put_hcd(hcd);
+
+	ps3_io_irq_destroy(tmp);
+	ps3_free_mmio_region(dev->m_region);
+
+	ps3_dma_region_free(dev->d_region);
+	ps3_close_hv_device(dev);
+
+	return 0;
+}
+
+static int ps3_ohci_shutdown(struct ps3_system_bus_device *dev)
+{
+	unsigned int tmp;
+	struct usb_hcd *hcd =
+		(struct usb_hcd *)ps3_system_bus_get_driver_data(dev);
+
+	BUG_ON(!hcd);
+
+	dev_dbg(&dev->core, "%s:%d: regs %p\n", __func__, __LINE__, hcd->regs);
+	dev_dbg(&dev->core, "%s:%d: irq %u\n", __func__, __LINE__, hcd->irq);
+
+	tmp = hcd->irq;
+
+	if (hcd->driver->shutdown)
+		hcd->driver->shutdown(hcd);
+
+	ps3_system_bus_set_driver_data(dev, NULL);
 
 	ps3_io_irq_destroy(tmp);
 	ps3_free_mmio_region(dev->m_region);
@@ -245,5 +273,5 @@ static struct ps3_system_bus_driver ps3_ohci_driver = {
 	.match_id = PS3_MATCH_ID_OHCI,
 	.probe = ps3_ohci_probe,
 	.remove = ps3_ohci_remove,
-	.shutdown = ps3_ohci_remove,
+	.shutdown = ps3_ohci_shutdown,
 };

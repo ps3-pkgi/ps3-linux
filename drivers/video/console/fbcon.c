@@ -401,7 +401,6 @@ static void fb_flashcursor(struct work_struct *work)
 	int c;
 	int mode;
 
-	WARN_ON(fbcon_has_exited);
 	if (fbcon_has_exited)
 		return;
 
