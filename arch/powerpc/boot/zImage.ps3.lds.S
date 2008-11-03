@@ -8,11 +8,15 @@ SECTIONS
   _vmlinux_end =  .;
 
   . = ALIGN(4096);
+  _dtb_start = .;
+  .kernel:dtb : { *(.kernel:dtb) }
+  _dtb_end = .;
+
+  . = ALIGN(4096);
   _initrd_start =  .;
   .kernel:initrd : { *(.kernel:initrd) }
   _initrd_end =  .;
 
-  . = ALIGN(4096);
   _start = .;
   .text      :
   {
@@ -20,7 +24,6 @@ SECTIONS
     *(.fixup)
   }
   _etext = .;
-
   . = ALIGN(4096);
   .data    :
   {
@@ -31,11 +34,6 @@ SECTIONS
     *(.got2)
     __got2_end = .;
   }
-
-  . = ALIGN(8);
-  _dtb_start = .;
-  .kernel:dtb : { *(.kernel:dtb) }
-  _dtb_end = .;
 
   . = ALIGN(4096);
   _edata  =  .;
