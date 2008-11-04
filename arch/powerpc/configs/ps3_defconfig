@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.28-rc3
-# Tue Nov  4 09:10:19 2008
+# Tue Nov  4 11:58:06 2008
 #
 CONFIG_PPC64=y
 
@@ -497,7 +497,7 @@ CONFIG_MTD_CFI_I2=y
 #
 # CONFIG_MTD_SLRAM is not set
 # CONFIG_MTD_PHRAM is not set
-# CONFIG_MTD_PS3VRAM is not set
+CONFIG_MTD_PS3VRAM=m
 # CONFIG_MTD_MTDRAM is not set
 # CONFIG_MTD_BLOCK2MTD is not set
 
