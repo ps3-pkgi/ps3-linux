@@ -91,7 +91,9 @@ struct ps3vram_priv {
 #define DMA_NOTIFIER_OFFSET_BASE 0x1000     /* first DMA notifier offset */
 #define DMA_NOTIFIER_SIZE        0x40
 
-#define NOTIFIER 8	/* notifier used for completion report */
+#define NUM_NOTIFIERS		16
+
+#define NOTIFIER 7	/* notifier used for completion report */
 
 /* A trailing '-' means to subtract off ps3fb_videomemory.size */
 char *size = "256M-";
@@ -148,7 +150,7 @@ static void ps3vram_dump_reports(struct mtd_info *mtd)
 	struct ps3vram_priv *priv = mtd->priv;
 	int i;
 
-	for (i = 0; i < 16; i++) {
+	for (i = 0; i < NUM_NOTIFIERS; i++) {
 		uint32_t *n = ps3vram_get_notifier(priv->reports, i);
 		pr_info("%p: %08x\n", n, *n);
 	}
@@ -217,6 +219,8 @@ static void ps3vram_fire_ring(struct mtd_info *mtd)
 	struct ps3vram_priv *priv = mtd->priv;
 	u64 status;
 
+	mutex_lock(&ps3_gpu_mutex);
+
 	priv->ctrl[CTRL_PUT] = FIFO_BASE + FIFO_OFFSET +
 		(priv->fifo_ptr - priv->fifo_base) * sizeof(uint32_t);
 
@@ -233,6 +237,8 @@ static void ps3vram_fire_ring(struct mtd_info *mtd)
 		ps3vram_wait_ring(mtd, 200);
 		ps3vram_rewind_ring(mtd);
 	}
+
+	mutex_unlock(&ps3_gpu_mutex);
 }
 
 static void ps3vram_bind(struct mtd_info *mtd)
@@ -708,7 +714,9 @@ static int __devinit ps3vram_probe(struct ps3_system_bus_device *dev)
 		goto out_unmap_ctrl;
 	}
 
+	mutex_lock(&ps3_gpu_mutex);
 	ps3vram_init_ring(&ps3vram_mtd);
+	mutex_unlock(&ps3_gpu_mutex);
 
 	ps3vram_mtd.name = "ps3vram";
 	ps3vram_mtd.size = ddr_size;
@@ -725,7 +733,10 @@ static int __devinit ps3vram_probe(struct ps3_system_bus_device *dev)
 
 	ps3vram_bind(&ps3vram_mtd);
 
-	if (ps3vram_wait_ring(&ps3vram_mtd, 100) < 0) {
+	mutex_lock(&ps3_gpu_mutex);
+	ret = ps3vram_wait_ring(&ps3vram_mtd, 100);
+	mutex_unlock(&ps3_gpu_mutex);
+	if (ret < 0) {
 		pr_err("failed to initialize channels\n");
 		ret = -ETIMEDOUT;
 		goto out_unmap_reports;
