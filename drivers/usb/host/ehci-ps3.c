@@ -52,6 +52,19 @@ static int ps3_ehci_hc_reset(struct usb_hcd *hcd)
 	return result;
 }
 
+static int ps3_ehci_bus_suspend(struct usb_hcd *hcd)
+{
+	ehci_dbg(hcd_to_ehci(hcd), "%s:%d\n", __func__, __LINE__);
+	return -EBUSY;
+}
+
+static int ps3_ehci_bus_resume(struct usb_hcd *hcd)
+{
+	ehci_dbg(hcd_to_ehci(hcd), "%s:%d\n", __func__, __LINE__);
+	return 0;
+}
+
+
 static const struct hc_driver ps3_ehci_hc_driver = {
 	.description		= hcd_name,
 	.product_desc		= "PS3 EHCI Host Controller",
@@ -69,8 +82,8 @@ static const struct hc_driver ps3_ehci_hc_driver = {
 	.hub_status_data	= ehci_hub_status_data,
 	.hub_control		= ehci_hub_control,
 #if defined(CONFIG_PM)
-	.bus_suspend		= ehci_bus_suspend,
-	.bus_resume		= ehci_bus_resume,
+	.bus_suspend		= ps3_ehci_bus_suspend,
+	.bus_resume		= ps3_ehci_bus_resume,
 #endif
 	.relinquish_port	= ehci_relinquish_port,
 	.port_handed_over	= ehci_port_handed_over,
