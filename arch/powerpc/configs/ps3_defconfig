@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
-# Linux kernel version: 2.6.28-rc3
-# Tue Nov  4 11:58:06 2008
+# Linux kernel version: 2.6.28-rc7
+# Tue Dec  2 09:32:27 2008
 #
 CONFIG_PPC64=y
 
@@ -533,6 +533,7 @@ CONFIG_BLK_DEV_RAM_SIZE=65535
 CONFIG_MISC_DEVICES=y
 # CONFIG_EEPROM_93CX6 is not set
 # CONFIG_ENCLOSURE_SERVICES is not set
+# CONFIG_C2PORT is not set
 CONFIG_HAVE_IDE=y
 # CONFIG_IDE is not set
 
@@ -755,11 +756,11 @@ CONFIG_ARCH_WANT_OPTIONAL_GPIOLIB=y
 # CONFIG_THERMAL is not set
 # CONFIG_THERMAL_HWMON is not set
 # CONFIG_WATCHDOG is not set
+CONFIG_SSB_POSSIBLE=y
 
 #
 # Sonics Silicon Backplane
 #
-CONFIG_SSB_POSSIBLE=y
 # CONFIG_SSB is not set
 
 #
@@ -769,14 +770,7 @@ CONFIG_SSB_POSSIBLE=y
 # CONFIG_MFD_SM501 is not set
 # CONFIG_HTC_PASIC3 is not set
 # CONFIG_MFD_TMIO is not set
-
-#
-# Voltage and Current regulators
-#
 # CONFIG_REGULATOR is not set
-# CONFIG_REGULATOR_FIXED_VOLTAGE is not set
-# CONFIG_REGULATOR_VIRTUAL_CONSUMER is not set
-# CONFIG_REGULATOR_BQ24022 is not set
 
 #
 # Multimedia devices
@@ -829,6 +823,7 @@ CONFIG_FB_PS3=y
 CONFIG_FB_PS3_DEFAULT_SIZE_M=9
 # CONFIG_FB_VIRTUAL is not set
 # CONFIG_FB_METRONOME is not set
+# CONFIG_FB_MB862XX is not set
 # CONFIG_BACKLIGHT_LCD_SUPPORT is not set
 
 #
@@ -974,11 +969,11 @@ CONFIG_USB_OHCI_LITTLE_ENDIAN=y
 # CONFIG_USB_TMC is not set
 
 #
-# NOTE: USB_STORAGE enables SCSI, and 'SCSI disk support'
+# NOTE: USB_STORAGE depends on SCSI but BLK_DEV_SD may also be needed;
 #
 
 #
-# may also be needed; see USB_STORAGE Help for more information
+# see USB_STORAGE Help for more information
 #
 CONFIG_USB_STORAGE=m
 # CONFIG_USB_STORAGE_DEBUG is not set
@@ -1076,6 +1071,7 @@ CONFIG_RTC_DRV_PPC=m
 # CONFIG_DMADEVICES is not set
 # CONFIG_UIO is not set
 # CONFIG_STAGING is not set
+CONFIG_STAGING_EXCLUDE_BUILD=y
 
 #
 # File systems
