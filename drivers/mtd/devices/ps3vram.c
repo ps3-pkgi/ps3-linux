@@ -823,3 +823,4 @@ module_exit(ps3vram_exit);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Jim Paris <jim@jtan.com>");
 MODULE_DESCRIPTION("MTD driver for PS3 video RAM");
+MODULE_ALIAS(PS3_MODULE_ALIAS_GRAPHICS_RAMDISK);

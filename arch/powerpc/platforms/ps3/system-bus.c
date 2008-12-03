@@ -453,7 +453,8 @@ static int ps3_system_bus_uevent(struct device *_dev, struct kobj_uevent_env *en
 {
 	struct ps3_system_bus_device *dev = ps3_dev_to_system_bus_dev(_dev);
 
-	if (add_uevent_var(env, "MODALIAS=ps3:%d", dev->match_id))
+	if (add_uevent_var(env, "MODALIAS=ps3:%d:%d", dev->match_id,
+			   dev->match_sub_id))
 		return -ENOMEM;
 	return 0;
 }
@@ -462,7 +463,8 @@ static ssize_t modalias_show(struct device *_dev, struct device_attribute *a,
 	char *buf)
 {
 	struct ps3_system_bus_device *dev = ps3_dev_to_system_bus_dev(_dev);
-	int len = snprintf(buf, PAGE_SIZE, "ps3:%d\n", dev->match_id);
+	int len = snprintf(buf, PAGE_SIZE, "ps3:%d:%d\n", dev->match_id,
+			   dev->match_sub_id);
 
 	return (len >= PAGE_SIZE) ? (PAGE_SIZE - 1) : len;
 }

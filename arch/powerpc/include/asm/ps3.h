@@ -318,17 +318,18 @@ enum ps3_match_id {
 	PS3_MATCH_ID_LPM            = 11,
 };
 
-#define PS3_MODULE_ALIAS_EHCI           "ps3:1"
-#define PS3_MODULE_ALIAS_OHCI           "ps3:2"
-#define PS3_MODULE_ALIAS_GELIC          "ps3:3"
-#define PS3_MODULE_ALIAS_AV_SETTINGS    "ps3:4"
-#define PS3_MODULE_ALIAS_SYSTEM_MANAGER "ps3:5"
-#define PS3_MODULE_ALIAS_STOR_DISK      "ps3:6"
-#define PS3_MODULE_ALIAS_STOR_ROM       "ps3:7"
-#define PS3_MODULE_ALIAS_STOR_FLASH     "ps3:8"
-#define PS3_MODULE_ALIAS_SOUND          "ps3:9"
-#define PS3_MODULE_ALIAS_GRAPHICS       "ps3:10"
-#define PS3_MODULE_ALIAS_LPM            "ps3:11"
+#define PS3_MODULE_ALIAS_EHCI			"ps3:1:0"
+#define PS3_MODULE_ALIAS_OHCI			"ps3:2:0"
+#define PS3_MODULE_ALIAS_GELIC			"ps3:3:0"
+#define PS3_MODULE_ALIAS_AV_SETTINGS		"ps3:4:0"
+#define PS3_MODULE_ALIAS_SYSTEM_MANAGER		"ps3:5:0"
+#define PS3_MODULE_ALIAS_STOR_DISK		"ps3:6:0"
+#define PS3_MODULE_ALIAS_STOR_ROM		"ps3:7:0"
+#define PS3_MODULE_ALIAS_STOR_FLASH		"ps3:8:0"
+#define PS3_MODULE_ALIAS_SOUND			"ps3:9:0"
+#define PS3_MODULE_ALIAS_GRAPHICS_FB		"ps3:10:1"
+#define PS3_MODULE_ALIAS_GRAPHICS_RAMDISK	"ps3:10:2"
+#define PS3_MODULE_ALIAS_LPM			"ps3:11:0"
 
 enum ps3_system_bus_device_type {
 	PS3_DEVICE_TYPE_IOC0 = 1,
