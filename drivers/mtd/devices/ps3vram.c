@@ -798,8 +798,8 @@ static int ps3vram_shutdown(struct ps3_system_bus_device *dev)
 }
 
 static struct ps3_system_bus_driver ps3vram_driver = {
-	.match_id	= PS3_MATCH_ID_GRAPHICS,
-	.match_sub_id	= PS3_MATCH_SUB_ID_RAMDISK,
+	.match_id	= PS3_MATCH_ID_GPU,
+	.match_sub_id	= PS3_MATCH_SUB_ID_GPU_RAMDISK,
 	.core.name	= DEVICE_NAME,
 	.core.owner	= THIS_MODULE,
 	.probe		= ps3vram_probe,
@@ -823,4 +823,4 @@ module_exit(ps3vram_exit);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Jim Paris <jim@jtan.com>");
 MODULE_DESCRIPTION("MTD driver for PS3 video RAM");
-MODULE_ALIAS(PS3_MODULE_ALIAS_GRAPHICS_RAMDISK);
+MODULE_ALIAS(PS3_MODULE_ALIAS_GPU_RAMDISK);

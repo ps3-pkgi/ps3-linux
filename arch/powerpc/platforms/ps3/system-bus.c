@@ -175,7 +175,7 @@ int ps3_open_hv_device(struct ps3_system_bus_device *dev)
 		return ps3_open_hv_device_sb(dev);
 
 	case PS3_MATCH_ID_SOUND:
-	case PS3_MATCH_ID_GRAPHICS:
+	case PS3_MATCH_ID_GPU:
 		return ps3_open_hv_device_gpu(dev);
 
 	case PS3_MATCH_ID_AV_SETTINGS:
@@ -213,7 +213,7 @@ int ps3_close_hv_device(struct ps3_system_bus_device *dev)
 		return ps3_close_hv_device_sb(dev);
 
 	case PS3_MATCH_ID_SOUND:
-	case PS3_MATCH_ID_GRAPHICS:
+	case PS3_MATCH_ID_GPU:
 		return ps3_close_hv_device_gpu(dev);
 
 	case PS3_MATCH_ID_AV_SETTINGS:
