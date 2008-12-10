@@ -807,12 +807,12 @@ static int ehci_hub_control (
 		temp &= ~PORT_RWC_BITS;
 		switch (wValue) {
 		case USB_PORT_FEAT_SUSPEND:
-			if (ehci->no_selective_suspend)
-				break;
 			if ((temp & PORT_PE) == 0
 					|| (temp & PORT_RESET) != 0)
 				goto error;
-			ehci_writel(ehci, temp | PORT_SUSPEND, status_reg);
+			if (!ehci->no_selective_suspend)
+				ehci_writel(ehci, temp | PORT_SUSPEND,
+					status_reg);
 			set_bit(wIndex, &ehci->suspended_ports);
 			break;
 		case USB_PORT_FEAT_POWER:
