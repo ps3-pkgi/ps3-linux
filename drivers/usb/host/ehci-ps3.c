@@ -57,22 +57,21 @@ static int ps3_ehci_bus_suspend(struct usb_hcd *hcd)
 	int result;
 	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
 
-	ehci_dbg(ehci, "%s:%d ->\n", __func__, __LINE__);
+	ehci_dbg(ehci, "%s:%d\n", __func__, __LINE__);
 
 	/*
 	 * The PS3 EHCI HC stops the root hub after both root hub ports are
 	 * suspended.  The EHCI root hub driver expects the root hub to still
 	 * be running when ehci_bus_suspend() is called.  Forcing the HC into
-	 * the HALT state here will allow ehci_bus_suspend() to succeed.
+	 * the HALT state here will allow a successful suspend.
 	 */
 
 	ehci_halt(ehci);
-	ehci_to_hcd(ehci)->state = HC_STATE_HALT;
+	ehci_to_hcd(ehci)->state = HC_STATE_SUSPENDED;
 
 	result = ehci_bus_suspend(hcd);
 	WARN_ON(result);
 
-	ehci_dbg(ehci, "%s:%d <-\n", __func__, __LINE__);
 	return result;
 }
 
@@ -81,27 +80,22 @@ static int ps3_ehci_bus_resume(struct usb_hcd *hcd)
 	int result;
 	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
 
-	ehci_dbg(ehci, "%s:%d ->\n", __func__, __LINE__);
+	ehci_dbg(ehci, "%s:%d\n", __func__, __LINE__);
 
 	/*
-	 * Put the HC into the RUNNING state, thus undoing the effects of
-	 * ps3_ehci_bus_suspend().
+	 * Putting the HC into the RUN state here will get the root hub
+	 * running and allow a successful resume.
 	 */
 
-	ehci->command  = ehci_readl(ehci, &ehci->regs->command);
 	ehci->command |= CMD_RUN;
 	ehci_writel(ehci, ehci->command, &ehci->regs->command);
-	(void) ehci_readl(ehci, &ehci->regs->command);
 
 	result = handshake(ehci, &ehci->regs->status, STS_HALT, 0, 250 * 1000);
-
 	WARN_ON(result);
-	hcd->state = HC_STATE_RUNNING;
 
 	result = ehci_bus_resume(hcd);
 	WARN_ON(result);
 
-	ehci_dbg(ehci, "%s:%d <-\n", __func__, __LINE__);
 	return result;
 }
 
@@ -259,8 +253,8 @@ static int ps3_ehci_remove(struct ps3_system_bus_device *dev)
 	tmp = hcd->irq;
 
 	/*
-	 * Due to the work-around done in ps3_ehci_bus_suspend() the HC must
-	 * be resumed for usb_remove_hcd() to succeed.
+	 * Putting the HC into the RUN state here will get the root hub
+	 * running and allow a successful usb_remove_hcd().
 	 */
 
 	ps3_ehci_bus_resume(hcd);
