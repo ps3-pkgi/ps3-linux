@@ -52,9 +52,9 @@ static int ps3_ehci_hc_reset(struct usb_hcd *hcd)
 	return result;
 }
 
-static int ps3_ehci_bus_suspend(struct usb_hcd *hcd)
+static int __maybe_unused ps3_ehci_bus_suspend(struct usb_hcd *hcd)
 {
-	int result;
+	int result = 0;
 	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
 
 	ehci_dbg(ehci, "%s:%d\n", __func__, __LINE__);
@@ -69,13 +69,15 @@ static int ps3_ehci_bus_suspend(struct usb_hcd *hcd)
 	ehci_halt(ehci);
 	ehci_to_hcd(ehci)->state = HC_STATE_SUSPENDED;
 
+#if defined(CONFIG_PM)
 	result = ehci_bus_suspend(hcd);
+#endif
 	WARN_ON(result);
 
 	return result;
 }
 
-static int ps3_ehci_bus_resume(struct usb_hcd *hcd)
+static int __maybe_unused ps3_ehci_bus_resume(struct usb_hcd *hcd)
 {
 	int result;
 	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
@@ -93,7 +95,9 @@ static int ps3_ehci_bus_resume(struct usb_hcd *hcd)
 	result = handshake(ehci, &ehci->regs->status, STS_HALT, 0, 250 * 1000);
 	WARN_ON(result);
 
+#if defined(CONFIG_PM)
 	result = ehci_bus_resume(hcd);
+#endif
 	WARN_ON(result);
 
 	return result;
@@ -257,8 +261,9 @@ static int ps3_ehci_remove(struct ps3_system_bus_device *dev)
 	 * running and allow a successful usb_remove_hcd().
 	 */
 
+#if defined(CONFIG_PM)
 	ps3_ehci_bus_resume(hcd);
-
+#endif
 	ehci_shutdown(hcd);
 	usb_remove_hcd(hcd);
 
