@@ -23,7 +23,7 @@
 
 #define DEVICE_NAME		"ps3vram"
 
-#define XDR_BUF_SIZE (2 * 1024 * 1024) /* XDR buffer (must be 1MB aligned) */
+#define XDR_BUF_SIZE (2 * 1024 * 1024) /* XDR buffer (must be 1MiB aligned) */
 #define XDR_IOIF 0x0c000000
 
 #define FIFO_BASE XDR_IOIF
@@ -78,19 +78,16 @@ struct ps3vram_priv {
 	uint32_t *fifo_base;
 	uint32_t *fifo_ptr;
 
+	struct device *dev;
 	struct ps3vram_cache cache;
 
 	/* Used to serialize cache/DMA operations */
 	struct mutex lock;
-	struct device *dev;
 };
 
 #define DMA_NOTIFIER_HANDLE_BASE 0x66604200 /* first DMA notifier handle */
 #define DMA_NOTIFIER_OFFSET_BASE 0x1000     /* first DMA notifier offset */
 #define DMA_NOTIFIER_SIZE        0x40
-
-#define NUM_NOTIFIERS		16
-
 #define NOTIFIER 7	/* notifier used for completion report */
 
 /* A trailing '-' means to subtract off ps3fb_videomemory.size */
@@ -132,28 +129,6 @@ static int ps3vram_notifier_wait(struct mtd_info *mtd, int timeout_ms)
 	return -1;
 }
 
-static void ps3vram_dump_ring(struct mtd_info *mtd)
-{
-	struct ps3vram_priv *priv = mtd->priv;
-	uint32_t *fifo;
-
-	dev_dbg(priv->dev, "PUT = %08x GET = %08x\n", priv->ctrl[CTRL_PUT],
-		priv->ctrl[CTRL_GET]);
-	for (fifo = priv->fifo_base; fifo < priv->fifo_ptr; fifo++)
-		dev_dbg(priv->dev, "%p: %08x\n", fifo, *fifo);
-}
-
-static void ps3vram_dump_reports(struct mtd_info *mtd)
-{
-	struct ps3vram_priv *priv = mtd->priv;
-	int i;
-
-	for (i = 0; i < NUM_NOTIFIERS; i++) {
-		uint32_t *n = ps3vram_get_notifier(priv->reports, i);
-		dev_dbg(priv->dev, "%p: %08x\n", n, *n);
-	}
-}
-
 static void ps3vram_init_ring(struct mtd_info *mtd)
 {
 	struct ps3vram_priv *priv = mtd->priv;
@@ -174,9 +149,9 @@ static int ps3vram_wait_ring(struct mtd_info *mtd, int timeout)
 		udelay(1);
 	}
 	if (timeout == 0) {
-		dev_dbg(priv->dev, "FIFO timeout (%08x/%08x/%08x)\n",
-			priv->ctrl[CTRL_PUT], priv->ctrl[CTRL_GET],
-			priv->ctrl[CTRL_TOP]);
+		dev_dbg(priv->dev, "%s:%d: FIFO timeout (%08x/%08x/%08x)\n",
+			__func__, __LINE__, priv->ctrl[CTRL_PUT],
+			priv->ctrl[CTRL_GET], priv->ctrl[CTRL_TOP]);
 		return -ETIMEDOUT;
 	}
 
@@ -208,9 +183,8 @@ static void ps3vram_rewind_ring(struct mtd_info *mtd)
 					   L1GPU_CONTEXT_ATTRIBUTE_FB_BLIT,
 					   0, 0, 0, 0);
 	if (status)
-		dev_err(priv->dev,
-			"%s: lv1_gpu_context_attribute FB_BLIT failed\n",
-			__func__);
+		dev_err(priv->dev, "%s:%d: lv1_gpu_context_attribute failed\n",
+			__func__, __LINE__);
 
 	priv->fifo_ptr = priv->fifo_base;
 }
@@ -230,13 +204,13 @@ static void ps3vram_fire_ring(struct mtd_info *mtd)
 					   L1GPU_CONTEXT_ATTRIBUTE_FB_BLIT,
 					   0, 0, 0, 0);
 	if (status)
-		dev_err(priv->dev,
-			"%s: lv1_gpu_context_attribute FB_BLIT failed\n",
-			__func__);
+		dev_err(priv->dev, "%s:%d: lv1_gpu_context_attribute failed\n",
+			__func__, __LINE__);
 
 	if ((priv->fifo_ptr - priv->fifo_base) * sizeof(uint32_t) >
 	    FIFO_SIZE - 1024) {
-		dev_dbg(priv->dev, "%s: fifo full, rewinding\n", __func__);
+		dev_dbg(priv->dev, "%s:%d: fifo full, rewinding\n", __func__,
+			__LINE__);
 		ps3vram_wait_ring(mtd, 200);
 		ps3vram_rewind_ring(mtd);
 	}
@@ -289,9 +263,8 @@ static int ps3vram_upload(struct mtd_info *mtd, unsigned int src_offset,
 	ps3vram_out_ring(priv, 0);
 	ps3vram_fire_ring(mtd);
 	if (ps3vram_notifier_wait(mtd, 200) < 0) {
-		dev_dbg(priv->dev, "%s: notifier timeout\n", __func__);
-		ps3vram_dump_ring(mtd);
-		ps3vram_dump_reports(mtd);
+		dev_dbg(priv->dev, "%s:%d: notifier timeout\n", __func__,
+			__LINE__);
 		return -1;
 	}
 
@@ -322,9 +295,8 @@ static int ps3vram_download(struct mtd_info *mtd, unsigned int src_offset,
 	ps3vram_out_ring(priv, 0);
 	ps3vram_fire_ring(mtd);
 	if (ps3vram_notifier_wait(mtd, 200) < 0) {
-		dev_dbg(priv->dev, "%s: notifier timeout\n", __func__);
-		ps3vram_dump_ring(mtd);
-		ps3vram_dump_reports(mtd);
+		dev_dbg(priv->dev, "%s:%d: notifier timeout\n", __func__,
+			__LINE__);
 		return -1;
 	}
 
@@ -337,18 +309,17 @@ static void ps3vram_cache_evict(struct mtd_info *mtd, int entry)
 	struct ps3vram_cache *cache = &priv->cache;
 
 	if (cache->tags[entry].flags & CACHE_PAGE_DIRTY) {
-		dev_dbg(priv->dev, "%s: flushing %d : 0x%08x\n", __func__, entry,
-			cache->tags[entry].address);
+		dev_dbg(priv->dev, "%s:%d: flushing %d : 0x%08x\n", __func__,
+			__LINE__, entry, cache->tags[entry].address);
 		if (ps3vram_upload(mtd,
 				   CACHE_OFFSET + entry * cache->page_size,
 				   cache->tags[entry].address,
 				   DMA_PAGE_SIZE,
 				   cache->page_size / DMA_PAGE_SIZE) < 0) {
-			dev_dbg(priv->dev, "%s: failed to upload from "
-				"0x%x to 0x%x size 0x%x\n", __func__,
+			dev_dbg(priv->dev, "%s:%d: failed to upload from "
+				"0x%x to 0x%x size 0x%x\n", __func__, __LINE__,
 				entry * cache->page_size,
-				cache->tags[entry].address,
-				cache->page_size);
+				cache->tags[entry].address, cache->page_size);
 		}
 		cache->tags[entry].flags &= ~CACHE_PAGE_DIRTY;
 	}
@@ -360,15 +331,15 @@ static void ps3vram_cache_load(struct mtd_info *mtd, int entry,
 	struct ps3vram_priv *priv = mtd->priv;
 	struct ps3vram_cache *cache = &priv->cache;
 
-	dev_dbg(priv->dev, "%s: fetching %d : 0x%08x\n", __func__, entry,
-		address);
+	dev_dbg(priv->dev, "%s:%d: fetching %d : 0x%08x\n", __func__, __LINE__,
+		entry, address);
 	if (ps3vram_download(mtd,
 			     address,
 			     CACHE_OFFSET + entry * cache->page_size,
 			     DMA_PAGE_SIZE,
 			     cache->page_size / DMA_PAGE_SIZE) < 0) {
-		dev_err(priv->dev, "%s: failed to download from "
-			"0x%x to 0x%x size 0x%x\n", __func__, address,
+		dev_err(priv->dev, "%s:%d: failed to download from "
+			"0x%x to 0x%x size 0x%x\n", __func__, __LINE__, address,
 			entry * cache->page_size, cache->page_size);
 	}
 
@@ -383,7 +354,7 @@ static void ps3vram_cache_flush(struct mtd_info *mtd)
 	struct ps3vram_cache *cache = &priv->cache;
 	int i;
 
-	dev_dbg(priv->dev, "FLUSH\n");
+	dev_dbg(priv->dev, "%s:%d: FLUSH\n", __func__, __LINE__);
 	for (i = 0; i < cache->page_count; i++) {
 		ps3vram_cache_evict(mtd, i);
 		cache->tags[i].flags = 0;
@@ -406,16 +377,16 @@ static unsigned int ps3vram_cache_match(struct mtd_info *mtd, loff_t address)
 	for (i = 0; i < cache->page_count; i++) {
 		if ((cache->tags[i].flags & CACHE_PAGE_PRESENT) &&
 		    cache->tags[i].address == base) {
-			dev_dbg(priv->dev, "%s: found entry %d : 0x%08x\n",
-				__func__, i, cache->tags[i].address);
 			cache->hit++;
+			dev_dbg(priv->dev, "%s:%d: found entry %d : 0x%08x\n",
+				__func__, __LINE__, i, cache->tags[i].address);
 			return i;
 		}
 	}
 
 	/* choose a random entry */
 	i = (jiffies + (counter++)) % cache->page_count;
-	dev_dbg(priv->dev, "%s: using cache entry %d\n", __func__, i);
+	dev_dbg(priv->dev, "%s:%d: using entry %d\n", __func__, __LINE__, i);
 
 	ps3vram_cache_evict(mtd, i);
 	ps3vram_cache_load(mtd, i, base);
@@ -433,8 +404,8 @@ static int ps3vram_cache_init(struct mtd_info *mtd)
 	priv->cache.tags = kzalloc(sizeof(struct ps3vram_tag) *
 				   CACHE_PAGE_COUNT, GFP_KERNEL);
 	if (priv->cache.tags == NULL) {
-		dev_err(priv->dev, "%s: could not allocate cache tags\n",
-			__func__);
+		dev_err(priv->dev, "%s:%d: could not allocate cache tags\n",
+			__func__, __LINE__);
 		return -ENOMEM;
 	}
 
@@ -480,7 +451,7 @@ static int ps3vram_read(struct mtd_info *mtd, loff_t from, size_t len,
 	struct ps3vram_priv *priv = mtd->priv;
 	unsigned int cached, count;
 
-	dev_dbg(priv->dev, "%s: from=0x%08x len=0x%zx\n", __func__,
+	dev_dbg(priv->dev, "%s:%d: from=0x%08x len=0x%zx\n", __func__, __LINE__,
 		(unsigned int)from, len);
 
 	if (from >= mtd->size)
@@ -503,9 +474,9 @@ static int ps3vram_read(struct mtd_info *mtd, loff_t from, size_t len,
 		entry = ps3vram_cache_match(mtd, from);
 		cached = CACHE_OFFSET + entry * priv->cache.page_size + offset;
 
-		dev_dbg(priv->dev, "%s: from=%08x cached=%08x offset=%08x "
-			"avail=%08x count=%08x\n", __func__, (unsigned int)from,
-			cached, offset, avail, count);
+		dev_dbg(priv->dev, "%s:%d: from=%08x cached=%08x offset=%08x "
+			"avail=%08x count=%08x\n", __func__, __LINE__,
+			(unsigned int)from, cached, offset, avail, count);
 
 		if (avail > count)
 			avail = count;
@@ -548,9 +519,9 @@ static int ps3vram_write(struct mtd_info *mtd, loff_t to, size_t len,
 		entry = ps3vram_cache_match(mtd, to);
 		cached = CACHE_OFFSET + entry * priv->cache.page_size + offset;
 
-		dev_dbg(priv->dev, "%s: to=%08x cached=%08x offset=%08x "
-			"avail=%08x count=%08x\n", __func__, (unsigned int)to,
-			cached, offset, avail, count);
+		dev_dbg(priv->dev, "%s:%d: to=%08x cached=%08x offset=%08x "
+			"avail=%08x count=%08x\n", __func__, __LINE__,
+			(unsigned int)to, cached, offset, avail, count);
 
 		if (avail > count)
 			avail = count;
@@ -595,19 +566,21 @@ static int ps3vram_proc_read(char *buf, char **start, off_t offset,
 	return count;
 }
 
-static void __devinit init_proc(void)
+static void __devinit ps3vram_proc_init(struct mtd_info *mtd)
 {
+	struct ps3vram_priv *priv = mtd->priv;
 	struct proc_dir_entry *proc_file;
 
 	proc_file = create_proc_entry("ps3vram", 0644, NULL);
 
 	if (!proc_file) {
-		pr_warning("failed to create /proc entry\n");
+		dev_warn(priv->dev, "%s:%d: failed to create /proc entry\n",
+			__func__, __LINE__);
 		return;
 	}
 
 	proc_file->owner = THIS_MODULE;
-	proc_file->data = ps3vram_mtd.priv;
+	proc_file->data = priv;
 	proc_file->read_proc = ps3vram_proc_read;
 }
 
@@ -630,12 +603,12 @@ static int __devinit ps3vram_probe(struct ps3_system_bus_device *dev)
 	mutex_init(&priv->lock);
 	priv->dev = &dev->core;
 
-	/* Allocate XDR buffer (1MB aligned) */
+	/* Allocate XDR buffer (1MiB aligned) */
 	priv->xdr_buf = (uint8_t *) __get_free_pages(GFP_KERNEL,
 						     get_order(XDR_BUF_SIZE));
 	if (priv->xdr_buf == NULL) {
-		dev_dbg(&dev->core, "%s: could not allocate XDR buffer\n",
-			__func__);
+		dev_dbg(&dev->core, "%s:%d: could not allocate XDR buffer\n",
+			__func__, __LINE__);
 		ret = -ENOMEM;
 		goto out_free_priv;
 	}
@@ -646,8 +619,8 @@ static int __devinit ps3vram_probe(struct ps3_system_bus_device *dev)
 
 	/* XXX: Need to open GPU, in case ps3fb or snd_ps3 aren't loaded */
 	if (ps3_open_hv_device(dev)) {
-		dev_err(&dev->core, "%s: ps3_open_hv_device failed\n",
-			__func__);
+		dev_err(&dev->core, "%s:%d: ps3_open_hv_device failed\n",
+			__func__, __LINE__);
 		ret = -EAGAIN;
 		goto out_close_gpu;
 	}
@@ -659,8 +632,8 @@ static int __devinit ps3vram_probe(struct ps3_system_bus_device *dev)
 		ddr_size -= ps3fb_videomemory.size;
 	ddr_size = ALIGN(ddr_size, 1024*1024);
 	if (ddr_size <= 0) {
-		dev_err(&dev->core, "%s: specified size is too small\n",
-			__func__);
+		dev_err(&dev->core, "%s:%d: specified size is too small\n",
+			__func__, __LINE__);
 		ret = -EINVAL;
 		goto out_close_gpu;
 	}
@@ -674,8 +647,8 @@ static int __devinit ps3vram_probe(struct ps3_system_bus_device *dev)
 		ddr_size -= 1024*1024;
 	}
 	if (status != 0 || ddr_size <= 0) {
-		dev_err(&dev->core, "%s: lv1_gpu_memory_allocate failed\n",
-			__func__);
+		dev_err(&dev->core, "%s:%d: lv1_gpu_memory_allocate failed\n",
+			__func__, __LINE__);
 		ret = -ENOMEM;
 		goto out_free_xdr_buf;
 	}
@@ -689,8 +662,8 @@ static int __devinit ps3vram_probe(struct ps3_system_bus_device *dev)
 					  &reports_lpar,
 					  &reports_size);
 	if (status) {
-		dev_err(&dev->core, "%s: lv1_gpu_context_allocate failed\n",
-			__func__);
+		dev_err(&dev->core, "%s:%d: lv1_gpu_context_allocate failed\n",
+			__func__, __LINE__);
 		ret = -ENOMEM;
 		goto out_free_memory;
 	}
@@ -700,29 +673,32 @@ static int __devinit ps3vram_probe(struct ps3_system_bus_device *dev)
 				       ps3_mm_phys_to_lpar(__pa(priv->xdr_buf)),
 				       XDR_BUF_SIZE, 0);
 	if (status) {
-		dev_err(&dev->core, "%s: lv1_gpu_context_iomap failed\n",
-			__func__);
+		dev_err(&dev->core, "%s:%d: lv1_gpu_context_iomap failed\n",
+			__func__, __LINE__);
 		ret = -ENOMEM;
 		goto out_free_context;
 	}
 
 	priv->base = ioremap(ddr_lpar, ddr_size);
 	if (!priv->base) {
-		dev_err(&dev->core, "%s: ioremap failed\n", __func__);
+		dev_err(&dev->core, "%s:%d: ioremap failed\n", __func__,
+			__LINE__);
 		ret = -ENOMEM;
 		goto out_free_context;
 	}
 
 	priv->ctrl = ioremap(ctrl_lpar, 64 * 1024);
 	if (!priv->ctrl) {
-		dev_err(&dev->core, "%s: ioremap failed\n", __func__);
+		dev_err(&dev->core, "%s:%d: ioremap failed\n", __func__,
+			__LINE__);
 		ret = -ENOMEM;
 		goto out_unmap_vram;
 	}
 
 	priv->reports = ioremap(reports_lpar, reports_size);
 	if (!priv->reports) {
-		dev_err(&dev->core, "%s: ioremap failed\n", __func__);
+		dev_err(&dev->core, "%s:%d: ioremap failed\n", __func__,
+			__LINE__);
 		ret = -ENOMEM;
 		goto out_unmap_ctrl;
 	}
@@ -750,24 +726,24 @@ static int __devinit ps3vram_probe(struct ps3_system_bus_device *dev)
 	ret = ps3vram_wait_ring(&ps3vram_mtd, 100);
 	mutex_unlock(&ps3_gpu_mutex);
 	if (ret < 0) {
-		dev_err(&dev->core, "%s: failed to initialize channels\n",
-			__func__);
+		dev_err(&dev->core, "%s:%d: failed to initialize channels\n",
+			__func__, __LINE__);
 		ret = -ETIMEDOUT;
 		goto out_unmap_reports;
 	}
 
 	ps3vram_cache_init(&ps3vram_mtd);
-	init_proc();
+	ps3vram_proc_init(&ps3vram_mtd);
 
 	if (add_mtd_device(&ps3vram_mtd)) {
-		dev_err(&dev->core, "%s: failed to register device\n",
-			__func__);
+		dev_err(&dev->core, "%s:%d: add_mtd_device failed\n",
+			__func__, __LINE__);
 		ret = -EAGAIN;
 		goto out_cache_cleanup;
 	}
 
 	dev_info(&dev->core, "reserved %u MiB of gpu memory\n",
-		(unsigned int) (ddr_size / 1024 / 1024));
+		(unsigned int)(ddr_size / 1024 / 1024));
 
 	return 0;
 
