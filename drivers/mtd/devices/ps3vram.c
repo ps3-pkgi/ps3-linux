@@ -70,9 +70,9 @@ struct ps3vram_cache {
 struct ps3vram_priv {
 	u64 memory_handle;
 	u64 context_handle;
-	u64 xdr_base;
 	u32 *ctrl;
 	u32 *reports;
+	u8 *base;
 	u8 *xdr_buf;
 
 	u32 *fifo_base;
@@ -428,7 +428,7 @@ static int ps3vram_erase(struct mtd_info *mtd, struct erase_info *instr)
 	ps3vram_cache_flush(mtd);
 
 	/* Set bytes to 0xFF */
-	memset((void *)(priv->xdr_base + instr->addr), 0xFF, instr->len);
+	memset(priv->base + instr->addr, 0xFF, instr->len);
 
 	mutex_unlock(&priv->lock);
 
@@ -581,6 +581,7 @@ static int __devinit ps3vram_probe(struct ps3_system_bus_device *dev)
 {
 	struct ps3vram_priv *priv;
 	int status;
+	u64 ddr_lpar;
 	u64 ctrl_lpar;
 	u64 info_lpar;
 	u64 reports_lpar;
@@ -599,7 +600,8 @@ static int __devinit ps3vram_probe(struct ps3_system_bus_device *dev)
 	priv->dev = &dev->core;
 
 	/* Allocate XDR buffer (1MiB aligned) */
-	priv->xdr_buf = (void *)__get_free_pages(GFP_KERNEL, get_order(XDR_BUF_SIZE));
+	priv->xdr_buf = (void *)__get_free_pages(GFP_KERNEL,
+		get_order(XDR_BUF_SIZE));
 	if (priv->xdr_buf == NULL) {
 		dev_dbg(&dev->core, "%s:%d: could not allocate XDR buffer\n",
 			__func__, __LINE__);
@@ -635,7 +637,7 @@ static int __devinit ps3vram_probe(struct ps3_system_bus_device *dev)
 	while (ddr_size > 0) {
 		status = lv1_gpu_memory_allocate(ddr_size, 0, 0, 0, 0,
 						 &priv->memory_handle,
-						 &priv->xdr_base);
+						 &ddr_lpar);
 		if (!status)
 			break;
 		ddr_size -= 1024*1024;
@@ -673,12 +675,20 @@ static int __devinit ps3vram_probe(struct ps3_system_bus_device *dev)
 		goto out_free_context;
 	}
 
+	priv->base = ioremap(ddr_lpar, ddr_size);
+	if (!priv->base) {
+		dev_err(&dev->core, "%s:%d: ioremap failed\n", __func__,
+			__LINE__);
+		ret = -ENOMEM;
+		goto out_free_context;
+	}
+
 	priv->ctrl = ioremap(ctrl_lpar, 64 * 1024);
 	if (!priv->ctrl) {
 		dev_err(&dev->core, "%s:%d: ioremap failed\n", __func__,
 			__LINE__);
 		ret = -ENOMEM;
-		goto out_free_context;
+		goto out_unmap_vram;
 	}
 
 	priv->reports = ioremap(reports_lpar, reports_size);
@@ -739,6 +749,8 @@ out_unmap_reports:
 	iounmap(priv->reports);
 out_unmap_ctrl:
 	iounmap(priv->ctrl);
+out_unmap_vram:
+	iounmap(priv->base);
 out_free_context:
 	lv1_gpu_context_free(priv->context_handle);
 out_free_memory:
@@ -765,6 +777,7 @@ static int ps3vram_shutdown(struct ps3_system_bus_device *dev)
 	ps3vram_cache_cleanup(&ps3vram_mtd);
 	iounmap(priv->reports);
 	iounmap(priv->ctrl);
+	iounmap(priv->base);
 	lv1_gpu_context_free(priv->context_handle);
 	lv1_gpu_memory_free(priv->memory_handle);
 	ps3_close_hv_device(dev);
