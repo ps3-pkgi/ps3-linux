@@ -6,6 +6,7 @@
  */
 
 #include <linux/io.h>
+#include <linux/mm.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
@@ -72,7 +73,7 @@ struct ps3vram_priv {
 	u64 context_handle;
 	u32 *ctrl;
 	u32 *reports;
-	u8 *base;
+	u8 __iomem *ddr_base;
 	u8 *xdr_buf;
 
 	u32 *fifo_base;
@@ -116,12 +117,13 @@ static int ps3vram_notifier_wait(struct mtd_info *mtd, unsigned int timeout_ms)
 {
 	struct ps3vram_priv *priv = mtd->priv;
 	u32 *notify = ps3vram_get_notifier(priv->reports, NOTIFIER);
+	unsigned long timeout = jiffies + msecs_to_jiffies(timeout_ms);
 
 	do {
 		if (!notify[3])
 			return 0;
 		msleep(1);
-	} while (timeout_ms--);
+	} while (time_before(jiffies, timeout));
 
 	return -ETIMEDOUT;
 }
@@ -137,12 +139,13 @@ static void ps3vram_init_ring(struct mtd_info *mtd)
 static int ps3vram_wait_ring(struct mtd_info *mtd, unsigned int timeout_ms)
 {
 	struct ps3vram_priv *priv = mtd->priv;
+	unsigned long timeout = jiffies + msecs_to_jiffies(timeout_ms);
 
 	do {
 		if (priv->ctrl[CTRL_PUT] == priv->ctrl[CTRL_GET])
 			return 0;
 		msleep(1);
-	} while (timeout_ms--);
+	} while (time_before(jiffies, timeout));
 
 	dev_dbg(priv->dev, "%s:%d: FIFO timeout (%08x/%08x/%08x)\n", __func__,
 		__LINE__, priv->ctrl[CTRL_PUT], priv->ctrl[CTRL_GET],
@@ -428,7 +431,7 @@ static int ps3vram_erase(struct mtd_info *mtd, struct erase_info *instr)
 	ps3vram_cache_flush(mtd);
 
 	/* Set bytes to 0xFF */
-	memset(priv->base + instr->addr, 0xFF, instr->len);
+	memset_io(priv->ddr_base + instr->addr, 0xFF, instr->len);
 
 	mutex_unlock(&priv->lock);
 
@@ -675,8 +678,9 @@ static int __devinit ps3vram_probe(struct ps3_system_bus_device *dev)
 		goto out_free_context;
 	}
 
-	priv->base = ioremap(ddr_lpar, ddr_size);
-	if (!priv->base) {
+	priv->ddr_base = ioremap_flags(ddr_lpar, ddr_size, _PAGE_NO_CACHE);
+
+	if (!priv->ddr_base) {
 		dev_err(&dev->core, "%s:%d: ioremap failed\n", __func__,
 			__LINE__);
 		ret = -ENOMEM;
@@ -750,7 +754,7 @@ out_unmap_reports:
 out_unmap_ctrl:
 	iounmap(priv->ctrl);
 out_unmap_vram:
-	iounmap(priv->base);
+	iounmap(priv->ddr_base);
 out_free_context:
 	lv1_gpu_context_free(priv->context_handle);
 out_free_memory:
@@ -777,7 +781,7 @@ static int ps3vram_shutdown(struct ps3_system_bus_device *dev)
 	ps3vram_cache_cleanup(&ps3vram_mtd);
 	iounmap(priv->reports);
 	iounmap(priv->ctrl);
-	iounmap(priv->base);
+	iounmap(priv->ddr_base);
 	lv1_gpu_context_free(priv->context_handle);
 	lv1_gpu_memory_free(priv->memory_handle);
 	ps3_close_hv_device(dev);
