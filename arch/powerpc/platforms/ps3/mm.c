@@ -1214,6 +1214,13 @@ void __init ps3_mm_init(void)
 	BUG_ON(map.rm.base);
 	BUG_ON(!map.rm.size);
 
+#if defined(CONFIG_PS3_DEBUG_HOT_PLUG_MEM_LIMIT) \
+	&& ((CONFIG_PS3_DEBUG_HOT_PLUG_MEM_LIMIT) >= 0)
+	map.total = min(map.total, map.rm.size
+		+ (CONFIG_PS3_DEBUG_HOT_PLUG_MEM_LIMIT) * 1024 * 1024);
+	pr_info("Limiting RAM to 0x%llx (%llu MiB)\n", map.total,
+		map.total / (1024 * 1024));
+#endif
 
 	/* arrange to do this in ps3_mm_add_memory */
 	ps3_mm_region_create(&map.r1, map.total - map.rm.size);
