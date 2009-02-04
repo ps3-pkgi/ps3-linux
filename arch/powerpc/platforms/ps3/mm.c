@@ -1214,11 +1214,24 @@ void __init ps3_mm_init(void)
 	BUG_ON(map.rm.base);
 	BUG_ON(!map.rm.size);
 
+#if defined(CONFIG_PS3_DEBUG_BOOT_MEM_LIMIT) \
+	&& ((CONFIG_PS3_DEBUG_BOOT_MEM_LIMIT) >= 0)
+{
+	u64 orig_size = map.rm.size;
+
+	map.rm.size = min(map.rm.size,
+		(CONFIG_PS3_DEBUG_BOOT_MEM_LIMIT) * 1024 * 1024);
+	map.total -= orig_size - map.rm.size;
+	pr_info("Limiting boot RAM to 0x%llx (%llu MiB)\n", map.rm.size,
+		map.rm.size / (1024 * 1024));
+}
+#endif
+
 #if defined(CONFIG_PS3_DEBUG_HOT_PLUG_MEM_LIMIT) \
 	&& ((CONFIG_PS3_DEBUG_HOT_PLUG_MEM_LIMIT) >= 0)
 	map.total = min(map.total, map.rm.size
 		+ (CONFIG_PS3_DEBUG_HOT_PLUG_MEM_LIMIT) * 1024 * 1024);
-	pr_info("Limiting RAM to 0x%llx (%llu MiB)\n", map.total,
+	pr_info("Limiting total RAM to 0x%llx (%llu MiB)\n", map.total,
 		map.total / (1024 * 1024));
 #endif
 
