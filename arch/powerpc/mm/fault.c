@@ -125,6 +125,9 @@ int __kprobes do_page_fault(struct pt_regs *regs, unsigned long address,
 	int trap = TRAP(regs);
  	int is_exec = trap == 0x400;
 
+	//printk("%s: address %lxh, code %lu\n", __func__, address, error_code);
+	//show_regs(regs);
+
 #if !(defined(CONFIG_4xx) || defined(CONFIG_BOOKE))
 	/*
 	 * Fortunately the bit assignments in SRR1 for an instruction
@@ -153,6 +156,7 @@ int __kprobes do_page_fault(struct pt_regs *regs, unsigned long address,
 #if !(defined(CONFIG_4xx) || defined(CONFIG_BOOKE))
   	if (error_code & DSISR_DABRMATCH) {
 		/* DABR match */
+		printk("%s: DSISR_DABRMATCH: address %lxh, code %lu\n", __func__, address, error_code);
 		do_dabr(regs, address, error_code);
 		return 0;
 	}

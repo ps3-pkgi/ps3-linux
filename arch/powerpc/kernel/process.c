@@ -247,6 +247,9 @@ void do_dabr(struct pt_regs *regs, unsigned long address,
 {
 	siginfo_t info;
 
+	printk("%s: address %lxh, code %lu\n", __func__, address, error_code);
+	show_regs(regs);
+
 	if (notify_die(DIE_DABR_MATCH, "dabr_match", regs, error_code,
 			11, SIGSEGV) == NOTIFY_STOP)
 		return;

@@ -499,4 +499,8 @@ u64 ps3_get_spe_id(void *arg);
 /* mutex synchronizing GPU accesses and video mode changes */
 extern struct mutex ps3_gpu_mutex;
 
+/* kernel debug routines */
+
+int ps3_debug_setup_dabr(u64 address, unsigned int dabr_flags);
+
 #endif
