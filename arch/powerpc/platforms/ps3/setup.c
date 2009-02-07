@@ -206,18 +206,19 @@ int ps3_debug_setup_dabr(u64 address, unsigned int dabr_flags)
 	BUG_ON(dabr_flags
 		& ~(DABR_DATA_WRITE | DABR_DATA_READ | DABR_TRANSLATION));
 
-	ppc_md.set_dabr = NULL;
+	/* PS3 seems to need DABR_TRANSLATION set to work */
 
-	reg = (address & -8L) | dabr_flags;
+	reg = (address & -8L) | dabr_flags | DABR_TRANSLATION;
 
-	printk("%s: address %llxh, flags %xh: %llxh\n", __func__, address,
-		dabr_flags, reg);
+	printk("%s: address %016llxh, flags %xh = %016llxh\n", __func__,
+		address, dabr_flags, reg);
 
 	result = ps3_set_dabr(reg);
 
 	if (result)
 		printk("%s: failed: %d %s\n", __func__, result,
 			ps3_result(result));
+
 	return result;
 }
 EXPORT_SYMBOL_GPL(ps3_debug_setup_dabr);
