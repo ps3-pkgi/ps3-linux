@@ -22,6 +22,8 @@
 #define _PS3_PLATFORM_H
 
 #include <linux/rtc.h>
+#include <scsi/scsi.h>
+
 #include <asm/ps3.h>
 
 /* htab */
@@ -81,12 +83,12 @@ enum ps3_bus_type {
 };
 
 enum ps3_dev_type {
-	PS3_DEV_TYPE_STOR_DISK = 0, /* TYPE_DISK */
+	PS3_DEV_TYPE_STOR_DISK = TYPE_DISK,	/* 0 */
 	PS3_DEV_TYPE_SB_GELIC = 3,
 	PS3_DEV_TYPE_SB_USB = 4,
-	PS3_DEV_TYPE_STOR_ROM = 5, /* TYPE_ROM */
+	PS3_DEV_TYPE_STOR_ROM = TYPE_ROM,	/* 5 */
 	PS3_DEV_TYPE_SB_GPIO = 6,
-	PS3_DEV_TYPE_STOR_FLASH = 14, /* TYPE_RBC */
+	PS3_DEV_TYPE_STOR_FLASH = TYPE_RBC,	/* 14 */
 };
 
 int ps3_repository_read_bus_str(unsigned int bus_index, const char *bus_str,
