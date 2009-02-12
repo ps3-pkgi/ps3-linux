@@ -289,7 +289,7 @@ static void ps3_mm_region_destroy(struct mem_region *r)
  * ps3_mm_add_memory - hot add memory
  */
 
-int __init ps3_mm_add_memory(void)
+static int __init ps3_mm_add_memory(void)
 {
 	int result;
 	unsigned long start_addr;
@@ -327,6 +327,8 @@ int __init ps3_mm_add_memory(void)
 
 	return result;
 }
+
+device_initcall(ps3_mm_add_memory);
 
 /*============================================================================*/
 /* dma routines                                                               */

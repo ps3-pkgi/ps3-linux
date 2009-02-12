@@ -279,11 +279,6 @@ static int __init ps3_probe(void)
 	return 1;
 }
 
-static void __init ps3_topology_ready(void)
-{
-	ps3_mm_add_memory();
-}
-
 #if defined(CONFIG_KEXEC)
 static void ps3_kexec_cpu_down(int crash_shutdown, int secondary)
 {
@@ -302,7 +297,6 @@ define_machine(ps3) {
 	.name				= "PS3",
 	.probe				= ps3_probe,
 	.setup_arch			= ps3_setup_arch,
-	.topology_ready			= ps3_topology_ready,
 	.init_IRQ			= ps3_init_IRQ,
 	.panic				= ps3_panic,
 	.get_boot_time			= ps3_get_boot_time,
