@@ -5,6 +5,9 @@
  *
  * Thanks goes out to P.A. Semi, Inc for supplying me with a PPC64 box.
  *
+ * Added function graph tracer code, taken from x86 that was written
+ * by Frederic Weisbecker, and ported to PPC by Steven Rostedt.
+ *
  */
 
 #include <linux/spinlock.h>
@@ -26,8 +29,6 @@
 #define DEBUGP(fmt , ...)	do { } while (0)
 #endif
 
-static unsigned int ftrace_nop = PPC_NOP_INSTR;
-
 #ifdef CONFIG_PPC32
 # define GET_ADDR(addr) addr
 #else
@@ -35,6 +36,8 @@ static unsigned int ftrace_nop = PPC_NOP_INSTR;
 # define GET_ADDR(addr) (*(unsigned long *)addr)
 #endif
 
+#ifdef CONFIG_DYNAMIC_FTRACE
+static unsigned int ftrace_nop = PPC_NOP_INSTR;
 
 static unsigned int ftrace_calc_offset(long ip, long addr)
 {
@@ -46,7 +49,8 @@ static unsigned char *ftrace_nop_replace(void)
 	return (char *)&ftrace_nop;
 }
 
-static unsigned char *ftrace_call_replace(unsigned long ip, unsigned long addr)
+static unsigned char *
+ftrace_call_replace(unsigned long ip, unsigned long addr, int link)
 {
 	static unsigned int op;
 
@@ -58,8 +62,9 @@ static unsigned char *ftrace_call_replace(unsigned long ip, unsigned long addr)
 	 */
 	addr = GET_ADDR(addr);
 
-	/* Set to "bl addr" */
-	op = 0x48000001 | (ftrace_calc_offset(ip, addr) & 0x03fffffc);
+	/* if (link) set op to 'bl' else 'b' */
+	op = 0x48000000 | (link ? 1 : 0);
+	op |= (ftrace_calc_offset(ip, addr) & 0x03fffffc);
 
 	/*
 	 * No locking needed, this must be called via kstop_machine
@@ -344,7 +349,7 @@ int ftrace_make_nop(struct module *mod,
 	 */
 	if (test_24bit_addr(ip, addr)) {
 		/* within range */
-		old = ftrace_call_replace(ip, addr);
+		old = ftrace_call_replace(ip, addr, 1);
 		new = ftrace_nop_replace();
 		return ftrace_modify_code(ip, old, new);
 	}
@@ -478,7 +483,7 @@ int ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
 	if (test_24bit_addr(ip, addr)) {
 		/* within range */
 		old = ftrace_nop_replace();
-		new = ftrace_call_replace(ip, addr);
+		new = ftrace_call_replace(ip, addr, 1);
 		return ftrace_modify_code(ip, old, new);
 	}
 
@@ -502,7 +507,7 @@ int ftrace_update_ftrace_func(ftrace_func_t func)
 	int ret;
 
 	memcpy(old, &ftrace_call, MCOUNT_INSN_SIZE);
-	new = ftrace_call_replace(ip, (unsigned long)func);
+	new = ftrace_call_replace(ip, (unsigned long)func, 1);
 	ret = ftrace_modify_code(ip, old, new);
 
 	return ret;
@@ -517,3 +522,117 @@ int __init ftrace_dyn_arch_init(void *data)
 
 	return 0;
 }
+#endif /* CONFIG_DYNAMIC_FTRACE */
+
+#ifdef CONFIG_FUNCTION_GRAPH_TRACER
+
+#ifdef CONFIG_DYNAMIC_FTRACE
+extern void ftrace_graph_call(void);
+extern void ftrace_graph_stub(void);
+
+int ftrace_enable_ftrace_graph_caller(void)
+{
+	unsigned long ip = (unsigned long)(&ftrace_graph_call);
+	unsigned long addr = (unsigned long)(&ftrace_graph_caller);
+	unsigned long stub = (unsigned long)(&ftrace_graph_stub);
+	unsigned char old[MCOUNT_INSN_SIZE], *new;
+
+	new = ftrace_call_replace(ip, stub, 0);
+	memcpy(old, new, MCOUNT_INSN_SIZE);
+	new = ftrace_call_replace(ip, addr, 0);
+
+	return ftrace_modify_code(ip, old, new);
+}
+
+int ftrace_disable_ftrace_graph_caller(void)
+{
+	unsigned long ip = (unsigned long)(&ftrace_graph_call);
+	unsigned long addr = (unsigned long)(&ftrace_graph_caller);
+	unsigned long stub = (unsigned long)(&ftrace_graph_stub);
+	unsigned char old[MCOUNT_INSN_SIZE], *new;
+
+	new = ftrace_call_replace(ip, addr, 0);
+	memcpy(old, new, MCOUNT_INSN_SIZE);
+	new = ftrace_call_replace(ip, stub, 0);
+
+	return ftrace_modify_code(ip, old, new);
+}
+#endif /* CONFIG_DYNAMIC_FTRACE */
+
+#ifdef CONFIG_PPC64
+extern void mod_return_to_handler(void);
+#endif
+
+/*
+ * Hook the return address and push it in the stack of return addrs
+ * in current thread info.
+ */
+void prepare_ftrace_return(unsigned long *parent, unsigned long self_addr)
+{
+	unsigned long old;
+	unsigned long long calltime;
+	int faulted;
+	struct ftrace_graph_ent trace;
+	unsigned long return_hooker = (unsigned long)&return_to_handler;
+
+	if (unlikely(atomic_read(&current->tracing_graph_pause)))
+		return;
+
+#if CONFIG_PPC64
+	/* non core kernel code needs to save and restore the TOC */
+	if (REGION_ID(self_addr) != KERNEL_REGION_ID)
+		return_hooker = (unsigned long)&mod_return_to_handler;
+#endif
+
+	return_hooker = GET_ADDR(return_hooker);
+
+	/*
+	 * Protect against fault, even if it shouldn't
+	 * happen. This tool is too much intrusive to
+	 * ignore such a protection.
+	 */
+	asm volatile(
+		"1: " PPC_LL "%[old], 0(%[parent])\n"
+		"2: " PPC_STL "%[return_hooker], 0(%[parent])\n"
+		"   li %[faulted], 0\n"
+		"3:\n"
+
+		".section .fixup, \"ax\"\n"
+		"4: li %[faulted], 1\n"
+		"   b 3b\n"
+		".previous\n"
+
+		".section __ex_table,\"a\"\n"
+			PPC_LONG_ALIGN "\n"
+			PPC_LONG "1b,4b\n"
+			PPC_LONG "2b,4b\n"
+		".previous"
+
+		: [old] "=r" (old), [faulted] "=r" (faulted)
+		: [parent] "r" (parent), [return_hooker] "r" (return_hooker)
+		: "memory"
+	);
+
+	if (unlikely(faulted)) {
+		ftrace_graph_stop();
+		WARN_ON(1);
+		return;
+	}
+
+	calltime = cpu_clock(raw_smp_processor_id());
+
+	if (ftrace_push_return_trace(old, calltime,
+				self_addr, &trace.depth) == -EBUSY) {
+		*parent = old;
+		return;
+	}
+
+	trace.func = self_addr;
+
+	/* Only trace if the calling function expects to */
+	if (!ftrace_graph_entry(&trace)) {
+		current->curr_ret_stack--;
+		*parent = old;
+	}
+}
+#endif /* CONFIG_FUNCTION_GRAPH_TRACER */
