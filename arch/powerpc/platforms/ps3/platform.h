@@ -37,6 +37,7 @@ void __init ps3_mm_init(void);
 void __init ps3_mm_vas_create(unsigned long* htab_size);
 void ps3_mm_vas_destroy(void);
 void ps3_mm_shutdown(void);
+int __init ps3_mm_add_memory(void);
 
 /* irq */
 

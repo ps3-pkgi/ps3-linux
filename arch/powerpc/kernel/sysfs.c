@@ -710,6 +710,9 @@ static int __init topology_init(void)
 			register_cpu_online(cpu);
 	}
 
+	if (ppc_md.topology_ready)
+		ppc_md.topology_ready();
+
 	return 0;
 }
 subsys_initcall(topology_init);
