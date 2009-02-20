@@ -18,6 +18,7 @@
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/rtc.h>
+#include <linux/platform_device.h>
 
 #include <asm/machdep.h>
 #include <asm/io.h>
@@ -159,3 +160,23 @@ int do_settimeofday(struct timespec *tv)
 }
 
 EXPORT_SYMBOL(do_settimeofday);
+
+
+static struct platform_device rtc_generic_dev = {
+	.name = "rtc-generic",
+	.id = -1,
+};
+
+static int __init rtc_init(void)
+{
+	int ret;
+
+	ret = platform_device_register(&rtc_generic_dev);
+	if (ret < 0)
+		pr_err("Unable to register rtc device...\n");
+
+	/* not necessarily an error */
+	return 0;
+}
+
+module_init(rtc_init);

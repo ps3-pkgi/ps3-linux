@@ -27,6 +27,10 @@ config ARCH_HAS_ILOG2_U64
 	bool
 	default n
 
+config ARCH_HAS_GENERIC_RTC
+	bool
+	default y
+
 config GENERIC_HWEIGHT
 	bool
 	default y

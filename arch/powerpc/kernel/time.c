@@ -1127,3 +1127,25 @@ void div128_by_32(u64 dividend_high, u64 dividend_low,
 	dr->result_low  = ((u64)y << 32) + z;
 
 }
+
+static struct platform_device rtc_generic_dev = {
+	.name = "rtc-generic",
+	.id = -1,
+};
+
+static int __init rtc_init(void)
+{
+	int ret;
+
+	if (!ppc_md.get_rtc_time)
+		return -ENODEV;
+
+	ret = platform_device_register(&rtc_generic_dev);
+	if (ret < 0)
+		pr_err("Unable to register rtc device...\n");
+
+	/* not necessarily an error */
+	return 0;
+}
+
+module_init(rtc_init);
