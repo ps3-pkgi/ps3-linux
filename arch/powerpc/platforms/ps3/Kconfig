@@ -128,10 +128,12 @@ config PS3_FLASH
 	  be disabled on the kernel command line using "ps3flash=off", to
 	  not allocate this fixed buffer.
 
-config OPROFILE_PS3
-	def_bool y
-	depends on PPC_PS3 && (OPROFILE = m || OPROFILE = y)
-	select PS3_LPM
+config PS3_VRAM
+	tristate "PS3 Video RAM Storage Driver"
+	depends on PPC_PS3 && BLOCK
+	help
+	  This driver allows you to use excess PS3 video RAM as volatile
+	  storage or system swap.
 
 config PS3_LPM
 	tristate "PS3 Logical Performance Monitor support"
@@ -145,6 +147,11 @@ config PS3_LPM
 	  If you intend to use the advanced performance monitoring and
 	  profiling support of the Cell processor with programs like
 	  oprofile and perfmon2, then say Y or M, otherwise say N.
+
+config OPROFILE_PS3
+	def_bool y
+	depends on PPC_PS3 && (OPROFILE = m || OPROFILE = y)
+	select PS3_LPM
 
 config PS3_DEBUG_BOOT_MEM_LIMIT
 	depends on PPC_PS3

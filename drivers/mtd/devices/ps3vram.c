@@ -50,7 +50,7 @@
 
 #define L1GPU_CONTEXT_ATTRIBUTE_FB_BLIT 0x601
 
-struct mtd_info ps3vram_mtd;
+static struct mtd_info ps3vram_mtd;
 
 #define CACHE_PAGE_PRESENT 1
 #define CACHE_PAGE_DIRTY   2
@@ -92,7 +92,7 @@ struct ps3vram_priv {
 #define NOTIFIER 7	/* notifier used for completion report */
 
 /* A trailing '-' means to subtract off ps3fb_videomemory.size */
-char *size = "256M-";
+static char *size = "256M-";
 module_param(size, charp, 0);
 MODULE_PARM_DESC(size, "memory size");
 
@@ -748,6 +748,7 @@ static int __devinit ps3vram_probe(struct ps3_system_bus_device *dev)
 	return 0;
 
 out_cache_cleanup:
+	remove_proc_entry("ps3vram", NULL);
 	ps3vram_cache_cleanup(&ps3vram_mtd);
 out_unmap_reports:
 	iounmap(priv->reports);
