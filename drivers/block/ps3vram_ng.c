@@ -12,6 +12,7 @@
 #include <linux/delay.h>
 #include <linux/kthread.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 
 #include <asm/firmware.h>
 #include <asm/lv1call.h>
@@ -512,48 +513,40 @@ static int ps3vram_write(struct ps3_system_bus_device *dev, loff_t to,
 	return 0;
 }
 
-static int ps3vram_proc_read(char *buf, char **start, off_t offset,
-			     int count, int *eof, void *data)
+static int ps3vram_proc_show(struct seq_file *m, void *v)
 {
-	struct ps3vram_priv *priv = (struct ps3vram_priv *) data;
-	int len;
-	off_t end;
-	char tmp[256];
+	struct ps3vram_priv *priv = m->private;
 
-	len = sprintf(tmp, "hit:%u\nmiss:%u\n",
-		      priv->cache.hit, priv->cache.miss);
-
-	*start = buf;
-
-	end = (off_t)count + offset;
-
-	if (end >= (off_t)len) {
-		*eof = 1;
-		count = ((off_t)len > offset) ?
-			(int)((off_t)len - offset) : 0;
-	}
-
-	memcpy(buf, tmp + offset, count);
-
-	return count;
+	seq_printf(m, "hit:%u\nmiss:%u\n", priv->cache.hit, priv->cache.miss);
+	return 0;
 }
+
+static int ps3vram_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, ps3vram_proc_show, PDE(inode)->data);
+}
+
+static const struct file_operations ps3vram_proc_fops = {
+	.owner		= THIS_MODULE,
+	.open		= ps3vram_proc_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
 
 static void __devinit ps3vram_proc_init(struct ps3_system_bus_device *dev)
 {
 	struct ps3vram_priv *priv = dev->core.driver_data;
-	struct proc_dir_entry *proc_file;
+	struct proc_dir_entry *pde;
 
-	proc_file = create_proc_entry(DEVICE_NAME, 0644, NULL);
-
-	if (!proc_file) {
-		dev_warn(&dev->core, "%s:%d: failed to create /proc entry\n",
-			__func__, __LINE__);
+	pde = proc_create(DEVICE_NAME, 0444, NULL, &ps3vram_proc_fops);
+	if (!pde) {
+		dev_warn(&dev->core, "failed to create /proc entry\n");
 		return;
 	}
 
-	proc_file->owner = THIS_MODULE;
-	proc_file->data = priv;
-	proc_file->read_proc = ps3vram_proc_read;
+	pde->owner = THIS_MODULE;
+	pde->data = priv;
 }
 
 static void ps3vram_do_request(struct ps3_system_bus_device *dev,
