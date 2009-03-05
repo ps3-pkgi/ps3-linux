@@ -10,7 +10,6 @@
 
 #include <linux/blkdev.h>
 #include <linux/delay.h>
-#include <linux/kthread.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 
@@ -65,8 +64,6 @@ struct ps3vram_cache {
 };
 
 struct ps3vram_priv {
-	spinlock_t lock;		/* Request queue spinlock */
-	struct task_struct *thread;
 	struct request_queue *queue;
 	struct gendisk *gendisk;
 
@@ -83,6 +80,9 @@ struct ps3vram_priv {
 	u32 *fifo_ptr;
 
 	struct ps3vram_cache cache;
+
+	/* Used to serialize cache/DMA operations */
+	struct mutex lock;
 };
 
 
@@ -99,8 +99,7 @@ static struct block_device_operations ps3vram_fops = {
 #define DMA_NOTIFIER_SIZE        0x40
 #define NOTIFIER 7	/* notifier used for completion report */
 
-/* A trailing '-' means to subtract off ps3fb_videomemory.size */
-static char *size = "256M-";
+static char *size = "256M";
 module_param(size, charp, 0);
 MODULE_PARM_DESC(size, "memory size");
 
@@ -156,9 +155,9 @@ static int ps3vram_wait_ring(struct ps3_system_bus_device *dev,
 		msleep(1);
 	} while (time_before(jiffies, timeout));
 
-	dev_dbg(&dev->core, "FIFO timeout (%08x/%08x/%08x)\n",
-		priv->ctrl[CTRL_PUT], priv->ctrl[CTRL_GET],
-		priv->ctrl[CTRL_TOP]);
+	dev_warn(&dev->core, "FIFO timeout (%08x/%08x/%08x)\n",
+		 priv->ctrl[CTRL_PUT], priv->ctrl[CTRL_GET],
+		 priv->ctrl[CTRL_TOP]);
 
 	return -ETIMEDOUT;
 }
@@ -177,7 +176,7 @@ static void ps3vram_begin_ring(struct ps3vram_priv *priv, u32 chan, u32 tag,
 static void ps3vram_rewind_ring(struct ps3_system_bus_device *dev)
 {
 	struct ps3vram_priv *priv = dev->core.driver_data;
-	u64 status;
+	int status;
 
 	ps3vram_out_ring(priv, 0x20000000 | (FIFO_BASE + FIFO_OFFSET));
 
@@ -189,8 +188,8 @@ static void ps3vram_rewind_ring(struct ps3_system_bus_device *dev)
 					   0, 0, 0);
 	if (status)
 		dev_err(&dev->core,
-			"%s: lv1_gpu_context_attribute failed %llu\n",
-			__func__, status);
+			"%s: lv1_gpu_context_attribute failed %d\n", __func__,
+			status);
 
 	priv->fifo_ptr = priv->fifo_base;
 }
@@ -198,7 +197,7 @@ static void ps3vram_rewind_ring(struct ps3_system_bus_device *dev)
 static void ps3vram_fire_ring(struct ps3_system_bus_device *dev)
 {
 	struct ps3vram_priv *priv = dev->core.driver_data;
-	u64 status;
+	int status;
 
 	mutex_lock(&ps3_gpu_mutex);
 
@@ -211,8 +210,8 @@ static void ps3vram_fire_ring(struct ps3_system_bus_device *dev)
 					   0, 0, 0);
 	if (status)
 		dev_err(&dev->core,
-			"%s: lv1_gpu_context_attribute failed %llu\n",
-			__func__, status);
+			"%s: lv1_gpu_context_attribute failed %d\n", __func__,
+			status);
 
 	if ((priv->fifo_ptr - priv->fifo_base) * sizeof(u32) >
 	    FIFO_SIZE - 1024) {
@@ -270,7 +269,7 @@ static int ps3vram_upload(struct ps3_system_bus_device *dev,
 	ps3vram_out_ring(priv, 0);
 	ps3vram_fire_ring(dev);
 	if (ps3vram_notifier_wait(dev, 200) < 0) {
-		dev_dbg(&dev->core, "%s: Notifier timeout\n", __func__);
+		dev_warn(&dev->core, "%s: Notifier timeout\n", __func__);
 		return -1;
 	}
 
@@ -302,7 +301,7 @@ static int ps3vram_download(struct ps3_system_bus_device *dev,
 	ps3vram_out_ring(priv, 0);
 	ps3vram_fire_ring(dev);
 	if (ps3vram_notifier_wait(dev, 200) < 0) {
-		dev_dbg(&dev->core, "%s: Notifier timeout\n", __func__);
+		dev_warn(&dev->core, "%s: Notifier timeout\n", __func__);
 		return -1;
 	}
 
@@ -436,7 +435,7 @@ static int ps3vram_read(struct ps3_system_bus_device *dev, loff_t from,
 		(unsigned int)from, len);
 
 	if (from >= priv->size)
-		return -EINVAL;
+		return -EIO;
 
 	if (len > priv->size - from)
 		len = priv->size - from;
@@ -450,6 +449,8 @@ static int ps3vram_read(struct ps3_system_bus_device *dev, loff_t from,
 		offset = (unsigned int) (from & (priv->cache.page_size - 1));
 		avail  = priv->cache.page_size - offset;
 
+		mutex_lock(&priv->lock);
+
 		entry = ps3vram_cache_match(dev, from);
 		cached = CACHE_OFFSET + entry * priv->cache.page_size + offset;
 
@@ -460,6 +461,8 @@ static int ps3vram_read(struct ps3_system_bus_device *dev, loff_t from,
 		if (avail > count)
 			avail = count;
 		memcpy(buf, priv->xdr_buf + cached, avail);
+
+		mutex_unlock(&priv->lock);
 
 		buf += avail;
 		count -= avail;
@@ -477,7 +480,7 @@ static int ps3vram_write(struct ps3_system_bus_device *dev, loff_t to,
 	unsigned int cached, count;
 
 	if (to >= priv->size)
-		return -EINVAL;
+		return -EIO;
 
 	if (len > priv->size - to)
 		len = priv->size - to;
@@ -491,6 +494,8 @@ static int ps3vram_write(struct ps3_system_bus_device *dev, loff_t to,
 		offset = (unsigned int) (to & (priv->cache.page_size - 1));
 		avail  = priv->cache.page_size - offset;
 
+		mutex_lock(&priv->lock);
+
 		entry = ps3vram_cache_match(dev, to);
 		cached = CACHE_OFFSET + entry * priv->cache.page_size + offset;
 
@@ -503,6 +508,8 @@ static int ps3vram_write(struct ps3_system_bus_device *dev, loff_t to,
 		memcpy(priv->xdr_buf + cached, buf, avail);
 
 		priv->cache.tags[entry].flags |= CACHE_PAGE_DIRTY;
+
+		mutex_unlock(&priv->lock);
 
 		buf += avail;
 		count -= avail;
@@ -549,96 +556,49 @@ static void __devinit ps3vram_proc_init(struct ps3_system_bus_device *dev)
 	pde->data = priv;
 }
 
-static void ps3vram_do_request(struct ps3_system_bus_device *dev,
-			       struct request *req)
+static int ps3vram_make_request(struct request_queue *q, struct bio *bio)
 {
-	struct ps3vram_priv *priv = dev->core.driver_data;
-	int write, res, uptodate = 0;
-	const char *op;
-	sector_t start_sector;
-	unsigned int sectors;
-	loff_t offset;
-	size_t len, retlen;
+	struct ps3_system_bus_device *dev = q->queuedata;
+	int write = bio_data_dir(bio) == WRITE;
+	const char *op = write ? "write" : "read";
+	loff_t offset = bio->bi_sector << 9;
+	int error = 0;
+	struct bio_vec *bvec;
+	unsigned int i;
 
-	write = rq_data_dir(req);
-	op = write ? "write" : "read";
+	dev_dbg(&dev->core, "%s\n", __func__);
 
-	start_sector = req->sector;
-	sectors = req->current_nr_sectors;
-	dev_dbg(&dev->core, "%s %u sectors starting at %lu\n", op, sectors,
-		start_sector);
+	bio_for_each_segment(bvec, bio, i) {
+		/* PS3 is ppc64, so we don't handle highmem */
+		char *ptr = page_address(bvec->bv_page) + bvec->bv_offset;
+		size_t len = bvec->bv_len, retlen;
 
-	offset = start_sector << 9;
-	len = sectors << 9;
+		dev_dbg(&dev->core, "    %s %zu bytes at offset %llu\n", op,
+			len, offset);
+		if (write)
+			error = ps3vram_write(dev, offset, len, &retlen, ptr);
+		else
+			error = ps3vram_read(dev, offset, len, &retlen, ptr);
 
-	if (write)
-		res = ps3vram_write(dev, offset, len, &retlen, req->buffer);
-	else
-		res = ps3vram_read(dev, offset, len, &retlen, req->buffer);
+		if (error) {
+			dev_err(&dev->core, "%s failed\n", op);
+			goto out;
+		}
 
-	if (res) {
-		dev_err(&dev->core, "%s failed\n", op);
-		goto out;
-	}
+		if (retlen != len) {
+			dev_err(&dev->core, "Short %s\n", op);
+			goto out;
+		}
 
-	if (retlen != len) {
-		dev_err(&dev->core, "Short %s\n", op);
-		goto out;
+		offset += len;
 	}
 
 	dev_dbg(&dev->core, "%s completed\n", op);
 
-	uptodate = 1;
-
 out:
-	spin_lock_irq(&priv->lock);
-	end_request(req, uptodate);
-	spin_unlock_irq(&priv->lock);
-}
-
-static int ps3vram_thread(void *data)
-{
-	struct ps3_system_bus_device *dev = data;
-	struct ps3vram_priv *priv = dev->core.driver_data;
-	struct request_queue *q = priv->queue;
-	struct request *req;
-
-	dev_dbg(&dev->core, "%s init\n", __func__);
-
-	current->flags |= PF_NOFREEZE;
-
-	while (!kthread_should_stop()) {
-		spin_lock_irq(&priv->lock);
-		set_current_state(TASK_INTERRUPTIBLE);
-		req = elv_next_request(q);
-		if (!req) {
-			spin_unlock_irq(&priv->lock);
-			schedule();
-			continue;
-		}
-		if (!blk_fs_request(req)) {
-			blk_dump_rq_flags(req, DEVICE_NAME " bad request");
-			end_request(req, 0);
-			spin_unlock_irq(&priv->lock);
-			continue;
-		}
-		spin_unlock_irq(&priv->lock);
-		ps3vram_do_request(dev, req);
-	}
-
-	dev_dbg(&dev->core, "%s exit\n", __func__);
+	bio_endio(bio, error);
 	return 0;
 }
-
-static void ps3vram_request(struct request_queue *q)
-{
-	struct ps3_system_bus_device *dev = q->queuedata;
-	struct ps3vram_priv *priv = dev->core.driver_data;
-
-	dev_dbg(&dev->core, "Waking up thread\n");
-	wake_up_process(priv->thread);
-}
-
 
 static int __devinit ps3vram_probe(struct ps3_system_bus_device *dev)
 {
@@ -649,7 +609,6 @@ static int __devinit ps3vram_probe(struct ps3_system_bus_device *dev)
 	u64 ddr_lpar, ctrl_lpar, info_lpar, reports_lpar, ddr_size,
 	    reports_size;
 	char *rest;
-	struct task_struct *task;
 
 	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (!priv) {
@@ -657,8 +616,8 @@ static int __devinit ps3vram_probe(struct ps3_system_bus_device *dev)
 		goto fail;
 	}
 
+	mutex_init(&priv->lock);
 	dev->core.driver_data = priv;
-	spin_lock_init(&priv->lock);
 
 	priv = dev->core.driver_data;
 
@@ -666,7 +625,7 @@ static int __devinit ps3vram_probe(struct ps3_system_bus_device *dev)
 	priv->xdr_buf = (void *)__get_free_pages(GFP_KERNEL,
 		get_order(XDR_BUF_SIZE));
 	if (priv->xdr_buf == NULL) {
-		dev_dbg(&dev->core, "Could not allocate XDR buffer\n");
+		dev_err(&dev->core, "Could not allocate XDR buffer\n");
 		error = -ENOMEM;
 		goto fail_free_priv;
 	}
@@ -684,11 +643,8 @@ static int __devinit ps3vram_probe(struct ps3_system_bus_device *dev)
 
 	/* Request memory */
 	status = -1;
-	ddr_size = memparse(size, &rest);
-	if (*rest == '-')
-		ddr_size -= ps3fb_videomemory.size;
-	ddr_size = ALIGN(ddr_size, 1024*1024);
-	if (ddr_size <= 0) {
+	ddr_size = ALIGN(memparse(size, &rest), 1024*1024);
+	if (!ddr_size) {
 		dev_err(&dev->core, "Specified size is too small\n");
 		error = -EINVAL;
 		goto out_close_gpu;
@@ -702,7 +658,7 @@ static int __devinit ps3vram_probe(struct ps3_system_bus_device *dev)
 			break;
 		ddr_size -= 1024*1024;
 	}
-	if (status || ddr_size <= 0) {
+	if (status) {
 		dev_err(&dev->core, "lv1_gpu_memory_allocate failed %d\n",
 			status);
 		error = -ENOMEM;
@@ -774,15 +730,22 @@ static int __devinit ps3vram_probe(struct ps3_system_bus_device *dev)
 	ps3vram_cache_init(dev);
 	ps3vram_proc_init(dev);
 
-	queue = blk_init_queue(ps3vram_request, &priv->lock);
+	queue = blk_alloc_queue(GFP_KERNEL);
 	if (!queue) {
-		dev_err(&dev->core, "blk_init_queue failed\n");
+		dev_err(&dev->core, "blk_alloc_queue failed\n");
 		error = -ENOMEM;
 		goto out_cache_cleanup;
 	}
 
 	priv->queue = queue;
 	queue->queuedata = dev;
+	blk_queue_make_request(queue, ps3vram_make_request);
+#if 0
+	blk_queue_max_phys_segments(q, MAX_PHYS_SEGMENTS);
+	blk_queue_max_hw_segments(q, MAX_HW_SEGMENTS);
+	blk_queue_max_segment_size(q, MAX_SEGMENT_SIZE);
+	blk_queue_max_sectors(q, SAFE_MAX_SECTORS);
+#endif
 
 	gendisk = alloc_disk(1);
 	if (!gendisk) {
@@ -801,21 +764,12 @@ static int __devinit ps3vram_probe(struct ps3_system_bus_device *dev)
 	strlcpy(gendisk->disk_name, DEVICE_NAME, sizeof(gendisk->disk_name));
 	set_capacity(gendisk, priv->size >> 9);
 
-	task = kthread_run(ps3vram_thread, dev, DEVICE_NAME);
-	if (IS_ERR(task)) {
-		error = PTR_ERR(task);
-		goto fail_free_disk;
-	}
-	priv->thread = task;
-
 	dev_info(&dev->core, "%s: Using %lu MiB of GPU memory\n",
 		 gendisk->disk_name, get_capacity(gendisk) >> 11);
 
 	add_disk(gendisk);
 	return 0;
 
-fail_free_disk:
-	put_disk(priv->gendisk);
 fail_cleanup_queue:
 	blk_cleanup_queue(queue);
 out_cache_cleanup:
@@ -846,12 +800,9 @@ static int ps3vram_remove(struct ps3_system_bus_device *dev)
 {
 	struct ps3vram_priv *priv = dev->core.driver_data;
 
-	BUG_ON(!elv_queue_empty(priv->queue));
-
-	kthread_stop(priv->thread);
 	del_gendisk(priv->gendisk);
-	blk_cleanup_queue(priv->queue);
 	put_disk(priv->gendisk);
+	blk_cleanup_queue(priv->queue);
 	remove_proc_entry(DEVICE_NAME, NULL);
 	ps3vram_cache_cleanup(dev);
 	iounmap(priv->reports);
