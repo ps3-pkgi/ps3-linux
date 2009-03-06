@@ -130,7 +130,7 @@ config PS3_FLASH
 
 config PS3_VRAM
 	tristate "PS3 Video RAM Storage Driver"
-	depends on PPC_PS3 && BLOCK
+	depends on FB_PS3=y && BLOCK && m
 	help
 	  This driver allows you to use excess PS3 video RAM as volatile
 	  storage or system swap.
