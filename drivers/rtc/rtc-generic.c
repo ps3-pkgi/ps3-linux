@@ -7,41 +7,23 @@
 #include <linux/module.h>
 #include <linux/time.h>
 #include <linux/platform_device.h>
+#include <linux/rtc.h>
 
 #include <asm/rtc.h>
 
-/* as simple as can be, and no simpler. */
-struct generic_rtc {
-	struct rtc_device *rtc;
-	spinlock_t lock;
-};
-
 static int generic_get_time(struct device *dev, struct rtc_time *tm)
 {
-	struct generic_rtc *p = dev_get_drvdata(dev);
-	unsigned long flags, ret;
-
-	spin_lock_irqsave(&p->lock, flags);
-	ret = get_rtc_time(tm);
-	spin_unlock_irqrestore(&p->lock, flags);
+	unsigned int ret = get_rtc_time(tm);
 
 	if (ret & RTC_BATT_BAD)
 		return -EOPNOTSUPP;
 
-	return 0;
+	return rtc_valid_tm(tm);
 }
 
 static int generic_set_time(struct device *dev, struct rtc_time *tm)
 {
-	struct generic_rtc *p = dev_get_drvdata(dev);
-	unsigned long flags;
-	int ret;
-
-	spin_lock_irqsave(&p->lock, flags);
-	ret = set_rtc_time(tm);
-	spin_unlock_irqrestore(&p->lock, flags);
-
-	if (ret < 0)
+	if (set_rtc_time(tm) < 0)
 		return -EOPNOTSUPP;
 
 	return 0;
@@ -52,35 +34,25 @@ static const struct rtc_class_ops generic_rtc_ops = {
 	.set_time = generic_set_time,
 };
 
-static int __devinit generic_rtc_probe(struct platform_device *dev)
+static int __init generic_rtc_probe(struct platform_device *dev)
 {
-	struct generic_rtc *p;
+	struct rtc_device *rtc;
 
-	p = kzalloc(sizeof (*p), GFP_KERNEL);
-	if (!p)
-		return -ENOMEM;
+	rtc = rtc_device_register("rtc-generic", &dev->dev, &generic_rtc_ops,
+				  THIS_MODULE);
+	if (IS_ERR(rtc))
+		return PTR_ERR(rtc);
 
-	spin_lock_init(&p->lock);
-
-	p->rtc = rtc_device_register("rtc-generic", &dev->dev,
-				     &generic_rtc_ops, THIS_MODULE);
-	if (IS_ERR(p->rtc)) {
-		int err = PTR_ERR(p->rtc);
-		kfree(p);
-		return err;
-	}
-
-	platform_set_drvdata(dev, p);
+	platform_set_drvdata(dev, rtc);
 
 	return 0;
 }
 
-static int __devexit generic_rtc_remove(struct platform_device *dev)
+static int __exit generic_rtc_remove(struct platform_device *dev)
 {
-	struct generic_rtc *p = platform_get_drvdata(dev);
+	struct rtc_device *rtc = platform_get_drvdata(dev);
 
-	rtc_device_unregister(p->rtc);
-	kfree(p);
+	rtc_device_unregister(rtc);
 
 	return 0;
 }
@@ -90,13 +62,12 @@ static struct platform_driver generic_rtc_driver = {
 		.name = "rtc-generic",
 		.owner = THIS_MODULE,
 	},
-	.probe = generic_rtc_probe,
-	.remove = __devexit_p(generic_rtc_remove),
+	.remove = __exit_p(generic_rtc_remove),
 };
 
 static int __init generic_rtc_init(void)
 {
-	return platform_driver_register(&generic_rtc_driver);
+	return platform_driver_probe(&generic_rtc_driver, generic_rtc_probe);
 }
 
 static void __exit generic_rtc_fini(void)

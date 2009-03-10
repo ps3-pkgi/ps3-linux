@@ -162,20 +162,17 @@ int do_settimeofday(struct timespec *tv)
 EXPORT_SYMBOL(do_settimeofday);
 
 
-static struct platform_device rtc_generic_dev = {
-	.name = "rtc-generic",
-	.id = -1,
-};
-
 static int __init rtc_init(void)
 {
-	int ret;
+	struct platform_device *pdev;
 
-	ret = platform_device_register(&rtc_generic_dev);
-	if (ret < 0)
-		pr_err("Unable to register rtc device...\n");
+	if (!mach_hwclk)
+		return -ENODEV;
 
-	/* not necessarily an error */
+	pdev = platform_device_register_simple("rtc-generic", -1, NULL, 0);
+	if (IS_ERR(pdev))
+		return PTR_ERR(pdev);
+
 	return 0;
 }
 

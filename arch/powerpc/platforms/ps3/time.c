@@ -80,14 +80,15 @@ unsigned long __init ps3_get_boot_time(void)
 	return read_rtc() + ps3_os_area_get_rtc_diff();
 }
 
-static struct platform_device rtc_ps3_dev = {
-	.name = "rtc-ps3",
-	.id = -1,
-};
-
-static int __init rtc_init(void)
+static int __init ps3_rtc_init(void)
 {
-	return platform_device_register(&rtc_ps3_dev);
+	struct platform_device *pdev;
+
+	pdev = platform_device_register_simple("rtc-ps3", -1, NULL, 0);
+	if (IS_ERR(pdev))
+		return PTR_ERR(pdev);
+
+	return 0;
 }
 
-module_init(rtc_init);
+module_init(ps3_rtc_init);
