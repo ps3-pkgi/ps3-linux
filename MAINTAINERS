@@ -1011,6 +1011,8 @@ L:	netdev@vger.kernel.org
 S:	Supported
 
 BROADCOM TG3 GIGABIT ETHERNET DRIVER
+P:	Matt Carlson
+M:	mcarlson@broadcom.com
 P:	Michael Chan
 M:	mchan@broadcom.com
 L:	netdev@vger.kernel.org
@@ -2843,7 +2845,7 @@ P:	Roman Zippel
 M:	zippel@linux-m68k.org
 L:	linux-m68k@lists.linux-m68k.org
 W:	http://www.linux-m68k.org/
-W:	http://linux-m68k-cvs.ubb.ca/
+T:	git git.kernel.org/pub/scm/linux/kernel/git/geert/linux-m68k.git
 S:	Maintained
 
 M68K ON APPLE MACINTOSH
@@ -3646,6 +3648,12 @@ M:	florian.fainelli@telecomint.eu
 L:	netdev@vger.kernel.org
 S:	Maintained
 
+RDS - RELIABLE DATAGRAM SOCKETS
+P:	Andy Grover
+M:	andy.grover@oracle.com
+L:	rds-devel@oss.oracle.com
+S:	Supported
+
 READ-COPY UPDATE (RCU)
 P:	Dipankar Sarma
 M:	dipankar@in.ibm.com
@@ -3735,6 +3743,15 @@ M:	blaschka@linux.vnet.ibm.com
 M:	linux390@de.ibm.com
 L:	linux-s390@vger.kernel.org
 W:	http://www.ibm.com/developerworks/linux/linux390/
+S:	Supported
+
+S390 ZCRYPT DRIVER
+P:	Felix Beck
+M:	felix.beck@de.ibm.com
+P:	Ralph Wuerthner
+M:	ralph.wuerthner@de.ibm.com
+M:	linux390@de.ibm.com
+L:	linux-s390@vger.kernel.org
 S:	Supported
 
 S390 ZFCP DRIVER
