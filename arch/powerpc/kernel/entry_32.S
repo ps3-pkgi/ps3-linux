@@ -63,7 +63,7 @@ debug_transfer_to_handler:
 
 	.globl	crit_transfer_to_handler
 crit_transfer_to_handler:
-#ifdef CONFIG_FSL_BOOKE
+#ifdef CONFIG_PPC_BOOK3E_MMU
 	mfspr	r0,SPRN_MAS0
 	stw	r0,MAS0(r11)
 	mfspr	r0,SPRN_MAS1
@@ -78,7 +78,7 @@ crit_transfer_to_handler:
 	mfspr	r0,SPRN_MAS7
 	stw	r0,MAS7(r11)
 #endif /* CONFIG_PHYS_64BIT */
-#endif /* CONFIG_FSL_BOOKE */
+#endif /* CONFIG_PPC_BOOK3E_MMU */
 #ifdef CONFIG_44x
 	mfspr	r0,SPRN_MMUCR
 	stw	r0,MMUCR(r11)
@@ -914,7 +914,7 @@ exc_exit_restart_end:
 	mtspr	SPRN_##exc_lvl_srr0,r9;					\
 	mtspr	SPRN_##exc_lvl_srr1,r10;
 
-#if defined(CONFIG_FSL_BOOKE)
+#if defined(CONFIG_PPC_BOOK3E_MMU)
 #ifdef CONFIG_PHYS_64BIT
 #define	RESTORE_MAS7							\
 	lwz	r11,MAS7(r1);						\
@@ -956,7 +956,7 @@ ret_from_crit_exc:
 	lwz	r10,crit_srr1@l(r10);
 	mtspr	SPRN_SRR0,r9;
 	mtspr	SPRN_SRR1,r10;
-	RET_FROM_EXC_LEVEL(SPRN_CSRR0, SPRN_CSRR1, RFCI)
+	RET_FROM_EXC_LEVEL(SPRN_CSRR0, SPRN_CSRR1, PPC_RFCI)
 #endif /* CONFIG_40x */
 
 #ifdef CONFIG_BOOKE
@@ -967,7 +967,7 @@ ret_from_crit_exc:
 	stw	r10,KSP_LIMIT(r9)
 	RESTORE_xSRR(SRR0,SRR1);
 	RESTORE_MMU_REGS;
-	RET_FROM_EXC_LEVEL(SPRN_CSRR0, SPRN_CSRR1, RFCI)
+	RET_FROM_EXC_LEVEL(SPRN_CSRR0, SPRN_CSRR1, PPC_RFCI)
 
 	.globl	ret_from_debug_exc
 ret_from_debug_exc:
@@ -981,7 +981,7 @@ ret_from_debug_exc:
 	RESTORE_xSRR(SRR0,SRR1);
 	RESTORE_xSRR(CSRR0,CSRR1);
 	RESTORE_MMU_REGS;
-	RET_FROM_EXC_LEVEL(SPRN_DSRR0, SPRN_DSRR1, RFDI)
+	RET_FROM_EXC_LEVEL(SPRN_DSRR0, SPRN_DSRR1, PPC_RFDI)
 
 	.globl	ret_from_mcheck_exc
 ret_from_mcheck_exc:
@@ -992,7 +992,7 @@ ret_from_mcheck_exc:
 	RESTORE_xSRR(CSRR0,CSRR1);
 	RESTORE_xSRR(DSRR0,DSRR1);
 	RESTORE_MMU_REGS;
-	RET_FROM_EXC_LEVEL(SPRN_MCSRR0, SPRN_MCSRR1, RFMCI)
+	RET_FROM_EXC_LEVEL(SPRN_MCSRR0, SPRN_MCSRR1, PPC_RFMCI)
 #endif /* CONFIG_BOOKE */
 
 /*
