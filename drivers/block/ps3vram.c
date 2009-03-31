@@ -536,7 +536,7 @@ static const struct file_operations ps3vram_proc_fops = {
 static void __devinit ps3vram_proc_init(struct ps3_system_bus_device *dev)
 {
 	struct ps3vram_priv *priv = dev->core.driver_data;
-	struct proc_dir_entry *pde;
+  	struct proc_dir_entry *pde;
 
 	pde = proc_create_data(DEVICE_NAME, 0444, NULL, &ps3vram_proc_fops,
 			       priv);
