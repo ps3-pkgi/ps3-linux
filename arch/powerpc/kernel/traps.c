@@ -745,13 +745,6 @@ static int emulate_isel(struct pt_regs *regs, u32 instword)
 	return 0;
 }
 
-void do_warn_emulate(const char *type)
-{
-	if (printk_ratelimit())
-		pr_warning("%s used emulated %s instruction\n", current->comm,
-			   type);
-}
-
 static int emulate_instruction(struct pt_regs *regs)
 {
 	u32 instword;
@@ -766,7 +759,7 @@ static int emulate_instruction(struct pt_regs *regs)
 
 	/* Emulate the mfspr rD, PVR. */
 	if ((instword & PPC_INST_MFSPR_PVR_MASK) == PPC_INST_MFSPR_PVR) {
-		WARN_EMULATE(mfpvr);
+		WARN_EMULATED(mfpvr);
 		rd = (instword >> 21) & 0x1f;
 		regs->gpr[rd] = mfspr(SPRN_PVR);
 		return 0;
@@ -774,7 +767,7 @@ static int emulate_instruction(struct pt_regs *regs)
 
 	/* Emulating the dcba insn is just a no-op.  */
 	if ((instword & PPC_INST_DCBA_MASK) == PPC_INST_DCBA) {
-		WARN_EMULATE(dcba);
+		WARN_EMULATED(dcba);
 		return 0;
 	}
 
@@ -783,7 +776,7 @@ static int emulate_instruction(struct pt_regs *regs)
 		int shift = (instword >> 21) & 0x1c;
 		unsigned long msk = 0xf0000000UL >> shift;
 
-		WARN_EMULATE(mcrxr);
+		WARN_EMULATED(mcrxr);
 		regs->ccr = (regs->ccr & ~msk) | ((regs->xer >> shift) & msk);
 		regs->xer &= ~0xf0000000UL;
 		return 0;
@@ -791,18 +784,19 @@ static int emulate_instruction(struct pt_regs *regs)
 
 	/* Emulate load/store string insn. */
 	if ((instword & PPC_INST_STRING_GEN_MASK) == PPC_INST_STRING) {
-		WARN_EMULATE(string);
+		WARN_EMULATED(string);
 		return emulate_string_inst(regs, instword);
 	}
 
 	/* Emulate the popcntb (Population Count Bytes) instruction. */
 	if ((instword & PPC_INST_POPCNTB_MASK) == PPC_INST_POPCNTB) {
-		WARN_EMULATE(popcntb);
+		WARN_EMULATED(popcntb);
 		return emulate_popcntb_inst(regs, instword);
 	}
 
 	/* Emulate isel (Integer Select) instruction */
 	if ((instword & PPC_INST_ISEL_MASK) == PPC_INST_ISEL) {
+		WARN_EMULATED(isel);
 		return emulate_isel(regs, instword);
 	}
 
@@ -1001,7 +995,7 @@ void SoftwareEmulation(struct pt_regs *regs)
 #ifdef CONFIG_MATH_EMULATION
 	errcode = do_mathemu(regs);
 	if (errcode >= 0)
-		WARN_EMULATE(math);
+		WARN_EMULATED(math);
 
 	switch (errcode) {
 	case 0:
@@ -1024,7 +1018,7 @@ void SoftwareEmulation(struct pt_regs *regs)
 #elif defined(CONFIG_8XX_MINIMAL_FPEMU)
 	errcode = Soft_emulate_8xx(regs);
 	if (errcode >= 0)
-		WARN_EMULATE(8xx);
+		WARN_EMULATED(8xx);
 
 	switch (errcode) {
 	case 0:
@@ -1109,6 +1103,7 @@ void altivec_assist_exception(struct pt_regs *regs)
 
 	flush_altivec_to_thread(current);
 
+	WARN_EMULATED(altivec);
 	err = emulate_altivec(regs);
 	if (err == 0) {
 		regs->nip += 4;		/* skip emulated instruction */
@@ -1311,7 +1306,7 @@ void __init trap_init(void)
 #ifdef CONFIG_SYSCTL
 int sysctl_warn_emulated;
 
-static ctl_table warn_emulated_ctl_table[]={
+static ctl_table warn_emulated_ctl_table[] = {
 	{
 		.procname	= "cpu_emulation_warnings",
 		.data		= &sysctl_warn_emulated,
@@ -1332,12 +1327,18 @@ static ctl_table warn_emulated_sysctl_root[] = {
 	{}
 };
 
+void warn_emulated_print(const char *type)
+{
+	if (printk_ratelimit())
+		pr_warning("%s used emulated %s instruction\n", current->comm,
+			   type);
+}
+
 static inline int __init warn_emulated_sysctl_register(void)
 {
 	register_sysctl_table(warn_emulated_sysctl_root);
-
 	return 0;
 }
 
-__initcall(warn_emulated_sysctl_register);
+device_initcall(warn_emulated_sysctl_register);
 #endif /* !CONFIG_SYSCTL */

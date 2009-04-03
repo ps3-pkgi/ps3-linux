@@ -27,6 +27,7 @@
 #include <asm/udbg.h>
 #include <asm/lv1call.h>
 #include <asm/firmware.h>
+#include <asm/iommu.h>
 
 #include "platform.h"
 

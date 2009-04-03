@@ -18,17 +18,17 @@
 #ifndef _ASM_POWERPC_EMULATED_OPS_H
 #define _ASM_POWERPC_EMULATED_OPS_H
 
-#ifdef CONFIG_SYSCTL
-
-#ifdef CONFIG_PPC64
-
 #include <linux/percpu.h>
 
 #include <asm/atomic.h>
 
+#ifdef CONFIG_ALTIVEC
+DECLARE_PER_CPU(atomic_long_t, emulated_altivec);
+#endif
 DECLARE_PER_CPU(atomic_long_t, emulated_dcba);
 DECLARE_PER_CPU(atomic_long_t, emulated_dcbz);
 DECLARE_PER_CPU(atomic_long_t, emulated_fp_pair);
+DECLARE_PER_CPU(atomic_long_t, emulated_isel);
 DECLARE_PER_CPU(atomic_long_t, emulated_mcrxr);
 DECLARE_PER_CPU(atomic_long_t, emulated_mfpvr);
 DECLARE_PER_CPU(atomic_long_t, emulated_multiple);
@@ -40,33 +40,24 @@ DECLARE_PER_CPU(atomic_long_t, emulated_math);
 #elif defined(CONFIG_8XX_MINIMAL_FPEMU)
 DECLARE_PER_CPU(atomic_long_t, emulated_8xx);
 #endif
+#ifdef CONFIG_VSX
+DECLARE_PER_CPU(atomic_long_t, emulated_vsx);
+#endif
 
-#define WARN_EMULATE_INC(type)						\
+extern void warn_emulated_print(const char *type);
+
+#ifdef CONFIG_SYSCTL
+extern int sysctl_warn_emulated;
+#else
+#define sysctl_warn_emulated		0
+#endif
+
+#define WARN_EMULATED(type)						\
 	do {								\
 		atomic_long_inc(&per_cpu(emulated_ ## type,		\
 					 raw_smp_processor_id()));	\
-	} while (0)
-
-#else /* !CONFIG_PPC64 */
-
-#define WARN_EMULATE_INC(type)	do { } while (0)
-
-#endif /* !CONFIG_PPC64 */
-
-extern int sysctl_warn_emulated;
-extern void do_warn_emulate(const char *type);
-
-#define WARN_EMULATE(type)						\
-	do {								\
-		WARN_EMULATE_INC(type);					\
 		if (sysctl_warn_emulated)				\
-			do_warn_emulate(#type);				\
+			warn_emulated_print(#type);			\
 	} while (0)
-
-#else /* !CONFIG_SYSCTL */
-
-#define WARN_EMULATE(type)	do { } while (0)
-
-#endif /* !CONFIG_SYSCTL */
 
 #endif /* _ASM_POWERPC_EMULATED_OPS_H */

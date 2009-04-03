@@ -100,16 +100,6 @@
 #define IOSTE_PS_1M		0x0000000000000005ul /*   - 1MB  */
 #define IOSTE_PS_16M		0x0000000000000007ul /*   - 16MB */
 
-/* Page table entries */
-#define IOPTE_PP_W		0x8000000000000000ul /* protection: write */
-#define IOPTE_PP_R		0x4000000000000000ul /* protection: read */
-#define IOPTE_M			0x2000000000000000ul /* coherency required */
-#define IOPTE_SO_R		0x1000000000000000ul /* ordering: writes */
-#define IOPTE_SO_RW             0x1800000000000000ul /* ordering: r & w */
-#define IOPTE_RPN_Mask		0x07fffffffffff000ul /* RPN */
-#define IOPTE_H			0x0000000000000800ul /* cache hint */
-#define IOPTE_IOID_Mask		0x00000000000007fful /* ioid */
-
 
 /* IOMMU sizing */
 #define IO_SEGMENT_SHIFT	28

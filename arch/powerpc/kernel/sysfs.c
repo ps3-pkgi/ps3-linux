@@ -341,9 +341,13 @@ static struct sysdev_attribute emulated_ ## type ## _attr = {		\
 	.show = show_emulated_ ## type,					\
 };
 
+#ifdef CONFIG_ALTIVEC
+SYSFS_EMULATED_SETUP(altivec);
+#endif
 SYSFS_EMULATED_SETUP(dcba);
 SYSFS_EMULATED_SETUP(dcbz);
 SYSFS_EMULATED_SETUP(fp_pair);
+SYSFS_EMULATED_SETUP(isel);
 SYSFS_EMULATED_SETUP(mcrxr);
 SYSFS_EMULATED_SETUP(mfpvr);
 SYSFS_EMULATED_SETUP(multiple);
@@ -355,11 +359,18 @@ SYSFS_EMULATED_SETUP(math);
 #elif defined(CONFIG_8XX_MINIMAL_FPEMU)
 SYSFS_EMULATED_SETUP(8xx);
 #endif
+#ifdef CONFIG_VSX
+SYSFS_EMULATED_SETUP(vsx);
+#endif
 
 static struct attribute *emulated_attrs[] = {
+#ifdef CONFIG_ALTIVEC
+	&emulated_altivec_attr.attr,
+#endif
 	&emulated_dcba_attr.attr,
 	&emulated_dcbz_attr.attr,
 	&emulated_fp_pair_attr.attr,
+	&emulated_isel_attr.attr,
 	&emulated_mcrxr_attr.attr,
 	&emulated_mfpvr_attr.attr,
 	&emulated_multiple_attr.attr,
@@ -370,6 +381,9 @@ static struct attribute *emulated_attrs[] = {
 	&emulated_math_attr.attr,
 #elif defined(CONFIG_8XX_MINIMAL_FPEMU)
 	&emulated_8xx_attr.attr,
+#endif
+#ifdef CONFIG_VSX
+	&emulated_vsx_attr.attr,
 #endif
 	NULL
 };
@@ -446,7 +460,6 @@ static void __cpuinit register_cpu_online(unsigned int cpu)
 	cacheinfo_cpu_online(cpu);
 
 	res = sysfs_create_group(&s->kobj, &emulated_attr_group);
-
 	if (res)
 		pr_warning("Cannot create emulated sysfs group for cpu %u\n",
 			   cpu);

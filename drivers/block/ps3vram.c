@@ -14,6 +14,7 @@
 #include <linux/seq_file.h>
 
 #include <asm/firmware.h>
+#include <asm/iommu.h>
 #include <asm/lv1call.h>
 #include <asm/ps3.h>
 
@@ -536,7 +537,7 @@ static const struct file_operations ps3vram_proc_fops = {
 static void __devinit ps3vram_proc_init(struct ps3_system_bus_device *dev)
 {
 	struct ps3vram_priv *priv = dev->core.driver_data;
-  	struct proc_dir_entry *pde;
+	struct proc_dir_entry *pde;
 
 	pde = proc_create_data(DEVICE_NAME, 0444, NULL, &ps3vram_proc_fops,
 			       priv);
@@ -702,7 +703,8 @@ static int __devinit ps3vram_probe(struct ps3_system_bus_device *dev)
 	/* Map XDR buffer to RSX */
 	status = lv1_gpu_context_iomap(priv->context_handle, XDR_IOIF,
 				       ps3_mm_phys_to_lpar(__pa(priv->xdr_buf)),
-				       XDR_BUF_SIZE, 0);
+				       XDR_BUF_SIZE,
+				       IOPTE_PP_W | IOPTE_PP_R | IOPTE_M);
 	if (status) {
 		dev_err(&dev->core, "lv1_gpu_context_iomap failed %d\n",
 			status);
@@ -715,7 +717,7 @@ static int __devinit ps3vram_probe(struct ps3_system_bus_device *dev)
 	if (!priv->ddr_base) {
 		dev_err(&dev->core, "ioremap DDR failed\n");
 		error = -ENOMEM;
-		goto out_free_context;
+		goto out_unmap_context;
 	}
 
 	priv->ctrl = ioremap(ctrl_lpar, 64 * 1024);
@@ -801,6 +803,10 @@ out_unmap_ctrl:
 	iounmap(priv->ctrl);
 out_unmap_vram:
 	iounmap(priv->ddr_base);
+out_unmap_context:
+	lv1_gpu_context_iomap(priv->context_handle, XDR_IOIF,
+			      ps3_mm_phys_to_lpar(__pa(priv->xdr_buf)),
+			      XDR_BUF_SIZE, IOPTE_M);
 out_free_context:
 	lv1_gpu_context_free(priv->context_handle);
 out_free_memory:
@@ -828,6 +834,9 @@ static int ps3vram_remove(struct ps3_system_bus_device *dev)
 	iounmap(priv->reports);
 	iounmap(priv->ctrl);
 	iounmap(priv->ddr_base);
+	lv1_gpu_context_iomap(priv->context_handle, XDR_IOIF,
+			      ps3_mm_phys_to_lpar(__pa(priv->xdr_buf)),
+			      XDR_BUF_SIZE, IOPTE_M);
 	lv1_gpu_context_free(priv->context_handle);
 	lv1_gpu_memory_free(priv->memory_handle);
 	ps3_close_hv_device(dev);

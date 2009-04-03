@@ -24,6 +24,7 @@
 #include <linux/lmb.h>
 
 #include <asm/firmware.h>
+#include <asm/iommu.h>
 #include <asm/prom.h>
 #include <asm/udbg.h>
 #include <asm/lv1call.h>

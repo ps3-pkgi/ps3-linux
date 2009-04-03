@@ -32,6 +32,7 @@
 #include <linux/init.h>
 
 #include <asm/abs_addr.h>
+#include <asm/iommu.h>
 #include <asm/lv1call.h>
 #include <asm/ps3av.h>
 #include <asm/ps3fb.h>
@@ -956,73 +957,6 @@ static irqreturn_t ps3fb_vsync_interrupt(int irq, void *ptr)
 }
 
 
-static int ps3fb_vsync_settings(struct gpu_driver_info *dinfo,
-				struct device *dev)
-{
-	int error;
-
-	dev_dbg(dev, "version_driver:%x\n", dinfo->version_driver);
-	dev_dbg(dev, "irq outlet:%x\n", dinfo->irq.irq_outlet);
-	dev_dbg(dev,
-		"version_gpu: %x memory_size: %x ch: %x core_freq: %d "
-		"mem_freq:%d\n",
-		dinfo->version_gpu, dinfo->memory_size, dinfo->hardware_channel,
-		dinfo->nvcore_frequency/1000000, dinfo->memory_frequency/1000000);
-
-	if (dinfo->version_driver != GPU_DRIVER_INFO_VERSION) {
-		dev_err(dev, "%s: version_driver err:%x\n", __func__,
-			dinfo->version_driver);
-		return -EINVAL;
-	}
-
-	error = ps3_irq_plug_setup(PS3_BINDING_CPU_ANY, dinfo->irq.irq_outlet,
-				   &ps3fb.irq_no);
-	if (error) {
-		dev_err(dev, "%s: ps3_alloc_irq failed %d\n", __func__, error);
-		return error;
-	}
-
-	error = request_irq(ps3fb.irq_no, ps3fb_vsync_interrupt, IRQF_DISABLED,
-			    DEVICE_NAME, dev);
-	if (error) {
-		dev_err(dev, "%s: request_irq failed %d\n", __func__, error);
-		ps3_irq_plug_destroy(ps3fb.irq_no);
-		return error;
-	}
-
-	dinfo->irq.mask = (1 << GPU_INTR_STATUS_VSYNC_1) |
-			  (1 << GPU_INTR_STATUS_FLIP_1);
-	return 0;
-}
-
-static int ps3fb_xdr_settings(u64 xdr_lpar, struct device *dev)
-{
-	int status;
-
-	status = lv1_gpu_context_iomap(ps3fb.context_handle, GPU_IOIF,
-				       xdr_lpar, ps3fb_videomemory.size, 0);
-	if (status) {
-		dev_err(dev, "%s: lv1_gpu_context_iomap failed: %d\n",
-			__func__, status);
-		return -ENXIO;
-	}
-	dev_dbg(dev, "video:%p ioif:%lx lpar:%llx size:%lx\n",
-		ps3fb_videomemory.address, GPU_IOIF, xdr_lpar,
-		ps3fb_videomemory.size);
-
-	status = lv1_gpu_context_attribute(ps3fb.context_handle,
-					   L1GPU_CONTEXT_ATTRIBUTE_FB_SETUP,
-					   xdr_lpar, GPU_CMD_BUF_SIZE,
-					   GPU_IOIF, 0);
-	if (status) {
-		dev_err(dev,
-			"%s: lv1_gpu_context_attribute FB_SETUP failed: %d\n",
-			__func__, status);
-		return -ENXIO;
-	}
-	return 0;
-}
-
 static struct fb_ops ps3fb_ops = {
 	.fb_open	= ps3fb_open,
 	.fb_release	= ps3fb_release,
@@ -1048,49 +982,18 @@ static struct fb_fix_screeninfo ps3fb_fix __initdata = {
 	.accel =	FB_ACCEL_NONE,
 };
 
-static int ps3fb_set_sync(struct device *dev)
-{
-	int status;
-
-#ifdef HEAD_A
-	status = lv1_gpu_context_attribute(0x0,
-					   L1GPU_CONTEXT_ATTRIBUTE_DISPLAY_SYNC,
-					   0, L1GPU_DISPLAY_SYNC_VSYNC, 0, 0);
-	if (status) {
-		dev_err(dev,
-			"%s: lv1_gpu_context_attribute DISPLAY_SYNC failed: "
-			"%d\n",
-			__func__, status);
-		return -1;
-	}
-#endif
-#ifdef HEAD_B
-	status = lv1_gpu_context_attribute(0x0,
-					   L1GPU_CONTEXT_ATTRIBUTE_DISPLAY_SYNC,
-					   1, L1GPU_DISPLAY_SYNC_VSYNC, 0, 0);
-
-	if (status) {
-		dev_err(dev,
-			"%s: lv1_gpu_context_attribute DISPLAY_SYNC failed: "
-			"%d\n",
-			__func__, status);
-		return -1;
-	}
-#endif
-	return 0;
-}
-
 static int __devinit ps3fb_probe(struct ps3_system_bus_device *dev)
 {
 	struct fb_info *info;
 	struct ps3fb_par *par;
-	int retval = -ENOMEM;
+	int retval;
 	u64 ddr_lpar = 0;
 	u64 lpar_dma_control = 0;
 	u64 lpar_driver_info = 0;
 	u64 lpar_reports = 0;
 	u64 lpar_reports_size = 0;
 	u64 xdr_lpar;
+	struct gpu_driver_info *dinfo;
 	void *fb_start;
 	int status;
 	struct task_struct *task;
@@ -1101,8 +1004,8 @@ static int __devinit ps3fb_probe(struct ps3_system_bus_device *dev)
 		return -ENOMEM;
 	}
 
-	status = ps3_open_hv_device(dev);
-	if (status) {
+	retval = ps3_open_hv_device(dev);
+	if (retval) {
 		dev_err(&dev->core, "%s: ps3_open_hv_device failed\n",
 			__func__);
 		goto err;
@@ -1116,7 +1019,33 @@ static int __devinit ps3fb_probe(struct ps3_system_bus_device *dev)
 	atomic_set(&ps3fb.ext_flip, 0);	/* for flip with vsync */
 	init_waitqueue_head(&ps3fb.wait_vsync);
 
-	ps3fb_set_sync(&dev->core);
+#ifdef HEAD_A
+	status = lv1_gpu_context_attribute(0x0,
+					   L1GPU_CONTEXT_ATTRIBUTE_DISPLAY_SYNC,
+					   0, L1GPU_DISPLAY_SYNC_VSYNC, 0, 0);
+	if (status) {
+		dev_err(&dev->core,
+			"%s: lv1_gpu_context_attribute DISPLAY_SYNC failed: "
+			"%d\n",
+			__func__, status);
+		retval = -ENODEV;
+		goto err_close_device;
+	}
+#endif
+#ifdef HEAD_B
+	status = lv1_gpu_context_attribute(0x0,
+					   L1GPU_CONTEXT_ATTRIBUTE_DISPLAY_SYNC,
+					   1, L1GPU_DISPLAY_SYNC_VSYNC, 0, 0);
+
+	if (status) {
+		dev_err(&dev->core,
+			"%s: lv1_gpu_context_attribute DISPLAY_SYNC failed: "
+			"%d\n",
+			__func__, status);
+		retval = -ENODEV;
+		goto err_close_device;
+	}
+#endif
 
 	max_ps3fb_size = _ALIGN_UP(GPU_IOIF, 256*1024*1024) - GPU_IOIF;
 	if (ps3fb_videomemory.size > max_ps3fb_size) {
@@ -1131,7 +1060,7 @@ static int __devinit ps3fb_probe(struct ps3_system_bus_device *dev)
 	if (status) {
 		dev_err(&dev->core, "%s: lv1_gpu_memory_allocate failed: %d\n",
 			__func__, status);
-		goto err;
+		goto err_close_device;
 	}
 	dev_dbg(&dev->core, "ddr:lpar:0x%llx\n", ddr_lpar);
 
@@ -1147,27 +1076,81 @@ static int __devinit ps3fb_probe(struct ps3_system_bus_device *dev)
 	}
 
 	/* vsync interrupt */
-	ps3fb.dinfo = (void __force *)ioremap(lpar_driver_info, 128 * 1024);
-	if (!ps3fb.dinfo) {
+	dinfo = (void __force *)ioremap(lpar_driver_info, 128 * 1024);
+	if (!dinfo) {
 		dev_err(&dev->core, "%s: ioremap failed\n", __func__);
 		goto err_gpu_context_free;
 	}
 
-	retval = ps3fb_vsync_settings(ps3fb.dinfo, &dev->core);
-	if (retval)
+	ps3fb.dinfo = dinfo;
+	dev_dbg(&dev->core, "version_driver:%x\n", dinfo->version_driver);
+	dev_dbg(&dev->core, "irq outlet:%x\n", dinfo->irq.irq_outlet);
+	dev_dbg(&dev->core, "version_gpu: %x memory_size: %x ch: %x "
+		"core_freq: %d mem_freq:%d\n", dinfo->version_gpu,
+		dinfo->memory_size, dinfo->hardware_channel,
+		dinfo->nvcore_frequency/1000000,
+		dinfo->memory_frequency/1000000);
+
+	if (dinfo->version_driver != GPU_DRIVER_INFO_VERSION) {
+		dev_err(&dev->core, "%s: version_driver err:%x\n", __func__,
+			dinfo->version_driver);
+		retval = -EINVAL;
 		goto err_iounmap_dinfo;
+	}
+
+	retval = ps3_irq_plug_setup(PS3_BINDING_CPU_ANY, dinfo->irq.irq_outlet,
+				    &ps3fb.irq_no);
+	if (retval) {
+		dev_err(&dev->core, "%s: ps3_alloc_irq failed %d\n", __func__,
+			retval);
+		goto err_iounmap_dinfo;
+	}
+
+	retval = request_irq(ps3fb.irq_no, ps3fb_vsync_interrupt,
+			     IRQF_DISABLED, DEVICE_NAME, &dev->core);
+	if (retval) {
+		dev_err(&dev->core, "%s: request_irq failed %d\n", __func__,
+			retval);
+		goto err_destroy_plug;
+	}
+
+	dinfo->irq.mask = (1 << GPU_INTR_STATUS_VSYNC_1) |
+			  (1 << GPU_INTR_STATUS_FLIP_1);
 
 	/* Clear memory to prevent kernel info leakage into userspace */
 	memset(ps3fb_videomemory.address, 0, ps3fb_videomemory.size);
 
 	xdr_lpar = ps3_mm_phys_to_lpar(__pa(ps3fb_videomemory.address));
-	retval = ps3fb_xdr_settings(xdr_lpar, &dev->core);
-	if (retval)
+
+	status = lv1_gpu_context_iomap(ps3fb.context_handle, GPU_IOIF,
+				       xdr_lpar, ps3fb_videomemory.size,
+				       IOPTE_PP_W | IOPTE_PP_R | IOPTE_M);
+	if (status) {
+		dev_err(&dev->core, "%s: lv1_gpu_context_iomap failed: %d\n",
+			__func__, status);
+		retval =  -ENXIO;
 		goto err_free_irq;
+	}
+
+	dev_dbg(&dev->core, "video:%p ioif:%lx lpar:%llx size:%lx\n",
+		ps3fb_videomemory.address, GPU_IOIF, xdr_lpar,
+		ps3fb_videomemory.size);
+
+	status = lv1_gpu_context_attribute(ps3fb.context_handle,
+					   L1GPU_CONTEXT_ATTRIBUTE_FB_SETUP,
+					   xdr_lpar, GPU_CMD_BUF_SIZE,
+					   GPU_IOIF, 0);
+	if (status) {
+		dev_err(&dev->core,
+			"%s: lv1_gpu_context_attribute FB_SETUP failed: %d\n",
+			__func__, status);
+		retval = -ENXIO;
+		goto err_context_unmap;
+	}
 
 	info = framebuffer_alloc(sizeof(struct ps3fb_par), &dev->core);
 	if (!info)
-		goto err_free_irq;
+		goto err_context_unmap;
 
 	par = info->par;
 	par->mode_id = ~ps3fb_mode;	/* != ps3fb_mode, to trigger change */
@@ -1232,8 +1215,12 @@ err_fb_dealloc:
 	fb_dealloc_cmap(&info->cmap);
 err_framebuffer_release:
 	framebuffer_release(info);
+err_context_unmap:
+	lv1_gpu_context_iomap(ps3fb.context_handle, GPU_IOIF, xdr_lpar,
+			      ps3fb_videomemory.size, IOPTE_M);
 err_free_irq:
 	free_irq(ps3fb.irq_no, &dev->core);
+err_destroy_plug:
 	ps3_irq_plug_destroy(ps3fb.irq_no);
 err_iounmap_dinfo:
 	iounmap((u8 __force __iomem *)ps3fb.dinfo);
@@ -1241,6 +1228,8 @@ err_gpu_context_free:
 	lv1_gpu_context_free(ps3fb.context_handle);
 err_gpu_memory_free:
 	lv1_gpu_memory_free(ps3fb.memory_handle);
+err_close_device:
+	ps3_close_hv_device(dev);
 err:
 	return retval;
 }
@@ -1249,6 +1238,7 @@ static int ps3fb_shutdown(struct ps3_system_bus_device *dev)
 {
 	int status;
 	struct fb_info *info = dev->core.driver_data;
+	u64 xdr_lpar = ps3_mm_phys_to_lpar(__pa(ps3fb_videomemory.address));
 
 	dev_dbg(&dev->core, " -> %s:%d\n", __func__, __LINE__);
 
@@ -1268,9 +1258,16 @@ static int ps3fb_shutdown(struct ps3_system_bus_device *dev)
 		unregister_framebuffer(info);
 		fb_dealloc_cmap(&info->cmap);
 		framebuffer_release(info);
-		info = dev->core.driver_data = NULL;
+		dev->core.driver_data = NULL;
 	}
 	iounmap((u8 __force __iomem *)ps3fb.dinfo);
+
+	status = lv1_gpu_context_iomap(ps3fb.context_handle, GPU_IOIF,
+				       xdr_lpar, ps3fb_videomemory.size,
+				       IOPTE_M);
+	if (status)
+		dev_dbg(&dev->core, "lv1_gpu_context_iomap failed: %d\n",
+			status);
 
 	status = lv1_gpu_context_free(ps3fb.context_handle);
 	if (status)

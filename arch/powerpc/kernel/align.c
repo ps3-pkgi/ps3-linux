@@ -732,7 +732,7 @@ int fix_alignment(struct pt_regs *regs)
 
 #ifdef CONFIG_SPE
 	if ((instr >> 26) == 0x4) {
-		WARN_EMULATE(spe);
+		WARN_EMULATED(spe);
 		return emulate_spe(regs, reg, instr);
 	}
 #endif
@@ -786,6 +786,7 @@ int fix_alignment(struct pt_regs *regs)
 			flags |= SPLT;
 			nb = 8;
 		}
+		WARN_EMULATED(vsx);
 		return emulate_vsx(addr, reg, areg, regs, flags, nb);
 	}
 #endif
@@ -793,7 +794,7 @@ int fix_alignment(struct pt_regs *regs)
 	 * the exception of DCBZ which is handled as a special case here
 	 */
 	if (instr == DCBZ) {
-		WARN_EMULATE(dcbz);
+		WARN_EMULATED(dcbz);
 		return emulate_dcbz(regs, addr);
 	}
 	if (unlikely(nb == 0))
@@ -803,7 +804,7 @@ int fix_alignment(struct pt_regs *regs)
 	 * function
 	 */
 	if (flags & M) {
-		WARN_EMULATE(multiple);
+		WARN_EMULATED(multiple);
 		return emulate_multiple(regs, addr, reg, nb,
 					flags, instr, swiz);
 	}
@@ -824,7 +825,7 @@ int fix_alignment(struct pt_regs *regs)
 
 	/* Special case for 16-byte FP loads and stores */
 	if (nb == 16) {
-		WARN_EMULATE(fp_pair);
+		WARN_EMULATED(fp_pair);
 		return emulate_fp_pair(addr, reg, flags);
 	}
 
