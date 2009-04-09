@@ -46,6 +46,7 @@
 #define L1GPU_CONTEXT_ATTRIBUTE_FB_SETUP	0x600
 #define L1GPU_CONTEXT_ATTRIBUTE_FB_BLIT		0x601
 #define L1GPU_CONTEXT_ATTRIBUTE_FB_BLIT_SYNC	0x602
+#define L1GPU_CONTEXT_ATTRIBUTE_FB_CLOSE	0x603
 
 #define L1GPU_FB_BLIT_WAIT_FOR_COMPLETION	(1ULL << 32)
 
@@ -1150,7 +1151,7 @@ static int __devinit ps3fb_probe(struct ps3_system_bus_device *dev)
 
 	info = framebuffer_alloc(sizeof(struct ps3fb_par), &dev->core);
 	if (!info)
-		goto err_context_unmap;
+		goto err_context_fb_close;
 
 	par = info->par;
 	par->mode_id = ~ps3fb_mode;	/* != ps3fb_mode, to trigger change */
@@ -1215,6 +1216,10 @@ err_fb_dealloc:
 	fb_dealloc_cmap(&info->cmap);
 err_framebuffer_release:
 	framebuffer_release(info);
+err_context_fb_close:
+	lv1_gpu_context_attribute(ps3fb.context_handle,
+				  L1GPU_CONTEXT_ATTRIBUTE_FB_CLOSE, 0, 0, 0,
+				  0);
 err_context_unmap:
 	lv1_gpu_context_iomap(ps3fb.context_handle, GPU_IOIF, xdr_lpar,
 			      ps3fb_videomemory.size, IOPTE_M);
@@ -1236,7 +1241,6 @@ err:
 
 static int ps3fb_shutdown(struct ps3_system_bus_device *dev)
 {
-	int status;
 	struct fb_info *info = dev->core.driver_data;
 	u64 xdr_lpar = ps3_mm_phys_to_lpar(__pa(ps3fb_videomemory.address));
 
@@ -1261,24 +1265,13 @@ static int ps3fb_shutdown(struct ps3_system_bus_device *dev)
 		dev->core.driver_data = NULL;
 	}
 	iounmap((u8 __force __iomem *)ps3fb.dinfo);
-
-	status = lv1_gpu_context_iomap(ps3fb.context_handle, GPU_IOIF,
-				       xdr_lpar, ps3fb_videomemory.size,
-				       IOPTE_M);
-	if (status)
-		dev_dbg(&dev->core, "lv1_gpu_context_iomap failed: %d\n",
-			status);
-
-	status = lv1_gpu_context_free(ps3fb.context_handle);
-	if (status)
-		dev_dbg(&dev->core, "lv1_gpu_context_free failed: %d\n",
-			status);
-
-	status = lv1_gpu_memory_free(ps3fb.memory_handle);
-	if (status)
-		dev_dbg(&dev->core, "lv1_gpu_memory_free failed: %d\n",
-			status);
-
+	lv1_gpu_context_attribute(ps3fb.context_handle,
+				  L1GPU_CONTEXT_ATTRIBUTE_FB_CLOSE, 0, 0, 0,
+				  0);
+	lv1_gpu_context_iomap(ps3fb.context_handle, GPU_IOIF, xdr_lpar,
+			      ps3fb_videomemory.size, IOPTE_M);
+	lv1_gpu_context_free(ps3fb.context_handle);
+	lv1_gpu_memory_free(ps3fb.memory_handle);
 	ps3_close_hv_device(dev);
 	dev_dbg(&dev->core, " <- %s:%d\n", __func__, __LINE__);
 
