@@ -2758,7 +2758,7 @@ IDE SUBSYSTEM
 P:	Bartlomiej Zolnierkiewicz
 M:	bzolnier@gmail.com
 L:	linux-ide@vger.kernel.org
-T:	quilt kernel.org/pub/linux/kernel/people/bart/pata-2.6/
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/bart/ide-2.6.git
 S:	Maintained
 F:	Documentation/ide/
 F:	drivers/ide/
@@ -3991,8 +3991,8 @@ NETWORKING [GENERAL]
 P:	David S. Miller
 M:	davem@davemloft.net
 L:	netdev@vger.kernel.org
-W:	http://linux-net.osdl.org/
-T:	git kernel.org:/pub/scm/linux/kernel/git/davem/net-2.6.git
+W:	http://www.linuxfoundation.org/en/Net
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/davem/net-2.6.git
 S:	Maintained
 F:	net/
 F:	include/net/
@@ -4032,6 +4032,13 @@ S:	Maintained
 F:	net/wireless/
 F:	include/net/ieee80211*
 F:	include/net/wireless.h
+
+NETWORKING DRIVERS
+L:	netdev@vger.kernel.org
+W:	http://www.linuxfoundation.org/en/Net
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/davem/net-2.6.git
+S:	Odd Fixes
+F:	drivers/net/
 
 NETXEN (1/10) GbE SUPPORT
 P:	Dhananjay Phadke
