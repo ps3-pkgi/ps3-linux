@@ -37,21 +37,10 @@
 #include <asm/ps3av.h>
 #include <asm/ps3fb.h>
 #include <asm/ps3.h>
+#include <asm/ps3gpu.h>
 
 
 #define DEVICE_NAME		"ps3fb"
-
-#define L1GPU_CONTEXT_ATTRIBUTE_DISPLAY_SYNC	0x101
-#define L1GPU_CONTEXT_ATTRIBUTE_DISPLAY_FLIP	0x102
-#define L1GPU_CONTEXT_ATTRIBUTE_FB_SETUP	0x600
-#define L1GPU_CONTEXT_ATTRIBUTE_FB_BLIT		0x601
-#define L1GPU_CONTEXT_ATTRIBUTE_FB_BLIT_SYNC	0x602
-#define L1GPU_CONTEXT_ATTRIBUTE_FB_CLOSE	0x603
-
-#define L1GPU_FB_BLIT_WAIT_FOR_COMPLETION	(1ULL << 32)
-
-#define L1GPU_DISPLAY_SYNC_HSYNC		1
-#define L1GPU_DISPLAY_SYNC_VSYNC		2
 
 #define GPU_CMD_BUF_SIZE			(2 * 1024 * 1024)
 #define GPU_FB_START				(64 * 1024)
@@ -464,33 +453,27 @@ static void ps3fb_sync_image(struct device *dev, u64 frame_offset,
 	src_offset += GPU_FB_START;
 
 	mutex_lock(&ps3_gpu_mutex);
-	status = lv1_gpu_context_attribute(ps3fb.context_handle,
-					   L1GPU_CONTEXT_ATTRIBUTE_FB_BLIT,
-					   dst_offset, GPU_IOIF + src_offset,
-					   L1GPU_FB_BLIT_WAIT_FOR_COMPLETION |
-					   (width << 16) | height,
-					   line_length);
+	status = lv1_gpu_fb_blit(ps3fb.context_handle, dst_offset,
+				 GPU_IOIF + src_offset,
+				 L1GPU_FB_BLIT_WAIT_FOR_COMPLETION |
+				 (width << 16) | height,
+				 line_length);
 	mutex_unlock(&ps3_gpu_mutex);
 
 	if (status)
-		dev_err(dev,
-			"%s: lv1_gpu_context_attribute FB_BLIT failed: %d\n",
-			__func__, status);
+		dev_err(dev, "%s: lv1_gpu_fb_blit failed: %d\n", __func__,
+			status);
 #ifdef HEAD_A
-	status = lv1_gpu_context_attribute(ps3fb.context_handle,
-					   L1GPU_CONTEXT_ATTRIBUTE_DISPLAY_FLIP,
-					   0, frame_offset, 0, 0);
+	status = lv1_gpu_display_flip(ps3fb.context_handle, 0, frame_offset);
 	if (status)
-		dev_err(dev, "%s: lv1_gpu_context_attribute FLIP failed: %d\n",
-			__func__, status);
+		dev_err(dev, "%s: lv1_gpu_display_flip failed: %d\n", __func__,
+			status);
 #endif
 #ifdef HEAD_B
-	status = lv1_gpu_context_attribute(ps3fb.context_handle,
-					   L1GPU_CONTEXT_ATTRIBUTE_DISPLAY_FLIP,
-					   1, frame_offset, 0, 0);
+	status = lv1_gpu_display_flip(ps3fb.context_handle, 1, frame_offset);
 	if (status)
-		dev_err(dev, "%s: lv1_gpu_context_attribute FLIP failed: %d\n",
-			__func__, status);
+		dev_err(dev, "%s: lv1_gpu_display_flip failed: %d\n", __func__,
+			status);
 #endif
 }
 
@@ -1021,27 +1004,18 @@ static int __devinit ps3fb_probe(struct ps3_system_bus_device *dev)
 	init_waitqueue_head(&ps3fb.wait_vsync);
 
 #ifdef HEAD_A
-	status = lv1_gpu_context_attribute(0x0,
-					   L1GPU_CONTEXT_ATTRIBUTE_DISPLAY_SYNC,
-					   0, L1GPU_DISPLAY_SYNC_VSYNC, 0, 0);
+	status = lv1_gpu_display_sync(0x0, 0, L1GPU_DISPLAY_SYNC_VSYNC);
 	if (status) {
-		dev_err(&dev->core,
-			"%s: lv1_gpu_context_attribute DISPLAY_SYNC failed: "
-			"%d\n",
+		dev_err(&dev->core, "%s: lv1_gpu_display_sync failed: %d\n",
 			__func__, status);
 		retval = -ENODEV;
 		goto err_close_device;
 	}
 #endif
 #ifdef HEAD_B
-	status = lv1_gpu_context_attribute(0x0,
-					   L1GPU_CONTEXT_ATTRIBUTE_DISPLAY_SYNC,
-					   1, L1GPU_DISPLAY_SYNC_VSYNC, 0, 0);
-
+	status = lv1_gpu_display_sync(0x0, 1, L1GPU_DISPLAY_SYNC_VSYNC);
 	if (status) {
-		dev_err(&dev->core,
-			"%s: lv1_gpu_context_attribute DISPLAY_SYNC failed: "
-			"%d\n",
+		dev_err(&dev->core, "%s: lv1_gpu_display_sync failed: %d\n",
 			__func__, status);
 		retval = -ENODEV;
 		goto err_close_device;
@@ -1071,7 +1045,7 @@ static int __devinit ps3fb_probe(struct ps3_system_bus_device *dev)
 					  &lpar_reports, &lpar_reports_size);
 	if (status) {
 		dev_err(&dev->core,
-			"%s: lv1_gpu_context_attribute failed: %d\n", __func__,
+			"%s: lv1_gpu_context_allocate failed: %d\n", __func__,
 			status);
 		goto err_gpu_memory_free;
 	}
@@ -1137,13 +1111,10 @@ static int __devinit ps3fb_probe(struct ps3_system_bus_device *dev)
 		ps3fb_videomemory.address, GPU_IOIF, xdr_lpar,
 		ps3fb_videomemory.size);
 
-	status = lv1_gpu_context_attribute(ps3fb.context_handle,
-					   L1GPU_CONTEXT_ATTRIBUTE_FB_SETUP,
-					   xdr_lpar, GPU_CMD_BUF_SIZE,
-					   GPU_IOIF, 0);
+	status = lv1_gpu_fb_setup(ps3fb.context_handle, xdr_lpar,
+				  GPU_CMD_BUF_SIZE, GPU_IOIF);
 	if (status) {
-		dev_err(&dev->core,
-			"%s: lv1_gpu_context_attribute FB_SETUP failed: %d\n",
+		dev_err(&dev->core, "%s: lv1_gpu_fb_setup failed: %d\n",
 			__func__, status);
 		retval = -ENXIO;
 		goto err_context_unmap;
@@ -1217,9 +1188,7 @@ err_fb_dealloc:
 err_framebuffer_release:
 	framebuffer_release(info);
 err_context_fb_close:
-	lv1_gpu_context_attribute(ps3fb.context_handle,
-				  L1GPU_CONTEXT_ATTRIBUTE_FB_CLOSE, 0, 0, 0,
-				  0);
+	lv1_gpu_fb_close(ps3fb.context_handle);
 err_context_unmap:
 	lv1_gpu_context_iomap(ps3fb.context_handle, GPU_IOIF, xdr_lpar,
 			      ps3fb_videomemory.size, IOPTE_M);
@@ -1262,12 +1231,10 @@ static int ps3fb_shutdown(struct ps3_system_bus_device *dev)
 		unregister_framebuffer(info);
 		fb_dealloc_cmap(&info->cmap);
 		framebuffer_release(info);
-		dev->core.driver_data = NULL;
+		info = dev->core.driver_data = NULL;
 	}
 	iounmap((u8 __force __iomem *)ps3fb.dinfo);
-	lv1_gpu_context_attribute(ps3fb.context_handle,
-				  L1GPU_CONTEXT_ATTRIBUTE_FB_CLOSE, 0, 0, 0,
-				  0);
+	lv1_gpu_fb_close(ps3fb.context_handle);
 	lv1_gpu_context_iomap(ps3fb.context_handle, GPU_IOIF, xdr_lpar,
 			      ps3fb_videomemory.size, IOPTE_M);
 	lv1_gpu_context_free(ps3fb.context_handle);

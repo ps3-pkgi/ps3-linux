@@ -17,6 +17,7 @@
 #include <asm/iommu.h>
 #include <asm/lv1call.h>
 #include <asm/ps3.h>
+#include <asm/ps3gpu.h>
 
 
 #define DEVICE_NAME		"ps3vram"
@@ -46,8 +47,6 @@
 #define NV_MEMORY_TO_MEMORY_FORMAT_OFFSET_IN	0x0000030c
 #define NV_MEMORY_TO_MEMORY_FORMAT_NOTIFY	0x00000104
 
-#define L1GPU_CONTEXT_ATTRIBUTE_FB_BLIT 0x601
-
 #define CACHE_PAGE_PRESENT 1
 #define CACHE_PAGE_DIRTY   2
 
@@ -73,8 +72,7 @@ struct ps3vram_priv {
 	u64 memory_handle;
 	u64 context_handle;
 	u32 *ctrl;
-	u32 *reports;
-	u8 __iomem *ddr_base;
+	void *reports;
 	u8 *xdr_buf;
 
 	u32 *fifo_base;
@@ -104,9 +102,9 @@ static char *size = "256M";
 module_param(size, charp, 0);
 MODULE_PARM_DESC(size, "memory size");
 
-static u32 *ps3vram_get_notifier(u32 *reports, int notifier)
+static u32 *ps3vram_get_notifier(void *reports, int notifier)
 {
-	return (void *)reports + DMA_NOTIFIER_OFFSET_BASE +
+	return reports + DMA_NOTIFIER_OFFSET_BASE +
 	       DMA_NOTIFIER_SIZE * notifier;
 }
 
@@ -184,13 +182,10 @@ static void ps3vram_rewind_ring(struct ps3_system_bus_device *dev)
 	priv->ctrl[CTRL_PUT] = FIFO_BASE + FIFO_OFFSET;
 
 	/* asking the HV for a blit will kick the FIFO */
-	status = lv1_gpu_context_attribute(priv->context_handle,
-					   L1GPU_CONTEXT_ATTRIBUTE_FB_BLIT, 0,
-					   0, 0, 0);
+	status = lv1_gpu_fb_blit(priv->context_handle, 0, 0, 0, 0);
 	if (status)
-		dev_err(&dev->core,
-			"%s: lv1_gpu_context_attribute failed %d\n", __func__,
-			status);
+		dev_err(&dev->core, "%s: lv1_gpu_fb_blit failed %d\n",
+			__func__, status);
 
 	priv->fifo_ptr = priv->fifo_base;
 }
@@ -206,13 +201,10 @@ static void ps3vram_fire_ring(struct ps3_system_bus_device *dev)
 			       (priv->fifo_ptr - priv->fifo_base) * sizeof(u32);
 
 	/* asking the HV for a blit will kick the FIFO */
-	status = lv1_gpu_context_attribute(priv->context_handle,
-					   L1GPU_CONTEXT_ATTRIBUTE_FB_BLIT, 0,
-					   0, 0, 0);
+	status = lv1_gpu_fb_blit(priv->context_handle, 0, 0, 0, 0);
 	if (status)
-		dev_err(&dev->core,
-			"%s: lv1_gpu_context_attribute failed %d\n", __func__,
-			status);
+		dev_err(&dev->core, "%s: lv1_gpu_fb_blit failed %d\n",
+			__func__, status);
 
 	if ((priv->fifo_ptr - priv->fifo_base) * sizeof(u32) >
 	    FIFO_SIZE - 1024) {
@@ -629,8 +621,8 @@ static int __devinit ps3vram_probe(struct ps3_system_bus_device *dev)
 	int error, status;
 	struct request_queue *queue;
 	struct gendisk *gendisk;
-	u64 ddr_lpar, ctrl_lpar, info_lpar, reports_lpar, ddr_size,
-	    reports_size;
+	u64 ddr_size, ddr_lpar, ctrl_lpar, info_lpar, reports_lpar,
+	    reports_size, xdr_lpar;
 	char *rest;
 
 	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
@@ -701,9 +693,9 @@ static int __devinit ps3vram_probe(struct ps3_system_bus_device *dev)
 	}
 
 	/* Map XDR buffer to RSX */
+	xdr_lpar = ps3_mm_phys_to_lpar(__pa(priv->xdr_buf));
 	status = lv1_gpu_context_iomap(priv->context_handle, XDR_IOIF,
-				       ps3_mm_phys_to_lpar(__pa(priv->xdr_buf)),
-				       XDR_BUF_SIZE,
+				       xdr_lpar, XDR_BUF_SIZE,
 				       IOPTE_PP_W | IOPTE_PP_R | IOPTE_M);
 	if (status) {
 		dev_err(&dev->core, "lv1_gpu_context_iomap failed %d\n",
@@ -712,19 +704,11 @@ static int __devinit ps3vram_probe(struct ps3_system_bus_device *dev)
 		goto out_free_context;
 	}
 
-	priv->ddr_base = ioremap_flags(ddr_lpar, ddr_size, _PAGE_NO_CACHE);
-
-	if (!priv->ddr_base) {
-		dev_err(&dev->core, "ioremap DDR failed\n");
-		error = -ENOMEM;
-		goto out_unmap_context;
-	}
-
 	priv->ctrl = ioremap(ctrl_lpar, 64 * 1024);
 	if (!priv->ctrl) {
 		dev_err(&dev->core, "ioremap CTRL failed\n");
 		error = -ENOMEM;
-		goto out_unmap_vram;
+		goto out_unmap_context;
 	}
 
 	priv->reports = ioremap(reports_lpar, reports_size);
@@ -801,11 +785,8 @@ out_unmap_reports:
 	iounmap(priv->reports);
 out_unmap_ctrl:
 	iounmap(priv->ctrl);
-out_unmap_vram:
-	iounmap(priv->ddr_base);
 out_unmap_context:
-	lv1_gpu_context_iomap(priv->context_handle, XDR_IOIF,
-			      ps3_mm_phys_to_lpar(__pa(priv->xdr_buf)),
+	lv1_gpu_context_iomap(priv->context_handle, XDR_IOIF, xdr_lpar,
 			      XDR_BUF_SIZE, IOPTE_M);
 out_free_context:
 	lv1_gpu_context_free(priv->context_handle);
@@ -833,7 +814,6 @@ static int ps3vram_remove(struct ps3_system_bus_device *dev)
 	ps3vram_cache_cleanup(dev);
 	iounmap(priv->reports);
 	iounmap(priv->ctrl);
-	iounmap(priv->ddr_base);
 	lv1_gpu_context_iomap(priv->context_handle, XDR_IOIF,
 			      ps3_mm_phys_to_lpar(__pa(priv->xdr_buf)),
 			      XDR_BUF_SIZE, IOPTE_M);
