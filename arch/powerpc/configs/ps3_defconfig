@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
-# Linux kernel version: 2.6.30-rc4
-# Fri May  8 18:34:50 2009
+# Linux kernel version: 2.6.30-rc5
+# Fri May 15 09:53:04 2009
 #
 CONFIG_PPC64=y
 
@@ -92,8 +92,7 @@ CONFIG_CLASSIC_RCU=y
 CONFIG_LOG_BUF_SHIFT=17
 # CONFIG_GROUP_SCHED is not set
 # CONFIG_CGROUPS is not set
-CONFIG_SYSFS_DEPRECATED=y
-CONFIG_SYSFS_DEPRECATED_V2=y
+# CONFIG_SYSFS_DEPRECATED_V2 is not set
 # CONFIG_RELAY is not set
 CONFIG_NAMESPACES=y
 # CONFIG_UTS_NS is not set
