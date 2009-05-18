@@ -1099,7 +1099,8 @@ static int __devinit ps3fb_probe(struct ps3_system_bus_device *dev)
 
 	status = lv1_gpu_context_iomap(ps3fb.context_handle, GPU_IOIF,
 				       xdr_lpar, ps3fb_videomemory.size,
-				       IOPTE_PP_W | IOPTE_PP_R | IOPTE_M);
+				       CBE_IOPTE_PP_W | CBE_IOPTE_PP_R |
+				       CBE_IOPTE_M);
 	if (status) {
 		dev_err(&dev->core, "%s: lv1_gpu_context_iomap failed: %d\n",
 			__func__, status);
@@ -1191,7 +1192,7 @@ err_context_fb_close:
 	lv1_gpu_fb_close(ps3fb.context_handle);
 err_context_unmap:
 	lv1_gpu_context_iomap(ps3fb.context_handle, GPU_IOIF, xdr_lpar,
-			      ps3fb_videomemory.size, IOPTE_M);
+			      ps3fb_videomemory.size, CBE_IOPTE_M);
 err_free_irq:
 	free_irq(ps3fb.irq_no, &dev->core);
 err_destroy_plug:
@@ -1236,7 +1237,7 @@ static int ps3fb_shutdown(struct ps3_system_bus_device *dev)
 	iounmap((u8 __force __iomem *)ps3fb.dinfo);
 	lv1_gpu_fb_close(ps3fb.context_handle);
 	lv1_gpu_context_iomap(ps3fb.context_handle, GPU_IOIF, xdr_lpar,
-			      ps3fb_videomemory.size, IOPTE_M);
+			      ps3fb_videomemory.size, CBE_IOPTE_M);
 	lv1_gpu_context_free(ps3fb.context_handle);
 	lv1_gpu_memory_free(ps3fb.memory_handle);
 	ps3_close_hv_device(dev);
