@@ -213,7 +213,7 @@ static int ps3_ehci_probe(struct ps3_system_bus_device *dev)
 	dev_dbg(&dev->core, "%s:%d: virq            %lu\n", __func__, __LINE__,
 		(unsigned long)virq);
 
-	ps3_system_bus_set_driver_data(dev, hcd);
+	ps3_system_bus_set_drvdata(dev, hcd);
 
 	result = usb_add_hcd(hcd, virq, IRQF_DISABLED);
 
@@ -246,8 +246,7 @@ fail_start:
 static int ps3_ehci_remove(struct ps3_system_bus_device *dev)
 {
 	unsigned int tmp;
-	struct usb_hcd *hcd =
-		(struct usb_hcd *)ps3_system_bus_get_driver_data(dev);
+	struct usb_hcd *hcd = ps3_system_bus_get_drvdata(dev);
 
 	BUG_ON(!hcd);
 
@@ -267,7 +266,7 @@ static int ps3_ehci_remove(struct ps3_system_bus_device *dev)
 	ehci_shutdown(hcd);
 	usb_remove_hcd(hcd);
 
-	ps3_system_bus_set_driver_data(dev, NULL);
+	ps3_system_bus_set_drvdata(dev, NULL);
 
 	BUG_ON(!hcd->regs);
 	iounmap(hcd->regs);
