@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
-# Linux kernel version: 2.6.30-rc5
-# Fri May 15 09:53:04 2009
+# Linux kernel version: 2.6.30-rc8
+# Mon Jun  8 11:54:27 2009
 #
 CONFIG_PPC64=y
 
@@ -1409,6 +1409,7 @@ CONFIG_HAVE_ARCH_KGDB=y
 CONFIG_PRINT_STACK_DEPTH=64
 CONFIG_DEBUG_STACKOVERFLOW=y
 # CONFIG_DEBUG_STACK_USAGE is not set
+# CONFIG_PPC_EMULATED_STATS is not set
 # CONFIG_CODE_PATCHING_SELFTEST is not set
 # CONFIG_FTR_FIXUP_SELFTEST is not set
 # CONFIG_MSI_BITMAP_SELFTEST is not set
