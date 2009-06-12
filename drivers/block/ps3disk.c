@@ -213,16 +213,8 @@ static void ps3disk_do_request(struct ps3_storage_device *dev,
 
 static void ps3disk_request(struct request_queue *q)
 {
-	struct ps3_storage_device *dev;
-	struct ps3disk_private *priv;
-
-	BUG_ON(!q);
-	BUG_ON(!q->queuedata);
-
-	dev = q->queuedata;
-	BUG_ON(!ps3_system_bus_get_drvdata(&dev->sbd));
-
-	priv = ps3_system_bus_get_drvdata(&dev->sbd);
+	struct ps3_storage_device *dev = q->queuedata;
+	struct ps3disk_private *priv = ps3_system_bus_get_drvdata(&dev->sbd);
 
 	if (priv->req) {
 		dev_dbg(&dev->sbd.core, "%s:%u busy\n", __func__, __LINE__);
@@ -241,9 +233,6 @@ static irqreturn_t ps3disk_interrupt(int irq, void *data)
 	u64 tag, status;
 	unsigned long num_sectors;
 	const char *op;
-
-	BUG_ON(!dev);
-	BUG_ON(!ps3_system_bus_get_drvdata(&dev->sbd));
 
 	res = lv1_storage_get_async_status(dev->sbd.dev_id, &tag, &status);
 
@@ -555,9 +544,6 @@ static int ps3disk_remove(struct ps3_system_bus_device *_dev)
 	__clear_bit(MINOR(disk_devt(priv->gendisk)) / PS3DISK_MINORS,
 		    &ps3disk_mask);
 	mutex_unlock(&ps3disk_mask_mutex);
-
-	BUG_ON(priv->req || !elv_queue_empty(priv->queue));
-
 	del_gendisk(priv->gendisk);
 	blk_cleanup_queue(priv->queue);
 	put_disk(priv->gendisk);
@@ -565,7 +551,6 @@ static int ps3disk_remove(struct ps3_system_bus_device *_dev)
 	ps3disk_sync_cache(dev);
 	ps3stor_teardown(dev);
 	kfree(dev->bounce_buf);
-	dev->bounce_buf = NULL;
 	kfree(priv);
 	ps3_system_bus_set_drvdata(_dev, NULL);
 	return 0;
