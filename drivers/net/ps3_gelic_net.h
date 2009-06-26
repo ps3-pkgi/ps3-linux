@@ -284,7 +284,6 @@ struct gelic_card {
 
 	struct gelic_descr_chain tx_chain;
 	struct gelic_descr_chain rx_chain;
-	int rx_dma_restart_required;
 	int rx_csum;
 	/*
 	 * tx_lock guards tx descriptor list and
