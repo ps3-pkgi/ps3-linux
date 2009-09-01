@@ -23,6 +23,15 @@
 #include <asm/lv1call.h>
 #include <asm/ps3stor.h>
 
+/*
+ * A workaround for CECHH and later models when there are no
+ * OtherOS disk regions.  Delay disk close until flash is closed.
+ */
+
+static struct cechh_workaround {
+	struct ps3_storage_device *disk;
+	struct ps3_storage_device *flash;
+} cechh_workaround;
 
 static int ps3stor_probe_access(struct ps3_storage_device *dev)
 {
@@ -73,6 +82,9 @@ static int ps3stor_probe_access(struct ps3_storage_device *dev)
 		 "First accessible region has index %u start %llu size %llu\n",
 		 dev->region_idx, dev->regions[dev->region_idx].start,
 		 dev->regions[dev->region_idx].size);
+
+	if (dev->sbd.match_id == PS3_MATCH_ID_STOR_FLASH)
+		cechh_workaround.flash = dev;
 
 	return 0;
 }
@@ -166,7 +178,11 @@ fail_free_irq:
 fail_sb_event_receive_port_destroy:
 	ps3_sb_event_receive_port_destroy(&dev->sbd, dev->irq);
 fail_close_device:
-	ps3_close_hv_device(&dev->sbd);
+	if (dev->sbd.match_id == PS3_MATCH_ID_STOR_DISK
+		&& cechh_workaround.flash)
+		cechh_workaround.disk = dev;
+	else
+		ps3_close_hv_device(&dev->sbd);
 fail:
 	return error;
 }
@@ -198,6 +214,10 @@ void ps3stor_teardown(struct ps3_storage_device *dev)
 		dev_err(&dev->sbd.core,
 			"%s:%u: ps3_close_hv_device failed %d\n", __func__,
 			__LINE__, error);
+
+	if (dev->sbd.match_id == PS3_MATCH_ID_STOR_FLASH
+		&& cechh_workaround.disk)
+		ps3_close_hv_device(&cechh_workaround.disk->sbd);
 }
 EXPORT_SYMBOL_GPL(ps3stor_teardown);
 
