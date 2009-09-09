@@ -24,14 +24,64 @@
 #include <asm/ps3stor.h>
 
 /*
- * A workaround for CECHH and later models when there are no
- * OtherOS disk regions.  Delay disk close until flash is closed.
+ * A workaround for flash memory I/O errors when the internal hard disk
+ * has not been formatted for OtherOS use.  Delay disk close until flash
+ * memory is closed.
  */
 
-static struct cechh_workaround {
-	struct ps3_storage_device *disk;
-	struct ps3_storage_device *flash;
-} cechh_workaround;
+static struct ps3_flash_workaround {
+	int flash_open;
+	int disk_open;
+	struct ps3_system_bus_device *disk_sbd;
+} ps3_flash_workaround;
+
+static int ps3stor_open_hv_device(struct ps3_system_bus_device *sbd)
+{
+	int error = ps3_open_hv_device(sbd);
+
+	if (error)
+		return error;
+
+	if (sbd->match_id == PS3_MATCH_ID_STOR_FLASH)
+		ps3_flash_workaround.flash_open = 1;
+
+	if (sbd->match_id == PS3_MATCH_ID_STOR_DISK)
+		ps3_flash_workaround.disk_open = 1;
+
+	return 0;
+}
+
+static int ps3stor_close_hv_device(struct ps3_system_bus_device *sbd)
+{
+	int error;
+
+	if (sbd->match_id == PS3_MATCH_ID_STOR_DISK
+		&& ps3_flash_workaround.disk_open
+		&& ps3_flash_workaround.flash_open) {
+		ps3_flash_workaround.disk_sbd = sbd;
+		return 0;
+	}
+
+	error = ps3_close_hv_device(sbd);
+
+	if (error)
+		return error;
+
+	if (sbd->match_id == PS3_MATCH_ID_STOR_DISK)
+		ps3_flash_workaround.disk_open = 0;
+
+	if (sbd->match_id == PS3_MATCH_ID_STOR_FLASH) {
+		ps3_flash_workaround.flash_open = 0;
+
+		if (ps3_flash_workaround.disk_sbd) {
+			ps3_close_hv_device(ps3_flash_workaround.disk_sbd);
+			ps3_flash_workaround.disk_open = 0;
+			ps3_flash_workaround.disk_sbd = NULL;
+		}
+	}
+
+	return 0;
+}
 
 static int ps3stor_probe_access(struct ps3_storage_device *dev)
 {
@@ -83,9 +133,6 @@ static int ps3stor_probe_access(struct ps3_storage_device *dev)
 		 dev->region_idx, dev->regions[dev->region_idx].start,
 		 dev->regions[dev->region_idx].size);
 
-	if (dev->sbd.match_id == PS3_MATCH_ID_STOR_FLASH)
-		cechh_workaround.flash = dev;
-
 	return 0;
 }
 
@@ -102,7 +149,7 @@ int ps3stor_setup(struct ps3_storage_device *dev, irq_handler_t handler)
 	int error, res, alignment;
 	enum ps3_dma_page_size page_size;
 
-	error = ps3_open_hv_device(&dev->sbd);
+	error = ps3stor_open_hv_device(&dev->sbd);
 	if (error) {
 		dev_err(&dev->sbd.core,
 			"%s:%u: ps3_open_hv_device failed %d\n", __func__,
@@ -178,11 +225,7 @@ fail_free_irq:
 fail_sb_event_receive_port_destroy:
 	ps3_sb_event_receive_port_destroy(&dev->sbd, dev->irq);
 fail_close_device:
-	if (dev->sbd.match_id == PS3_MATCH_ID_STOR_DISK
-		&& cechh_workaround.flash)
-		cechh_workaround.disk = dev;
-	else
-		ps3_close_hv_device(&dev->sbd);
+	ps3stor_close_hv_device(&dev->sbd);
 fail:
 	return error;
 }
@@ -209,15 +252,11 @@ void ps3stor_teardown(struct ps3_storage_device *dev)
 			"%s:%u: destroy event receive port failed %d\n",
 			__func__, __LINE__, error);
 
-	error = ps3_close_hv_device(&dev->sbd);
+	error = ps3stor_close_hv_device(&dev->sbd);
 	if (error)
 		dev_err(&dev->sbd.core,
 			"%s:%u: ps3_close_hv_device failed %d\n", __func__,
 			__LINE__, error);
-
-	if (dev->sbd.match_id == PS3_MATCH_ID_STOR_FLASH
-		&& cechh_workaround.disk)
-		ps3_close_hv_device(&cechh_workaround.disk->sbd);
 }
 EXPORT_SYMBOL_GPL(ps3stor_teardown);
 
