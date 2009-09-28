@@ -2021,6 +2021,12 @@ static int iwl4965_tx_status_reply_tx(struct iwl_priv *priv,
 					   agg->frame_count, txq_id, idx);
 
 			hdr = iwl_tx_queue_get_hdr(priv, txq_id, idx);
+			if (!hdr) {
+				IWL_ERR(priv,
+					"BUG_ON idx doesn't point to valid skb"
+					" idx=%d, txq_id=%d\n", idx, txq_id);
+				return -1;
+			}
 
 			sc = le16_to_cpu(hdr->seq_ctrl);
 			if (idx != (SEQ_TO_SN(sc) & 0xff)) {
@@ -2346,6 +2352,7 @@ struct iwl_cfg iwl4965_agn_cfg = {
 	.mod_params = &iwl4965_mod_params,
 	.use_isr_legacy = true,
 	.ht_greenfield_support = false,
+	.broken_powersave = true,
 };
 
 /* Module firmware */
