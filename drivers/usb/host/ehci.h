@@ -130,6 +130,9 @@ struct ehci_hcd {			/* one per controller */
 	unsigned		need_io_watchdog:1;
 	unsigned		broken_periodic:1;
 
+	/* perform post CMD_RESET and CMD_LRESET work-arounds */
+	void	(*post_reset) (struct ehci_hcd *ehci);
+
 	/* required for usb32 quirk */
 	#define OHCI_CTRL_HCFS          (3 << 6)
 	#define OHCI_USB_OPER           (2 << 6)

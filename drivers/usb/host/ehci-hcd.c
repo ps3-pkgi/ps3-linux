@@ -254,6 +254,9 @@ static int ehci_reset (struct ehci_hcd *ehci)
 	retval = handshake (ehci, &ehci->regs->command,
 			    CMD_RESET, 0, 250 * 1000);
 
+	if (ehci->post_reset)
+		ehci->post_reset(ehci);
+
 	if (ehci->has_hostpc) {
 		ehci_writel(ehci, USBMODE_EX_HC | USBMODE_EX_VBPS,
 			(u32 __iomem *)(((u8 *)ehci->regs) + USBMODE_EX));
@@ -658,6 +661,9 @@ static int ehci_run (struct usb_hcd *hcd)
 	ehci->command |= CMD_RUN;
 	ehci_writel(ehci, ehci->command, &ehci->regs->command);
 	dbg_cmd (ehci, "init", ehci->command);
+
+	if (ehci->post_reset)
+		ehci->post_reset(ehci);
 
 	/*
 	 * Start, enabling full USB 2.0 functionality ... usb 1.1 devices
