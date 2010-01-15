@@ -40,6 +40,31 @@
 
 /*-------------------------------------------------------------------------*/
 
+static unsigned int qh_mpl(u32 cpu_info1)
+{
+	return (unsigned int)((cpu_info1 >> 16) & 0x7ff);
+}
+
+static unsigned int qh_to_mpl(struct ehci_hcd *ehci, const struct ehci_qh *qh)
+{
+	u32 cpu_info1 = hc32_to_cpup(ehci, &qh->hw->hw_info1);
+
+	return qh_mpl(cpu_info1);
+}
+
+static unsigned int qtd_offset(u32 cpu_buf_0)
+{
+	return (unsigned int)(cpu_buf_0 & 0xfff);
+}
+
+static unsigned int qtd_to_offset(struct ehci_hcd *ehci,
+	const struct ehci_qtd *qtd)
+{
+	u32 cpu_buf_0 = hc32_to_cpup(ehci, &qtd->hw_buf[0]);
+
+	return qtd_offset(cpu_buf_0);
+}
+
 /* fill a qtd, returning how much of the buffer we were able to queue up */
 
 static int
@@ -51,6 +76,30 @@ qtd_fill(struct ehci_hcd *ehci, struct ehci_qtd *qtd, dma_addr_t buf,
 
 	/* one buffer entry per 4K ... first might be short or unaligned */
 	qtd->hw_buf[0] = cpu_to_hc32(ehci, (u32)addr);
+
+	if (qtd->urb->dev->speed == USB_SPEED_HIGH
+		&& qtd_to_offset(ehci, qtd)) {
+		if (qtd_to_offset(ehci, qtd) + len > 4096) {
+			ehci_warn(ehci,
+				"%s:%d: offset: %4.4xh (%d), len: %4.4xh (%d), end: %4.4xh (%d) **\n",
+				__func__, __LINE__,
+				qtd_to_offset(ehci, qtd), qtd_to_offset(ehci, qtd),
+				(unsigned int)len, (unsigned int)len,
+				qtd_to_offset(ehci, qtd) + (unsigned int)len,
+				qtd_to_offset(ehci, qtd) + (unsigned int)len);
+			//dump_stack();
+			BUG();
+		} else if (0) {
+			ehci_warn(ehci,
+				"%s:%d: offset: %4.4xh (%d), len: %4.4xh (%d), end: %4.4xh (%d)\n",
+				__func__, __LINE__,
+				qtd_to_offset(ehci, qtd), qtd_to_offset(ehci, qtd),
+				(unsigned int)len, (unsigned int)len,
+				qtd_to_offset(ehci, qtd) + (unsigned int)len,
+				qtd_to_offset(ehci, qtd) + (unsigned int)len);
+		}
+	}
+
 	qtd->hw_buf_hi[0] = cpu_to_hc32(ehci, (u32)(addr >> 32));
 	count = 0x1000 - (buf & 0x0fff);	/* rest of that page */
 	if (likely (len < count))		/* ... iff needed */
@@ -919,11 +968,13 @@ qh_make (
 	case USB_SPEED_HIGH:		/* no TT involved */
 		info1 |= (2 << 12);	/* EPS "high" */
 		if (type == PIPE_CONTROL) {
+			ehci_info(ehci, "%s:%d: PIPE_CONTROL\n", __func__, __LINE__);
 			info1 |= (EHCI_TUNE_RL_HS << 28);
 			info1 |= 64 << 16;	/* usb2 fixed maxpacket */
 			info1 |= 1 << 14;	/* toggle from qtd */
 			info2 |= (EHCI_TUNE_MULT_HS << 30);
 		} else if (type == PIPE_BULK) {
+			ehci_info(ehci, "%s:%d: PIPE_BULK\n", __func__, __LINE__);
 			info1 |= (EHCI_TUNE_RL_HS << 28);
 			/* The USB spec says that high speed bulk endpoints
 			 * always use 512 byte maxpacket.  But some device
@@ -934,9 +985,22 @@ qh_make (
 			info1 |= max_packet(maxp) << 16;
 			info2 |= (EHCI_TUNE_MULT_HS << 30);
 		} else {		/* PIPE_INTERRUPT */
+			ehci_info(ehci, "%s:%d: PIPE_INTERRUPT\n", __func__, __LINE__);
 			info1 |= max_packet (maxp) << 16;
 			info2 |= hb_mult (maxp) << 30;
 		}
+
+		if (!is_power_of_2(qh_mpl(info1)))
+			ehci_warn(ehci,
+				"%s:%d: max packet: %8.8xh -> %4.4xh (%d) *align\n",
+				__func__, __LINE__, (unsigned int)info1,
+				qh_mpl(info1), qh_mpl(info1));
+		if (qh_mpl(info1) > 0xc00)
+			ehci_info(ehci,
+				"%s:%d: max packet: %8.8xh -> %4.4xh (%d) *long\n",
+				__func__, __LINE__, (unsigned int)info1,
+				qh_mpl(info1), qh_mpl(info1));
+
 		break;
 	default:
 		dbg ("bogus dev %p speed %d", urb->dev, urb->dev->speed);
@@ -1024,12 +1088,14 @@ static struct ehci_qh *qh_append_tds (
 {
 	struct ehci_qh		*qh = NULL;
 	__hc32			qh_addr_mask = cpu_to_hc32(ehci, 0x7f);
+	int did_make = 0;
 
 	qh = (struct ehci_qh *) *ptr;
 	if (unlikely (qh == NULL)) {
 		/* can't sleep here, we have ehci->lock... */
 		qh = qh_make (ehci, urb, GFP_ATOMIC);
 		*ptr = qh;
+		did_make = 1;
 	}
 	if (likely (qh != NULL)) {
 		struct ehci_qtd	*qtd;
@@ -1046,6 +1112,16 @@ static struct ehci_qh *qh_append_tds (
                         /* usb_reset_device() briefly reverts to address 0 */
                         if (usb_pipedevice (urb->pipe) == 0)
 				qh->hw->hw_info1 &= ~qh_addr_mask;
+
+			if (urb->dev->speed == USB_SPEED_HIGH
+				&& !did_make
+				&& !is_power_of_2(qh_to_mpl(ehci, qh))) {
+				ehci_info(ehci, "%s:%d: %8.8xh: %4.4xh (%d) **\n",
+					__func__, __LINE__,
+					(unsigned int)qh->hw->hw_info1,
+					qh_to_mpl(ehci, qh), qh_to_mpl(ehci, qh));
+					BUG();
+			}
 		}
 
 		/* just one way to queue requests: swap with the dummy qtd.

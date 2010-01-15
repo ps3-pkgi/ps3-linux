@@ -21,6 +21,32 @@
 
 /*-------------------------------------------------------------------------*/
 
+static unsigned int sitd_offset(u32 cpu_buf_0)
+{
+	return (unsigned int)(cpu_buf_0 & 0xfff);
+}
+
+static unsigned int sitd_to_offset(struct ehci_hcd *ehci,
+	const struct ehci_sitd *sitd)
+{
+	u32 cpu_buf_0 = hc32_to_cpup(ehci, &sitd->hw_buf[0]);
+
+	return sitd_offset(cpu_buf_0);
+}
+
+static unsigned int itd_offset(u32 cpu_trans)
+{
+	return (unsigned int)(cpu_trans & 0x7ff);
+}
+
+static unsigned int itd_to_offset(struct ehci_hcd *ehci,
+	const struct ehci_itd *itd, unsigned int slot)
+{
+	u32 cpu_trans = hc32_to_cpup(ehci, &itd->hw_transaction[slot]);
+
+	return sitd_offset(cpu_trans);
+}
+
 /*
  * EHCI scheduled transaction support:  interrupt, iso, split iso
  * These are called "periodic" transactions in the EHCI spec.
@@ -1540,6 +1566,8 @@ itd_patch(
 	struct ehci_iso_packet	*uf = &iso_sched->packet [index];
 	unsigned		pg = itd->pg;
 
+	ehci_info(ehci, "%s:%d\n", __func__, __LINE__);
+
 	// BUG_ON (pg == 6 && uf->cross);
 
 	uframe &= 0x07;
@@ -1547,6 +1575,16 @@ itd_patch(
 
 	itd->hw_transaction[uframe] = uf->transaction;
 	itd->hw_transaction[uframe] |= cpu_to_hc32(ehci, pg << 12);
+
+	if (itd_to_offset(ehci, itd, uframe) > 0x400) {
+		ehci_warn(ehci,
+			"%s:%d: itd_offset: %4.4xh (%d) **\n",
+			__func__, __LINE__,
+			itd_to_offset(ehci, itd, uframe),
+			itd_to_offset(ehci, itd, uframe));
+		BUG();
+	}
+
 	itd->hw_bufp[pg] |= cpu_to_hc32(ehci, uf->bufp & ~(u32)0);
 	itd->hw_bufp_hi[pg] |= cpu_to_hc32(ehci, (u32)(uf->bufp >> 32));
 
@@ -1557,6 +1595,7 @@ itd_patch(
 		itd->pg = ++pg;
 		itd->hw_bufp[pg] |= cpu_to_hc32(ehci, bufp & ~(u32)0);
 		itd->hw_bufp_hi[pg] |= cpu_to_hc32(ehci, (u32)(bufp >> 32));
+		BUG_ON("itd cross");
 	}
 }
 
@@ -1963,11 +2002,27 @@ sitd_patch(
 
 	bufp = uf->bufp;
 	sitd->hw_buf[0] = cpu_to_hc32(ehci, bufp);
+
+	if (sitd_offset(bufp) > 0xC00) {
+		ehci_warn(ehci,
+			"%s:%d: sitd_offset: %8.8xh: %4.4xh (%d) **\n",
+			__func__, __LINE__,
+			(unsigned int)bufp,
+			sitd_offset(bufp), sitd_offset(bufp));
+		BUG();
+	}
 	sitd->hw_buf_hi[0] = cpu_to_hc32(ehci, bufp >> 32);
 
 	sitd->hw_buf[1] = cpu_to_hc32(ehci, uf->buf1);
-	if (uf->cross)
+	if (uf->cross) {
+		ehci_warn(ehci,
+			"%s:%d: sitd_offset: %8.8xh: %4.4xh (%d) **\n",
+			__func__, __LINE__,
+			(unsigned int)bufp,
+			sitd_offset(bufp), sitd_offset(bufp));
+		BUG_ON("sitd uf->cross");
 		bufp += 4096;
+	}
 	sitd->hw_buf_hi[1] = cpu_to_hc32(ehci, bufp >> 32);
 	sitd->index = index;
 }
