@@ -45,9 +45,10 @@ static unsigned int qh_mpl(u32 cpu_info1)
 	return (unsigned int)((cpu_info1 >> 16) & 0x7ff);
 }
 
-static unsigned int qh_to_mpl(struct ehci_hcd *ehci, const struct ehci_qh *qh)
+static unsigned int qh_to_mpl(struct ehci_hcd *ehci,
+	const struct ehci_qh_hw *qh)
 {
-	u32 cpu_info1 = hc32_to_cpup(ehci, &qh->hw->hw_info1);
+	u32 cpu_info1 = hc32_to_cpup(ehci, &qh->hw_info1);
 
 	return qh_mpl(cpu_info1);
 }
@@ -1115,11 +1116,11 @@ static struct ehci_qh *qh_append_tds (
 
 			if (urb->dev->speed == USB_SPEED_HIGH
 				&& !did_make
-				&& !is_power_of_2(qh_to_mpl(ehci, qh))) {
+				&& !is_power_of_2(qh_to_mpl(ehci, qh->hw))) {
 				ehci_info(ehci, "%s:%d: %8.8xh: %4.4xh (%d) **\n",
 					__func__, __LINE__,
 					(unsigned int)qh->hw->hw_info1,
-					qh_to_mpl(ehci, qh), qh_to_mpl(ehci, qh));
+					qh_to_mpl(ehci, qh->hw), qh_to_mpl(ehci, qh->hw));
 					BUG();
 			}
 		}
