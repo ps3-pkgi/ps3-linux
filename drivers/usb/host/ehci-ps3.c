@@ -37,16 +37,16 @@ enum ps3_ehci_hc_insnreg {
 static void _ps3_dump_insnreg(struct ehci_hcd *ehci, const char *func,
 	int line)
 {
-	unsigned int test;
+	unsigned int v1;
+	unsigned int v2;
+	unsigned int v3;
 
-	test = readl_be((void __iomem *)ehci->regs + ps3_ehci_hc_insnreg01);
-	ehci_info(ehci, "%s:%d: insnreg01: %xh\n", func, line, test);
+	v1 = readl_be((void __iomem *)ehci->regs + ps3_ehci_hc_insnreg01);
+	v2 = readl_be((void __iomem *)ehci->regs + ps3_ehci_hc_insnreg02);
+	v3 = readl_be((void __iomem *)ehci->regs + ps3_ehci_hc_insnreg03);
 
-	test = readl_be((void __iomem *)ehci->regs + ps3_ehci_hc_insnreg02);
-	ehci_info(ehci, "%s:%d: insnreg02: %xh\n", func, line, test);
-
-	test = readl_be((void __iomem *)ehci->regs + ps3_ehci_hc_insnreg03);
-	ehci_info(ehci, "%s:%d: insnreg03: %xh\n", func, line, test);
+	ehci_info(ehci, "%s:%d: insnreg: {%8.8xh, %8.8xh, %8.8xh}\n", func,
+		line, v1, v2, v3);
 }
 
 static void ps3_ehci_post_reset(struct ehci_hcd *ehci)
