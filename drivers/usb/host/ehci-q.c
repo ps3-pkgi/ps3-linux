@@ -66,6 +66,19 @@ static unsigned int qtd_to_offset(struct ehci_hcd *ehci,
 	return qtd_offset(cpu_buf_0);
 }
 
+static unsigned int qh_mult(u32 cpu_info2)
+{
+	return (unsigned int)((cpu_info2 >> 30) & 3);
+}
+
+static unsigned int qh_to_mult(struct ehci_hcd *ehci,
+	const struct ehci_qh_hw *qh)
+{
+	u32 cpu_info2 = hc32_to_cpup(ehci, &qh->hw_info2);
+
+	return qh_mpl(cpu_info2);
+}
+
 /* fill a qtd, returning how much of the buffer we were able to queue up */
 
 static int
@@ -1001,6 +1014,14 @@ qh_make (
 				"%s:%d: max packet: %8.8xh -> %4.4xh (%d) *long\n",
 				__func__, __LINE__, (unsigned int)info1,
 				qh_mpl(info1), qh_mpl(info1));
+
+		if (qh_mult(info2) > 2) {
+			ehci_info(ehci,
+				"%s:%d: qh_mult: %8.8xh -> %d *\n",
+				__func__, __LINE__, (unsigned int)info2,
+				qh_mult(info2));
+			BUG();
+		}
 
 		break;
 	default:

@@ -592,6 +592,7 @@ static int ehci_init(struct usb_hcd *hcd)
 			park = min(park, (unsigned) 3);
 			temp |= CMD_PARK;
 			temp |= park << 8;
+			BUG_ON("ehci park");
 		}
 		ehci_dbg(ehci, "park %d\n", park);
 	}
