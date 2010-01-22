@@ -18,27 +18,18 @@
 
 /* this file is part of ehci-hcd.c */
 
-/*-------------------------------------------------------------------------*/
+static unsigned int qh_mult(u32 cpu_info2)
+{
+	return (unsigned int)((cpu_info2 >> 30) & 3);
+}
 
-/*
- * EHCI hardware queue manipulation ... the core.  QH/QTD manipulation.
- *
- * Control, bulk, and interrupt traffic all use "qh" lists.  They list "qtd"
- * entries describing USB transactions, max 16-20kB/entry (with 4kB-aligned
- * buffers needed for the larger number).  We use one QH per endpoint, queue
- * multiple urbs (all three types) per endpoint.  URBs may need several qtds.
- *
- * ISO traffic uses "ISO TD" (itd, and sitd) records, and (along with
- * interrupts) needs careful scheduling.  Performance improvements can be
- * an ongoing challenge.  That's in "ehci-sched.c".
- *
- * USB 1.1 devices are handled (a) by "companion" OHCI or UHCI root hubs,
- * or otherwise through transaction translators (TTs) in USB 2.0 hubs using
- * (b) special fields in qh entries or (c) split iso entries.  TTs will
- * buffer low/full speed data so the host collects it at high speed.
- */
+static unsigned int qh_to_mult(struct ehci_hcd *ehci,
+	const struct ehci_qh_hw *qh)
+{
+	u32 cpu_info2 = hc32_to_cpup(ehci, &qh->hw_info2);
 
-/*-------------------------------------------------------------------------*/
+	return qh_mult(cpu_info2);
+}
 
 static unsigned int qh_mpl(u32 cpu_info1)
 {
@@ -66,18 +57,40 @@ static unsigned int qtd_to_offset(struct ehci_hcd *ehci,
 	return qtd_offset(cpu_buf_0);
 }
 
-static unsigned int qh_mult(u32 cpu_info2)
+static unsigned int qh_rl(u32 cpu_info1)
 {
-	return (unsigned int)((cpu_info2 >> 30) & 3);
+	return (unsigned int)((cpu_info1 >> 28) & 0xf);
 }
 
-static unsigned int qh_to_mult(struct ehci_hcd *ehci,
+static unsigned int qh_to_rl(struct ehci_hcd *ehci,
 	const struct ehci_qh_hw *qh)
 {
-	u32 cpu_info2 = hc32_to_cpup(ehci, &qh->hw_info2);
+	u32 cpu_info1 = hc32_to_cpup(ehci, &qh->hw_info1);
 
-	return qh_mpl(cpu_info2);
+	return qh_rl(cpu_info1);
 }
+
+/*-------------------------------------------------------------------------*/
+
+/*
+ * EHCI hardware queue manipulation ... the core.  QH/QTD manipulation.
+ *
+ * Control, bulk, and interrupt traffic all use "qh" lists.  They list "qtd"
+ * entries describing USB transactions, max 16-20kB/entry (with 4kB-aligned
+ * buffers needed for the larger number).  We use one QH per endpoint, queue
+ * multiple urbs (all three types) per endpoint.  URBs may need several qtds.
+ *
+ * ISO traffic uses "ISO TD" (itd, and sitd) records, and (along with
+ * interrupts) needs careful scheduling.  Performance improvements can be
+ * an ongoing challenge.  That's in "ehci-sched.c".
+ *
+ * USB 1.1 devices are handled (a) by "companion" OHCI or UHCI root hubs,
+ * or otherwise through transaction translators (TTs) in USB 2.0 hubs using
+ * (b) special fields in qh entries or (c) split iso entries.  TTs will
+ * buffer low/full speed data so the host collects it at high speed.
+ */
+
+/*-------------------------------------------------------------------------*/
 
 /* fill a qtd, returning how much of the buffer we were able to queue up */
 
@@ -981,6 +994,7 @@ qh_make (
 
 	case USB_SPEED_HIGH:		/* no TT involved */
 		info1 |= (2 << 12);	/* EPS "high" */
+		info1 |= (2 << 28);	/* RL = 2 */
 		if (type == PIPE_CONTROL) {
 			ehci_info(ehci, "%s:%d: PIPE_CONTROL\n", __func__, __LINE__);
 			info1 |= (EHCI_TUNE_RL_HS << 28);
@@ -1003,7 +1017,13 @@ qh_make (
 			info1 |= max_packet (maxp) << 16;
 			info2 |= hb_mult (maxp) << 30;
 		}
-
+		if (qh_mult(info2) > 2) {
+			ehci_info(ehci,
+				"%s:%d: qh_mult: %8.8xh -> %d *\n",
+				__func__, __LINE__, (unsigned int)info2,
+				qh_mult(info2));
+			BUG();
+		}
 		if (!is_power_of_2(qh_mpl(info1)))
 			ehci_warn(ehci,
 				"%s:%d: max packet: %8.8xh -> %4.4xh (%d) *align\n",
@@ -1014,15 +1034,13 @@ qh_make (
 				"%s:%d: max packet: %8.8xh -> %4.4xh (%d) *long\n",
 				__func__, __LINE__, (unsigned int)info1,
 				qh_mpl(info1), qh_mpl(info1));
-
-		if (qh_mult(info2) > 2) {
+		if (qh_rl(info1) == 0) {
 			ehci_info(ehci,
-				"%s:%d: qh_mult: %8.8xh -> %d *\n",
-				__func__, __LINE__, (unsigned int)info2,
-				qh_mult(info2));
+				"%s:%d: qh_rl: %8.8xh -> %d *\n",
+				__func__, __LINE__, (unsigned int)info1,
+				qh_rl(info1));
 			BUG();
 		}
-
 		break;
 	default:
 		dbg ("bogus dev %p speed %d", urb->dev, urb->dev->speed);
@@ -1110,14 +1128,12 @@ static struct ehci_qh *qh_append_tds (
 {
 	struct ehci_qh		*qh = NULL;
 	__hc32			qh_addr_mask = cpu_to_hc32(ehci, 0x7f);
-	int did_make = 0;
 
 	qh = (struct ehci_qh *) *ptr;
 	if (unlikely (qh == NULL)) {
 		/* can't sleep here, we have ehci->lock... */
 		qh = qh_make (ehci, urb, GFP_ATOMIC);
 		*ptr = qh;
-		did_make = 1;
 	}
 	if (likely (qh != NULL)) {
 		struct ehci_qtd	*qtd;
@@ -1134,16 +1150,6 @@ static struct ehci_qh *qh_append_tds (
                         /* usb_reset_device() briefly reverts to address 0 */
                         if (usb_pipedevice (urb->pipe) == 0)
 				qh->hw->hw_info1 &= ~qh_addr_mask;
-
-			if (urb->dev->speed == USB_SPEED_HIGH
-				&& !did_make
-				&& !is_power_of_2(qh_to_mpl(ehci, qh->hw))) {
-				ehci_info(ehci, "%s:%d: %8.8xh: %4.4xh (%d) **\n",
-					__func__, __LINE__,
-					(unsigned int)qh->hw->hw_info1,
-					qh_to_mpl(ehci, qh->hw), qh_to_mpl(ehci, qh->hw));
-					BUG();
-			}
 		}
 
 		/* just one way to queue requests: swap with the dummy qtd.
@@ -1186,6 +1192,32 @@ static struct ehci_qh *qh_append_tds (
 			dummy->hw_token = token;
 
 			urb->hcpriv = qh_get (qh);
+		}
+	}
+	if (urb->dev->speed == USB_SPEED_HIGH) {
+		if(qh_to_mult(ehci, qh->hw) > 2) {
+			ehci_info(ehci, "%s:%d: %8.8xh: %4.4xh (%d) **\n",
+				__func__, __LINE__,
+				(unsigned int)qh->hw->hw_info1,
+				qh_to_mult(ehci, qh->hw),
+				qh_to_mult(ehci, qh->hw));
+			BUG();
+		}
+		if (!is_power_of_2(qh_to_mpl(ehci, qh->hw))) {
+			ehci_info(ehci, "%s:%d: %8.8xh: %4.4xh (%d) **\n",
+				__func__, __LINE__,
+				(unsigned int)qh->hw->hw_info1,
+				qh_to_mpl(ehci, qh->hw),
+				qh_to_mpl(ehci, qh->hw));
+			BUG();
+		}
+		if (qh_to_rl(ehci, qh->hw) == 0) {
+			ehci_info(ehci,
+				"%s:%d: qh_rl: %8.8xh -> %d *\n",
+				__func__, __LINE__,
+				(unsigned int)qh->hw->hw_info1,
+				qh_to_rl(ehci, qh->hw));
+			BUG();
 		}
 	}
 	return qh;

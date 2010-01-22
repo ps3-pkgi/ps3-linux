@@ -1566,8 +1566,6 @@ itd_patch(
 	struct ehci_iso_packet	*uf = &iso_sched->packet [index];
 	unsigned		pg = itd->pg;
 
-	ehci_info(ehci, "%s:%d\n", __func__, __LINE__);
-
 	// BUG_ON (pg == 6 && uf->cross);
 
 	uframe &= 0x07;
