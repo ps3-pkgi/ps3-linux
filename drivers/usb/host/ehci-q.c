@@ -1349,6 +1349,10 @@ static void start_unlink_async (struct ehci_hcd *ehci, struct ehci_qh *qh)
 		if (ehci_to_hcd(ehci)->state != HC_STATE_HALT
 				&& !ehci->reclaim) {
 			/* ... and CMD_IAAD clear */
+			if (cmd & CMD_RUN && cmd & CMD_PSE) {
+				/* this doesn't hit the HC bug */
+				dbg_cmd(ehci, __func__, cmd);
+			}
 			ehci_writel(ehci, cmd & ~CMD_ASE,
 				    &ehci->regs->command);
 			wmb ();

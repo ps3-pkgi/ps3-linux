@@ -494,6 +494,10 @@ static int enable_periodic (struct ehci_hcd *ehci)
 		return status;
 
 	cmd = ehci_readl(ehci, &ehci->regs->command) | CMD_PSE;
+	if (cmd & CMD_RUN && !(cmd & CMD_ASE)) {
+		dbg_cmd(ehci, __func__, cmd);
+		BUG();
+	}
 	ehci_writel(ehci, cmd, &ehci->regs->command);
 	/* posted write ... PSS happens later */
 	ehci_to_hcd(ehci)->state = HC_STATE_RUNNING;

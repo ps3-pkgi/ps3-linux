@@ -325,8 +325,13 @@ static int ehci_bus_resume (struct usb_hcd *hcd)
 	temp = 0;
 	if (ehci->async->qh_next.qh)
 		temp |= CMD_ASE;
-	if (ehci->periodic_sched)
+	if (ehci->periodic_sched) {
 		temp |= CMD_PSE;
+		if (temp & CMD_RUN && !(temp & CMD_ASE)) {
+			dbg_cmd(ehci, __func__, temp);
+			BUG();
+		}
+	}
 	if (temp) {
 		ehci->command |= temp;
 		ehci_writel(ehci, ehci->command, &ehci->regs->command);
