@@ -496,7 +496,7 @@ static int enable_periodic (struct ehci_hcd *ehci)
 	cmd = ehci_readl(ehci, &ehci->regs->command) | CMD_PSE;
 	if (cmd & CMD_RUN && !(cmd & CMD_ASE)) {
 		dbg_cmd(ehci, __func__, cmd);
-		BUG();
+		WARN_ON("PS3 Errata 253");
 	}
 	ehci_writel(ehci, cmd, &ehci->regs->command);
 	/* posted write ... PSS happens later */
@@ -1584,7 +1584,7 @@ itd_patch(
 			__func__, __LINE__,
 			itd_to_offset(ehci, itd, uframe),
 			itd_to_offset(ehci, itd, uframe));
-		BUG();
+		BUG_ON("PS3 Errata 295");
 	}
 
 	itd->hw_bufp[pg] |= cpu_to_hc32(ehci, uf->bufp & ~(u32)0);
@@ -1597,7 +1597,7 @@ itd_patch(
 		itd->pg = ++pg;
 		itd->hw_bufp[pg] |= cpu_to_hc32(ehci, bufp & ~(u32)0);
 		itd->hw_bufp_hi[pg] |= cpu_to_hc32(ehci, (u32)(bufp >> 32));
-		BUG_ON("itd cross");
+		BUG_ON("PS3 Errata 295: itd cross");
 	}
 }
 
@@ -2011,7 +2011,7 @@ sitd_patch(
 			__func__, __LINE__,
 			(unsigned int)bufp,
 			sitd_offset(bufp), sitd_offset(bufp));
-		BUG();
+		BUG_ON("PS3 Errata 295");
 	}
 	sitd->hw_buf_hi[0] = cpu_to_hc32(ehci, bufp >> 32);
 
@@ -2022,7 +2022,7 @@ sitd_patch(
 			__func__, __LINE__,
 			(unsigned int)bufp,
 			sitd_offset(bufp), sitd_offset(bufp));
-		BUG_ON("sitd uf->cross");
+		BUG_ON("PS3 Errata 295: sitd uf->cross");
 		bufp += 4096;
 	}
 	sitd->hw_buf_hi[1] = cpu_to_hc32(ehci, bufp >> 32);

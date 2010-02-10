@@ -115,7 +115,7 @@ qtd_fill(struct ehci_hcd *ehci, struct ehci_qtd *qtd, dma_addr_t buf,
 				qtd_to_offset(ehci, qtd) + (unsigned int)len,
 				qtd_to_offset(ehci, qtd) + (unsigned int)len);
 			//dump_stack();
-			BUG();
+			BUG_ON("PS3 Errata 295");
 		} else if (0) {
 			ehci_warn(ehci,
 				"%s:%d: offset: %4.4xh (%d), len: %4.4xh (%d), end: %4.4xh (%d)\n",
@@ -1027,7 +1027,7 @@ qh_make (
 				"%s:%d: qh_mult: %8.8xh -> %d *\n",
 				__func__, __LINE__, (unsigned int)info2,
 				qh_mult(info2));
-			BUG();
+			BUG_ON("PS3 Errata 226");
 		}
 		if (!is_power_of_2(qh_mpl(info1)))
 			ehci_warn(ehci,
@@ -1044,7 +1044,7 @@ qh_make (
 				"%s:%d: qh_rl: %8.8xh -> %d *\n",
 				__func__, __LINE__, (unsigned int)info1,
 				qh_rl(info1));
-			BUG();
+			BUG_ON("PS3 Errata 236");
 		}
 		break;
 	default:
@@ -1206,7 +1206,7 @@ static struct ehci_qh *qh_append_tds (
 				(unsigned int)qh->hw->hw_info1,
 				qh_to_mult(ehci, qh->hw),
 				qh_to_mult(ehci, qh->hw));
-			BUG();
+			BUG_ON("PS3 Errata 226");
 		}
 		if (!is_power_of_2(qh_to_mpl(ehci, qh->hw))) {
 			ehci_info(ehci, "%s:%d: %8.8xh: %4.4xh (%d) **\n",
@@ -1214,7 +1214,7 @@ static struct ehci_qh *qh_append_tds (
 				(unsigned int)qh->hw->hw_info1,
 				qh_to_mpl(ehci, qh->hw),
 				qh_to_mpl(ehci, qh->hw));
-			BUG();
+			BUG_ON("PS3 Errata 295");
 		}
 		if (qh_to_rl(ehci, qh->hw) == 0) {
 			ehci_info(ehci,
@@ -1222,7 +1222,7 @@ static struct ehci_qh *qh_append_tds (
 				__func__, __LINE__,
 				(unsigned int)qh->hw->hw_info1,
 				qh_to_rl(ehci, qh->hw));
-			BUG();
+			BUG_ON("PS3 Errata 226");
 		}
 	}
 	return qh;

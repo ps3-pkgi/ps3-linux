@@ -594,7 +594,7 @@ static int ehci_init(struct usb_hcd *hcd)
 			park = min(park, (unsigned) 3);
 			temp |= CMD_PARK;
 			temp |= park << 8;
-			BUG_ON("ehci park");
+			BUG_ON("PS3 Errata 226: ehci park");
 		}
 		ehci_dbg(ehci, "park %d\n", park);
 	}

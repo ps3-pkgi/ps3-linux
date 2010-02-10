@@ -329,7 +329,7 @@ static int ehci_bus_resume (struct usb_hcd *hcd)
 		temp |= CMD_PSE;
 		if (temp & CMD_RUN && !(temp & CMD_ASE)) {
 			dbg_cmd(ehci, __func__, temp);
-			BUG();
+			WARN_ON("PS3 Errata 253");
 		}
 	}
 	if (temp) {
