@@ -1394,23 +1394,19 @@ static int gelic_wl_get_mode(struct net_device *netdev,
 static int hex2bin(u8 *str, u8 *bin, unsigned int len)
 {
 	unsigned int i;
-	static unsigned char *hex = "0123456789ABCDEF";
-	unsigned char *p, *q;
-	u8 tmp;
 
 	if (len != WPA_PSK_LEN * 2)
 		return -EINVAL;
 
 	for (i = 0; i < WPA_PSK_LEN * 2; i += 2) {
-		p = strchr(hex, toupper(str[i]));
-		q = strchr(hex, toupper(str[i + 1]));
-		if (!p || !q) {
+		int h = hex_to_bin(str[i]);
+		int l = hex_to_bin(str[i+1]);
+		if ((h == -1) || (l == -1)) {
 			pr_info("%s: unconvertible PSK digit=%d\n",
 				__func__, i);
 			return -EINVAL;
 		}
-		tmp = ((p - hex) << 4) + (q - hex);
-		*bin++ = tmp;
+		*bin++ = (h << 4) + l;
 	}
 	return 0;
 };
