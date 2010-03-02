@@ -1401,6 +1401,7 @@ static int hex2bin(u8 *str, u8 *bin, unsigned int len)
 	for (i = 0; i < WPA_PSK_LEN * 2; i += 2) {
 		int h = hex_to_bin(str[i]);
 		int l = hex_to_bin(str[i+1]);
+
 		if ((h == -1) || (l == -1)) {
 			pr_info("%s: unconvertible PSK digit=%d\n",
 				__func__, i);
