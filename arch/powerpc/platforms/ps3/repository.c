@@ -131,11 +131,11 @@ static int read_node(unsigned int lpar_id, u64 n1, u64 n2, u64 n3, u64 n4,
 		lpar_id = id;
 	}
 
-	result = lv1_get_repository_node_value(lpar_id, n1, n2, n3, n4, &v1,
+	result = lv1_read_repository_node(lpar_id, n1, n2, n3, n4, &v1,
 		&v2);
 
 	if (result) {
-		pr_debug("%s:%d: lv1_get_repository_node_value failed: %s\n",
+		pr_debug("%s:%d: lv1_read_repository_node failed: %s\n",
 			__func__, __LINE__, ps3_result(result));
 		dump_node_name(lpar_id, n1, n2, n3, n4);
 		return -ENOENT;
@@ -184,7 +184,7 @@ int ps3_repository_read_bus_type(unsigned int bus_index,
 	enum ps3_bus_type *bus_type)
 {
 	int result;
-	u64 v1;
+	u64 v1 = 0;
 
 	result = read_node(PS3_LPAR_ID_PME,
 		make_first_field("bus", bus_index),
@@ -199,7 +199,7 @@ int ps3_repository_read_bus_num_dev(unsigned int bus_index,
 	unsigned int *num_dev)
 {
 	int result;
-	u64 v1;
+	u64 v1 = 0;
 
 	result = read_node(PS3_LPAR_ID_PME,
 		make_first_field("bus", bus_index),
@@ -239,7 +239,7 @@ int ps3_repository_read_dev_type(unsigned int bus_index,
 	unsigned int dev_index, enum ps3_dev_type *dev_type)
 {
 	int result;
-	u64 v1;
+	u64 v1 = 0;
 
 	result = read_node(PS3_LPAR_ID_PME,
 		make_first_field("bus", bus_index),
@@ -256,8 +256,8 @@ int ps3_repository_read_dev_intr(unsigned int bus_index,
 	enum ps3_interrupt_type *intr_type, unsigned int *interrupt_id)
 {
 	int result;
-	u64 v1;
-	u64 v2;
+	u64 v1 = 0;
+	u64 v2 = 0;
 
 	result = read_node(PS3_LPAR_ID_PME,
 		make_first_field("bus", bus_index),
@@ -275,7 +275,7 @@ int ps3_repository_read_dev_reg_type(unsigned int bus_index,
 	enum ps3_reg_type *reg_type)
 {
 	int result;
-	u64 v1;
+	u64 v1 = 0;
 
 	result = read_node(PS3_LPAR_ID_PME,
 		make_first_field("bus", bus_index),
@@ -615,7 +615,7 @@ int ps3_repository_read_stor_dev_num_regions(unsigned int bus_index,
 	unsigned int dev_index, unsigned int *num_regions)
 {
 	int result;
-	u64 v1;
+	u64 v1 = 0;
 
 	result = read_node(PS3_LPAR_ID_PME,
 		make_first_field("bus", bus_index),
@@ -631,7 +631,7 @@ int ps3_repository_read_stor_dev_region_id(unsigned int bus_index,
 	unsigned int *region_id)
 {
 	int result;
-	u64 v1;
+	u64 v1 = 0;
 
 	result = read_node(PS3_LPAR_ID_PME,
 	    make_first_field("bus", bus_index),
@@ -786,7 +786,7 @@ int ps3_repository_read_mm_info(u64 *rm_base, u64 *rm_size, u64 *region_total)
 int ps3_repository_read_num_spu_reserved(unsigned int *num_spu_reserved)
 {
 	int result;
-	u64 v1;
+	u64 v1 = 0;
 
 	result = read_node(PS3_LPAR_ID_CURRENT,
 		make_first_field("bi", 0),
@@ -805,7 +805,7 @@ int ps3_repository_read_num_spu_reserved(unsigned int *num_spu_reserved)
 int ps3_repository_read_num_spu_resource_id(unsigned int *num_resource_id)
 {
 	int result;
-	u64 v1;
+	u64 v1 = 0;
 
 	result = read_node(PS3_LPAR_ID_CURRENT,
 		make_first_field("bi", 0),
@@ -827,8 +827,8 @@ int ps3_repository_read_spu_resource_id(unsigned int res_index,
 	enum ps3_spu_resource_type *resource_type, unsigned int *resource_id)
 {
 	int result;
-	u64 v1;
-	u64 v2;
+	u64 v1 = 0;
+	u64 v2 = 0;
 
 	result = read_node(PS3_LPAR_ID_CURRENT,
 		make_first_field("bi", 0),
@@ -854,7 +854,7 @@ static int ps3_repository_read_boot_dat_address(u64 *address)
 int ps3_repository_read_boot_dat_size(unsigned int *size)
 {
 	int result;
-	u64 v1;
+	u64 v1 = 0;
 
 	result = read_node(PS3_LPAR_ID_CURRENT,
 		make_first_field("bi", 0),
@@ -869,7 +869,7 @@ int ps3_repository_read_boot_dat_size(unsigned int *size)
 int ps3_repository_read_vuart_av_port(unsigned int *port)
 {
 	int result;
-	u64 v1;
+	u64 v1 = 0;
 
 	result = read_node(PS3_LPAR_ID_CURRENT,
 		make_first_field("bi", 0),
@@ -884,7 +884,7 @@ int ps3_repository_read_vuart_av_port(unsigned int *port)
 int ps3_repository_read_vuart_sysmgr_port(unsigned int *port)
 {
 	int result;
-	u64 v1;
+	u64 v1 = 0;
 
 	result = read_node(PS3_LPAR_ID_CURRENT,
 		make_first_field("bi", 0),
@@ -919,7 +919,7 @@ int ps3_repository_read_boot_dat_info(u64 *lpar_addr, unsigned int *size)
 int ps3_repository_read_num_be(unsigned int *num_be)
 {
 	int result;
-	u64 v1;
+	u64 v1 = 0;
 
 	result = read_node(PS3_LPAR_ID_PME,
 		make_first_field("ben", 0),
@@ -1050,7 +1050,7 @@ int ps3_repository_dump_resource_info(const struct ps3_repository_device *repo)
 
 		pr_debug("%s:%d (%u:%u) reg_type %u, bus_addr %lxh, len %lxh\n",
 			__func__, __LINE__, repo->bus_index, repo->dev_index,
-			reg_type, bus_addr, len);
+			reg_type, (unsigned long)bus_addr, (unsigned long)len);
 	}
 
 	pr_debug(" <- %s:%d\n", __func__, __LINE__);
@@ -1077,8 +1077,9 @@ static int dump_stor_dev_info(struct ps3_repository_device *repo)
 
 	pr_debug("%s:%d  (%u:%u): port %lu, blk_size %lu, num_blocks "
 		 "%lu, num_regions %u\n",
-		 __func__, __LINE__, repo->bus_index, repo->dev_index, port,
-		 blk_size, num_blocks, num_regions);
+		 __func__, __LINE__, repo->bus_index, repo->dev_index,
+		(unsigned long)port, (unsigned long)blk_size,
+		(unsigned long)num_blocks, num_regions);
 
 	for (region_index = 0; region_index < num_regions; region_index++) {
 		unsigned int region_id;
@@ -1096,7 +1097,8 @@ static int dump_stor_dev_info(struct ps3_repository_device *repo)
 
 		pr_debug("%s:%d (%u:%u) region_id %u, start %lxh, size %lxh\n",
 			__func__, __LINE__, repo->bus_index, repo->dev_index,
-			region_id, region_start, region_size);
+			region_id, (unsigned long)region_start,
+			(unsigned long)region_size);
 	}
 
 out:
@@ -1136,7 +1138,7 @@ static int dump_device_info(struct ps3_repository_device *repo,
 
 		pr_debug("%s:%d  (%u:%u): dev_type %u, dev_id %lu\n", __func__,
 			__LINE__, repo->bus_index, repo->dev_index,
-			repo->dev_type, repo->dev_id);
+			repo->dev_type, (unsigned long)repo->dev_id);
 
 		ps3_repository_dump_resource_info(repo);
 
@@ -1193,7 +1195,7 @@ int ps3_repository_dump_bus_info(void)
 
 		pr_debug("%s:%d bus_%u: bus_type %u, bus_id %lu, num_dev %u\n",
 			__func__, __LINE__, repo.bus_index, repo.bus_type,
-			repo.bus_id, num_dev);
+			(unsigned long)repo.bus_id, num_dev);
 
 		dump_device_info(&repo, num_dev);
 	}
