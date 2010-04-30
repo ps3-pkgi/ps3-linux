@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
-# Linux kernel version: 2.6.34-rc4
-# Thu Apr 15 11:41:59 2010
+# Linux kernel version: 2.6.34-rc6
+# Fri Apr 30 08:17:04 2010
 #
 CONFIG_PPC64=y
 
@@ -693,6 +693,8 @@ CONFIG_USB_NET_AX8817X=m
 # CONFIG_USB_NET_CDC_SUBSET is not set
 # CONFIG_USB_NET_ZAURUS is not set
 # CONFIG_USB_NET_INT51X1 is not set
+# CONFIG_USB_IPHETH is not set
+CONFIG_USB_SIERRA_NET=m
 # CONFIG_WAN is not set
 CONFIG_PPP=m
 CONFIG_PPP_MULTILINK=y
@@ -1165,6 +1167,7 @@ CONFIG_INOTIFY_USER=y
 CONFIG_QUOTA=y
 # CONFIG_QUOTA_NETLINK_INTERFACE is not set
 CONFIG_PRINT_QUOTA_WARNING=y
+# CONFIG_QUOTA_DEBUG is not set
 CONFIG_QUOTA_TREE=y
 # CONFIG_QFMT_V1 is not set
 CONFIG_QFMT_V2=y
