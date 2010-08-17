@@ -199,7 +199,7 @@ int __init oprofile_arch_init(struct oprofile_operations *ops)
 		return -ENODEV;
 
 	switch (cur_cpu_spec->oprofile_type) {
-#ifdef CONFIG_PPC64
+#ifdef CONFIG_PPC_BOOK3S_64
 #if defined(CONFIG_OPROFILE_CELL) || defined(CONFIG_OPROFILE_PS3)
 		case PPC_OPROFILE_CELL:
 			printk("%s:%d: \n", __func__, __LINE__);
