@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
-# Linux/powerpc 2.6.37-rc1 Kernel Configuration
-# Wed Nov 10 16:01:35 2010
+# Linux/powerpc 2.6.37-rc3 Kernel Configuration
+# Tue Nov 23 10:20:16 2010
 #
 CONFIG_PPC64=y
 
@@ -359,7 +359,6 @@ CONFIG_PM_DEBUG=y
 # CONFIG_PM_VERBOSE is not set
 # CONFIG_HIBERNATION is not set
 # CONFIG_PM_RUNTIME is not set
-# CONFIG_PM_OPP is not set
 # CONFIG_SECCOMP is not set
 CONFIG_ISA_DMA_API=y
 
@@ -1470,6 +1469,7 @@ CONFIG_DEBUG_STACKOVERFLOW=y
 #
 CONFIG_KEYS=y
 # CONFIG_KEYS_DEBUG_PROC_KEYS is not set
+# CONFIG_SECURITY_DMESG_RESTRICT is not set
 # CONFIG_SECURITY is not set
 # CONFIG_SECURITYFS is not set
 CONFIG_DEFAULT_SECURITY_DAC=y
