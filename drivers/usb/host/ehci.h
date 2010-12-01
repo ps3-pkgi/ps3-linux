@@ -134,10 +134,10 @@ struct ehci_hcd {			/* one per controller */
 	unsigned		fs_i_thresh:1;	/* Intel iso scheduling */
 	unsigned		use_dummy_qh:1;	/* AMD Frame List table quirk*/
 
+	/* required for usb32 quirk */
 	/* perform post CMD_RESET and CMD_LRESET work-arounds */
 	void	(*post_reset) (struct ehci_hcd *ehci);
 
-/* required for usb32 quirk */
 	#define OHCI_CTRL_HCFS          (3 << 6)
 	#define OHCI_USB_OPER           (2 << 6)
 	#define OHCI_USB_SUSPEND        (3 << 6)
