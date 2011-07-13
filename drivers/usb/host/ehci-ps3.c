@@ -81,7 +81,7 @@ static int ps3_ehci_hc_reset(struct usb_hcd *hcd)
 	ehci->big_endian_mmio = 1;
 
 	ehci->caps = hcd->regs;
-	ehci->regs = hcd->regs + HC_LENGTH(ehci_readl(ehci,
+	ehci->regs = hcd->regs + HC_LENGTH(ehci, ehci_readl(ehci,
 		&ehci->caps->hc_capbase));
 
 	ehci->post_reset = ps3_ehci_post_reset;

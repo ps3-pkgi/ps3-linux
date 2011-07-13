@@ -1083,7 +1083,7 @@ EXPORT_SYMBOL_GPL(ps3_lpm_close);
  * @offset: Offset in bytes from the start of the trace buffer.
  * @buf: Copy destination.
  * @count: Maximum count of bytes to copy.
- * @bytes_copied: Pointer to a variable that will recieve the number of
+ * @bytes_copied: Pointer to a variable that will receive the number of
  *  bytes copied to @buf.
  *
  * On error @buf will contain any successfully copied trace buffer data
@@ -1138,7 +1138,7 @@ EXPORT_SYMBOL_GPL(ps3_lpm_copy_tb);
  * @offset: Offset in bytes from the start of the trace buffer.
  * @buf: A __user copy destination.
  * @count: Maximum count of bytes to copy.
- * @bytes_copied: Pointer to a variable that will recieve the number of
+ * @bytes_copied: Pointer to a variable that will receive the number of
  *  bytes copied to @buf.
  *
  * On error @buf will contain any successfully copied trace buffer data
