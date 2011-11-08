@@ -38,11 +38,9 @@
 /**
  * struct ps3_bmp - a per cpu irq status and mask bitmap structure
  * @status: 256 bit status bitmap indexed by plug
- * @unused_1:
+ * @unused_1: Alignment
  * @mask: 256 bit mask bitmap indexed by plug
- * @unused_2:
- * @lock:
- * @ipi_debug_brk_mask:
+ * @unused_2: Alignment
  *
  * The HV maintains per SMT thread mappings of HV outlet to HV plug on
  * behalf of the guest.  These mappings are implemented as 256 bit guest
@@ -73,21 +71,24 @@ struct ps3_bmp {
 		unsigned long mask;
 		u64 unused_2[3];
 	};
-	u64 ipi_debug_brk_mask;
-	spinlock_t lock;
 };
 
 /**
  * struct ps3_private - a per cpu data structure
  * @bmp: ps3_bmp structure
+ * @bmp_lock: Syncronize access to bmp.
+ * @ipi_debug_brk_mask: Mask for debug break IPIs
  * @ppe_id: HV logical_ppe_id
  * @thread_id: HV thread_id
+ * @ipi_mask: Mask of IPI virqs
  */
 
 struct ps3_private {
 	struct ps3_bmp bmp __attribute__ ((aligned (PS3_BMP_MINALIGN)));
+	spinlock_t bmp_lock;
 	u64 ppe_id;
 	u64 thread_id;
+	unsigned long ipi_debug_brk_mask;
 	unsigned long ipi_mask;
 };
 
@@ -626,7 +627,7 @@ int ps3_spe_irq_destroy(unsigned int virq)
 static void _dump_64_bmp(const char *header, const u64 *p, unsigned cpu,
 	const char* func, int line)
 {
-	pr_debug("%s:%d: %s %u {%04lx_%04lx_%04lx_%04lx}\n",
+	pr_debug("%s:%d: %s %u {%04llx_%04llx_%04llx_%04llx}\n",
 		func, line, header, cpu,
 		*p >> 48, (*p >> 32) & 0xffff, (*p >> 16) & 0xffff,
 		*p & 0xffff);
@@ -635,7 +636,7 @@ static void _dump_64_bmp(const char *header, const u64 *p, unsigned cpu,
 static void __maybe_unused _dump_256_bmp(const char *header,
 	const u64 *p, unsigned cpu, const char* func, int line)
 {
-	pr_debug("%s:%d: %s %u {%016lx:%016lx:%016lx:%016lx}\n",
+	pr_debug("%s:%d: %s %u {%016llx:%016llx:%016llx:%016llx}\n",
 		func, line, header, cpu, p[0], p[1], p[2], p[3]);
 }
 
@@ -644,10 +645,10 @@ static void _dump_bmp(struct ps3_private* pd, const char* func, int line)
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&pd->bmp.lock, flags);
+	spin_lock_irqsave(&pd->bmp_lock, flags);
 	_dump_64_bmp("stat", &pd->bmp.status, pd->thread_id, func, line);
-	_dump_64_bmp("mask", &pd->bmp.mask, pd->thread_id, func, line);
-	spin_unlock_irqrestore(&pd->bmp.lock, flags);
+	_dump_64_bmp("mask", (u64*)&pd->bmp.mask, pd->thread_id, func, line);
+	spin_unlock_irqrestore(&pd->bmp_lock, flags);
 }
 
 #define dump_mask(_x) _dump_mask(_x, __func__, __LINE__)
@@ -656,9 +657,9 @@ static void __maybe_unused _dump_mask(struct ps3_private *pd,
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&pd->bmp.lock, flags);
-	_dump_64_bmp("mask", &pd->bmp.mask, pd->thread_id, func, line);
-	spin_unlock_irqrestore(&pd->bmp.lock, flags);
+	spin_lock_irqsave(&pd->bmp_lock, flags);
+	_dump_64_bmp("mask", (u64*)&pd->bmp.mask, pd->thread_id, func, line);
+	spin_unlock_irqrestore(&pd->bmp_lock, flags);
 }
 #else
 static void dump_bmp(struct ps3_private* pd) {};
@@ -690,10 +691,10 @@ void __init ps3_register_ipi_debug_brk(unsigned int cpu, unsigned int virq)
 {
 	struct ps3_private *pd = &per_cpu(ps3_private, cpu);
 
-	pd->bmp.ipi_debug_brk_mask = 0x8000000000000000UL >> virq;
+	set_bit(63 - virq, &pd->ipi_debug_brk_mask);
 
-	pr_debug("%s:%d: cpu %u, virq %u, mask %llxh\n", __func__, __LINE__,
-		cpu, virq, pd->bmp.ipi_debug_brk_mask);
+	pr_debug("%s:%d: cpu %u, virq %u, mask %lxh\n", __func__, __LINE__,
+		cpu, virq, pd->ipi_debug_brk_mask);
 }
 
 void __init ps3_register_ipi_irq(unsigned int cpu, unsigned int virq)
@@ -714,8 +715,8 @@ static unsigned int ps3_get_irq(void)
 
 	/* check for ipi break first to stop this cpu ASAP */
 
-	if (x & pd->bmp.ipi_debug_brk_mask)
-		x &= pd->bmp.ipi_debug_brk_mask;
+	if (x & pd->ipi_debug_brk_mask)
+		x &= pd->ipi_debug_brk_mask;
 
 	asm volatile("cntlzd %0,%1" : "=r" (plug) : "r" (x));
 	plug &= 0x3f;
@@ -760,7 +761,7 @@ void __init ps3_init_IRQ(void)
 
 		lv1_get_logical_ppe_id(&pd->ppe_id);
 		pd->thread_id = get_hard_smp_processor_id(cpu);
-		spin_lock_init(&pd->bmp.lock);
+		spin_lock_init(&pd->bmp_lock);
 
 		pr_debug("%s:%d: ppe_id %llu, thread_id %llu, bmp %lxh\n",
 			__func__, __LINE__, pd->ppe_id, pd->thread_id,
