@@ -200,10 +200,23 @@ int __init oprofile_arch_init(struct oprofile_operations *ops)
 
 	switch (cur_cpu_spec->oprofile_type) {
 #ifdef CONFIG_PPC_BOOK3S_64
-#ifdef CONFIG_OPROFILE_CELL
+#if defined(CONFIG_OPROFILE_CELL) || defined(CONFIG_OPROFILE_PS3)
 		case PPC_OPROFILE_CELL:
-			if (firmware_has_feature(FW_FEATURE_LPAR))
+			printk("%s:%d: \n", __func__, __LINE__);
+			if (firmware_has_feature(FW_FEATURE_PS3_LV1)) {
+				printk("%s:%d: \n", __func__, __LINE__);
+				model = &op_model_ps3;
+				ops->sync_start = model->sync_start;
+				ops->sync_stop = model->sync_stop;
+				break;
+			}
+
+			if (firmware_has_feature(FW_FEATURE_LPAR)) {
+				printk("%s:%d: \n", __func__, __LINE__);
 				return -ENODEV;
+			}
+
+			printk("%s:%d: \n", __func__, __LINE__);
 			model = &op_model_cell;
 			ops->sync_start = model->sync_start;
 			ops->sync_stop = model->sync_stop;
@@ -230,8 +243,10 @@ int __init oprofile_arch_init(struct oprofile_operations *ops)
 			break;
 #endif
 		default:
+			printk("%s:%d: \n", __func__, __LINE__);
 			return -ENODEV;
 	}
+	printk("%s:%d: \n", __func__, __LINE__);
 
 	model->num_counters = cur_cpu_spec->num_pmcs;
 
