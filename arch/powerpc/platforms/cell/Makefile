@@ -1,5 +1,6 @@
 obj-$(CONFIG_PPC_CELL_COMMON)		+= cbe_regs.o interrupt.o pervasive.o
 
+obj-$(CONFIG_PPC_CELL)			+= pmu-core.o
 obj-$(CONFIG_PPC_CELL_NATIVE)		+= iommu.o setup.o spider-pic.o \
 					   pmu.o spider-pci.o
 obj-$(CONFIG_CBE_RAS)			+= ras.o
