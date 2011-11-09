@@ -153,6 +153,18 @@ config OPROFILE_PS3
 	depends on PPC_PS3 && (OPROFILE = m || OPROFILE = y)
 	select PS3_LPM
 
+config PS3GELIC_UDBG
+	bool "PS3 udbg output via UDP broadcasts on Ethernet"
+	depends on PPC_PS3
+	help
+	  Enables udbg early debugging output by sending broadcast UDP
+	  via the Ethernet port (UDP port number 18194).
+
+	  This driver uses a trivial implementation and is independent
+	  from the main network driver.
+
+	  If in doubt, say N here.
+
 config PS3_DEBUG_BOOT_MEM_LIMIT
 	depends on PPC_PS3
 	int  "PS3 Limit available boot memory"
