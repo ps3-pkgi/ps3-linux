@@ -160,6 +160,11 @@ config PS3_LPM
 	  profiling support of the Cell processor with programs like
 	  oprofile and perfmon2, then say Y or M, otherwise say N.
 
+config OPROFILE_PS3
+	def_bool y
+	depends on PPC_PS3 && (OPROFILE = m || OPROFILE = y)
+	select PS3_LPM
+
 config PS3GELIC_UDBG
 	bool "PS3 udbg output via UDP broadcasts on Ethernet"
 	depends on PPC_PS3
