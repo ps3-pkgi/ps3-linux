@@ -67,120 +67,6 @@
 	} while (0)
 
 /*
- * Physical counter registers.
- * Each physical counter can act as one 32-bit counter or two 16-bit counters.
- */
-
-u32 cbe_read_phys_ctr(u32 cpu, u32 phys_ctr)
-{
-	u32 val_in_latch, val = 0;
-
-	if (phys_ctr < NR_PHYS_CTRS) {
-		READ_SHADOW_REG(val_in_latch, counter_value_in_latch);
-
-		/* Read the latch or the actual counter, whichever is newer. */
-		if (val_in_latch & (1 << phys_ctr)) {
-			READ_SHADOW_REG(val, pm_ctr[phys_ctr]);
-		} else {
-			READ_MMIO_UPPER32(val, pm_ctr[phys_ctr]);
-		}
-	}
-
-	return val;
-}
-EXPORT_SYMBOL_GPL(cbe_read_phys_ctr);
-
-void cbe_write_phys_ctr(u32 cpu, u32 phys_ctr, u32 val)
-{
-	struct cbe_pmd_shadow_regs *shadow_regs;
-	u32 pm_ctrl;
-
-	if (phys_ctr < NR_PHYS_CTRS) {
-		/* Writing to a counter only writes to a hardware latch.
-		 * The new value is not propagated to the actual counter
-		 * until the performance monitor is enabled.
-		 */
-		WRITE_WO_MMIO(pm_ctr[phys_ctr], val);
-
-		pm_ctrl = cbe_read_pm(cpu, pm_control);
-		if (pm_ctrl & CBE_PM_ENABLE_PERF_MON) {
-			/* The counters are already active, so we need to
-			 * rewrite the pm_control register to "re-enable"
-			 * the PMU.
-			 */
-			cbe_write_pm(cpu, pm_control, pm_ctrl);
-		} else {
-			shadow_regs = cbe_get_cpu_pmd_shadow_regs(cpu);
-			shadow_regs->counter_value_in_latch |= (1 << phys_ctr);
-		}
-	}
-}
-EXPORT_SYMBOL_GPL(cbe_write_phys_ctr);
-
-/*
- * "Logical" counter registers.
- * These will read/write 16-bits or 32-bits depending on the
- * current size of the counter. Counters 4 - 7 are always 16-bit.
- */
-
-u32 cbe_read_ctr(u32 cpu, u32 ctr)
-{
-	u32 val;
-	u32 phys_ctr = ctr & (NR_PHYS_CTRS - 1);
-
-	val = cbe_read_phys_ctr(cpu, phys_ctr);
-
-	if (cbe_get_ctr_size(cpu, phys_ctr) == 16)
-		val = (ctr < NR_PHYS_CTRS) ? (val >> 16) : (val & 0xffff);
-
-	return val;
-}
-EXPORT_SYMBOL_GPL(cbe_read_ctr);
-
-void cbe_write_ctr(u32 cpu, u32 ctr, u32 val)
-{
-	u32 phys_ctr;
-	u32 phys_val;
-
-	phys_ctr = ctr & (NR_PHYS_CTRS - 1);
-
-	if (cbe_get_ctr_size(cpu, phys_ctr) == 16) {
-		phys_val = cbe_read_phys_ctr(cpu, phys_ctr);
-
-		if (ctr < NR_PHYS_CTRS)
-			val = (val << 16) | (phys_val & 0xffff);
-		else
-			val = (val & 0xffff) | (phys_val & 0xffff0000);
-	}
-
-	cbe_write_phys_ctr(cpu, phys_ctr, val);
-}
-EXPORT_SYMBOL_GPL(cbe_write_ctr);
-
-/*
- * Counter-control registers.
- * Each "logical" counter has a corresponding control register.
- */
-
-u32 cbe_read_pm07_control(u32 cpu, u32 ctr)
-{
-	u32 pm07_control = 0;
-
-	if (ctr < NR_CTRS)
-		READ_SHADOW_REG(pm07_control, pm07_control[ctr]);
-
-	return pm07_control;
-}
-EXPORT_SYMBOL_GPL(cbe_read_pm07_control);
-
-void cbe_write_pm07_control(u32 cpu, u32 ctr, u32 val)
-{
-	if (ctr < NR_CTRS)
-		WRITE_WO_MMIO(pm07_control[ctr], val);
-}
-EXPORT_SYMBOL_GPL(cbe_write_pm07_control);
-
-/*
  * Other PMU control registers. Most of these are write-only.
  */
 
@@ -302,6 +188,120 @@ void cbe_set_ctr_size(u32 cpu, u32 phys_ctr, u32 ctr_size)
 EXPORT_SYMBOL_GPL(cbe_set_ctr_size);
 
 /*
+ * Physical counter registers.
+ * Each physical counter can act as one 32-bit counter or two 16-bit counters.
+ */
+
+u32 cbe_read_phys_ctr(u32 cpu, u32 phys_ctr)
+{
+	u32 val_in_latch, val = 0;
+
+	if (phys_ctr < NR_PHYS_CTRS) {
+		READ_SHADOW_REG(val_in_latch, counter_value_in_latch);
+
+		/* Read the latch or the actual counter, whichever is newer. */
+		if (val_in_latch & (1 << phys_ctr)) {
+			READ_SHADOW_REG(val, pm_ctr[phys_ctr]);
+		} else {
+			READ_MMIO_UPPER32(val, pm_ctr[phys_ctr]);
+		}
+	}
+
+	return val;
+}
+EXPORT_SYMBOL_GPL(cbe_read_phys_ctr);
+
+void cbe_write_phys_ctr(u32 cpu, u32 phys_ctr, u32 val)
+{
+	struct cbe_pmd_shadow_regs *shadow_regs;
+	u32 pm_ctrl;
+
+	if (phys_ctr < NR_PHYS_CTRS) {
+		/* Writing to a counter only writes to a hardware latch.
+		 * The new value is not propagated to the actual counter
+		 * until the performance monitor is enabled.
+		 */
+		WRITE_WO_MMIO(pm_ctr[phys_ctr], val);
+
+		pm_ctrl = cbe_read_pm(cpu, pm_control);
+		if (pm_ctrl & CBE_PM_ENABLE_PERF_MON) {
+			/* The counters are already active, so we need to
+			 * rewrite the pm_control register to "re-enable"
+			 * the PMU.
+			 */
+			cbe_write_pm(cpu, pm_control, pm_ctrl);
+		} else {
+			shadow_regs = cbe_get_cpu_pmd_shadow_regs(cpu);
+			shadow_regs->counter_value_in_latch |= (1 << phys_ctr);
+		}
+	}
+}
+EXPORT_SYMBOL_GPL(cbe_write_phys_ctr);
+
+/*
+ * "Logical" counter registers.
+ * These will read/write 16-bits or 32-bits depending on the
+ * current size of the counter. Counters 4 - 7 are always 16-bit.
+ */
+
+u32 cbe_read_ctr(u32 cpu, u32 ctr)
+{
+	u32 val;
+	u32 phys_ctr = ctr & (NR_PHYS_CTRS - 1);
+
+	val = cbe_read_phys_ctr(cpu, phys_ctr);
+
+	if (cbe_get_ctr_size(cpu, phys_ctr) == 16)
+		val = (ctr < NR_PHYS_CTRS) ? (val >> 16) : (val & 0xffff);
+
+	return val;
+}
+EXPORT_SYMBOL_GPL(cbe_read_ctr);
+
+void cbe_write_ctr(u32 cpu, u32 ctr, u32 val)
+{
+	u32 phys_ctr;
+	u32 phys_val;
+
+	phys_ctr = ctr & (NR_PHYS_CTRS - 1);
+
+	if (cbe_get_ctr_size(cpu, phys_ctr) == 16) {
+		phys_val = cbe_read_phys_ctr(cpu, phys_ctr);
+
+		if (ctr < NR_PHYS_CTRS)
+			val = (val << 16) | (phys_val & 0xffff);
+		else
+			val = (val & 0xffff) | (phys_val & 0xffff0000);
+	}
+
+	cbe_write_phys_ctr(cpu, phys_ctr, val);
+}
+EXPORT_SYMBOL_GPL(cbe_write_ctr);
+
+/*
+ * Counter-control registers.
+ * Each "logical" counter has a corresponding control register.
+ */
+
+u32 cbe_read_pm07_control(u32 cpu, u32 ctr)
+{
+	u32 pm07_control = 0;
+
+	if (ctr < NR_CTRS)
+		READ_SHADOW_REG(pm07_control, pm07_control[ctr]);
+
+	return pm07_control;
+}
+EXPORT_SYMBOL_GPL(cbe_read_pm07_control);
+
+void cbe_write_pm07_control(u32 cpu, u32 ctr, u32 val)
+{
+	if (ctr < NR_CTRS)
+		WRITE_WO_MMIO(pm07_control[ctr], val);
+}
+EXPORT_SYMBOL_GPL(cbe_write_pm07_control);
+
+/*
  * Enable/disable the entire performance monitoring unit.
  * When we enable the PMU, all pending writes to counters get committed.
  */
@@ -371,6 +371,24 @@ void cbe_disable_pm_interrupts(u32 cpu)
 }
 EXPORT_SYMBOL_GPL(cbe_disable_pm_interrupts);
 
+void cbe_sync_irq(int node)
+{
+	unsigned int irq;
+
+	irq = irq_find_mapping(NULL,
+			       IIC_IRQ_IOEX_PMI
+			       | (node << IIC_IRQ_NODE_SHIFT));
+
+	if (irq == NO_IRQ) {
+		printk(KERN_WARNING "ERROR, unable to get existing irq %d " \
+		"for node %d\n", irq, node);
+		return;
+	}
+
+	synchronize_irq(irq);
+}
+EXPORT_SYMBOL_GPL(cbe_sync_irq);
+
 static irqreturn_t cbe_pm_irq(int irq, void *dev_id)
 {
 	perf_irq(get_irq_regs());
@@ -403,22 +421,3 @@ static int __init cbe_init_pm_irq(void)
 	return 0;
 }
 machine_arch_initcall(cell, cbe_init_pm_irq);
-
-void cbe_sync_irq(int node)
-{
-	unsigned int irq;
-
-	irq = irq_find_mapping(NULL,
-			       IIC_IRQ_IOEX_PMI
-			       | (node << IIC_IRQ_NODE_SHIFT));
-
-	if (irq == NO_IRQ) {
-		printk(KERN_WARNING "ERROR, unable to get existing irq %d " \
-		"for node %d\n", irq, node);
-		return;
-	}
-
-	synchronize_irq(irq);
-}
-EXPORT_SYMBOL_GPL(cbe_sync_irq);
-
