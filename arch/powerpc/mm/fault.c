@@ -167,7 +167,8 @@ int __kprobes do_page_fault(struct pt_regs *regs, unsigned long address,
 		return 0;
 
 	/* On a kernel SLB miss we can only check for a valid exception entry */
-	if (!user_mode(regs) && (address >= TASK_SIZE))
+	if (!user_mode(regs) && (address >= TASK_SIZE)
+		&& !(error_code & DSISR_DABRMATCH))
 		return SIGSEGV;
 
 #if !(defined(CONFIG_4xx) || defined(CONFIG_BOOKE) || \

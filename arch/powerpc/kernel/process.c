@@ -273,6 +273,9 @@ void do_dabr(struct pt_regs *regs, unsigned long address,
 {
 	siginfo_t info;
 
+	printk("%s:%d: address %016lxh, code %08lxh\n",
+		__func__, __LINE__, address, error_code);
+
 	if (notify_die(DIE_DABR_MATCH, "dabr_match", regs, error_code,
 			11, SIGSEGV) == NOTIFY_STOP)
 		return;
@@ -282,6 +285,13 @@ void do_dabr(struct pt_regs *regs, unsigned long address,
 
 	/* Clear the DABR */
 	set_dabr(0);
+
+	if (!user_mode(regs)) {
+		show_regs(regs);
+		printk("%s:%d: done: address %016lxh\n", __func__, __LINE__,
+		address);
+		return;
+	}
 
 	/* Deliver the signal to userspace */
 	info.si_signo = SIGTRAP;
