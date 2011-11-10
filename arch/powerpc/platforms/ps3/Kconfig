@@ -193,4 +193,21 @@ config PS3_DEBUG_BOOT_MEM_LIMIT
 	  retail console reports 128 MiB of boot memory, this option
 	  will have no effect with a value of 128 or greater.
 
+config PS3_DEBUG_HOT_PLUG_MEM_LIMIT
+	depends on PPC_PS3
+	int  "PS3 Limit available hot plug memory"
+	range -1 1024
+	default -1
+	help
+	  This is a debug option used for memory stress testing.  Enter
+	  a value in units of MiB to limit available hot plug memory.
+
+	  If unsure, choose the default to disable this option.
+
+	  A negative value will disable this option.  A value of zero (0)
+	  will have maximum effect and the system will boot without hot
+	  plug memory.  Since the retail console reports about 128 MiB of
+	  hot plug memory, this option will have no effect with a value
+	  of 128 or greater.
+
 endmenu
