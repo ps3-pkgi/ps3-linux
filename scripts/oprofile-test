@@ -1,0 +1,104 @@
+#!/bin/sh -x
+
+name=oprofile
+prefixes="/usr"
+
+for prefix in ${prefixes}; do
+
+	if [ ! -d ${prefix} ]; then
+		echo "$0: bad prefix: '${prefix}'"
+		echo "$0: -- ${name} FAILED --"
+		exit 1
+	fi
+
+	dir=${prefix}/bin
+
+	if [ ! -d ${dir} ]; then
+		echo "$0: can't find root dir: '${dir}'"
+		echo "$0: -- ${name} FAILED --"
+		exit 1
+	fi
+
+	prog=${dir}/opcontrol
+
+	if [ ! -f ${prog} ] ; then
+		echo "$0: can't find progam: '${prog}'"
+		echo "$0: -- ${name} FAILED --"
+		exit 1
+	fi
+
+	prog=${dir}/opreport
+
+	if [ ! -f ${prog} ] ; then
+		echo "$0: can't find progam: '${prog}'"
+		echo "$0: -- ${name} FAILED --"
+		exit 1
+	fi
+
+	time=`date +%y.%m.%d-%H.%M.%S`
+	log=/root/${name}-dump-`hostname`-`uname -r`-${time}.dmp
+
+	echo "$0: root dir = '${dir}'"
+	echo "$0: log = '$log'"
+
+	${dir}/opcontrol --shutdown
+	${dir}/opcontrol --reset
+	${dir}/opcontrol --reset
+	rm -rf /var/lib/oprofile/*
+
+	if [ ! -f /boot/vmlinux ] ; then
+		echo "$0: can't find: '/boot/vmlinux'"
+		echo "$0: -- ${name} FAILED --"
+		exit 1
+	fi
+
+	${dir}/opcontrol --vmlinux=/boot/vmlinux
+
+	if [ $? -ne 0 ]; then
+		echo "$0: opcontrol --vmlinux failed."
+		echo "$0: -- ${name} FAILED --"
+		exit -1
+	fi
+
+	${dir}/opcontrol --event=cache_hit:10000 --event=cache_miss:10000
+
+	if [ $? -ne 0 ]; then
+		echo "$0: opcontrol --event=cache_hit:10000 --event=cache_miss:10000 failed."
+	fi
+
+	${dir}/opcontrol --verbose --start
+
+	if [ $? -ne 0 ]; then
+		echo "$0: opcontrol --start failed."
+		echo "$0: -- ${name} FAILED --"
+		exit -1
+	fi
+
+	echo sleeping 25 sec...
+	sleep 25
+
+	${dir}/opcontrol --dump
+
+	if [ $? -ne 0 ]; then
+		echo "$0: opcontrol --dump failed."
+		echo "$0: -- ${name} FAILED --"
+		exit -1
+	fi
+
+	${dir}/opreport
+
+	if [ $? -ne 0 ]; then
+		echo "$0: opreport failed."
+		echo "$0: -- ${name} FAILED --"
+		exit -1
+	fi
+
+	${dir}/opcontrol --shutdown
+	${dir}/opcontrol --reset
+	${dir}/opcontrol --reset
+	rm -rf /var/lib/oprofile/*
+
+	echo "$0: ++ ${name} OK ++"
+done
+
+exit 0
