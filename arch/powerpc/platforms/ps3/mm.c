@@ -1208,6 +1208,19 @@ void __init ps3_mm_init(void)
 	BUG_ON(map.rm.base);
 	BUG_ON(!map.rm.size);
 
+#if defined(CONFIG_PS3_DEBUG_BOOT_MEM_LIMIT) \
+	&& ((CONFIG_PS3_DEBUG_BOOT_MEM_LIMIT) >= 0)
+{
+	u64 orig_size = map.rm.size;
+
+	map.rm.size = min(map.rm.size,
+		(CONFIG_PS3_DEBUG_BOOT_MEM_LIMIT) * 1024 * 1024);
+	map.total -= orig_size - map.rm.size;
+	pr_info("Limiting boot RAM to 0x%llx (%llu MiB)\n", map.rm.size,
+		map.rm.size / (1024 * 1024));
+}
+#endif
+
 	/* Check if we got the highmem region from an earlier boot step */
 
 	if (ps3_mm_get_repository_highmem(&map.r1))
