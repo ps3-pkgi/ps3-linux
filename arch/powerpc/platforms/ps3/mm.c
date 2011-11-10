@@ -1229,6 +1229,14 @@ void __init ps3_mm_init(void)
 	/* correct map.total for the real total amount of memory we use */
 	map.total = map.rm.size + map.r1.size;
 
+#if defined(CONFIG_PS3_DEBUG_HOT_PLUG_MEM_LIMIT) \
+	&& ((CONFIG_PS3_DEBUG_HOT_PLUG_MEM_LIMIT) >= 0)
+	map.total = min(map.total, map.rm.size
+		+ (CONFIG_PS3_DEBUG_HOT_PLUG_MEM_LIMIT) * 1024 * 1024);
+	pr_info("Limiting total RAM to 0x%llx (%llu MiB)\n", map.total,
+		map.total / (1024 * 1024));
+#endif
+
 	if (!map.r1.size) {
 		DBG("%s:%d: No highmem region found\n", __func__, __LINE__);
 	} else {
