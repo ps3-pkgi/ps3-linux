@@ -527,4 +527,13 @@ void ps3_sync_irq(int node);
 u32 ps3_get_hw_thread_id(int cpu);
 u64 ps3_get_spe_id(void *arg);
 
+/* kernel debug routines */
+
+#define   DABR_TRANSLATION	(1UL << 2)
+#define   DABR_DATA_WRITE	(1UL << 1)
+#define   DABR_DATA_READ	(1UL << 0)
+
+int ps3_debug_setup_dabr(u64 address, unsigned int dabr_flags,
+	unsigned int dabrx);
+
 #endif
