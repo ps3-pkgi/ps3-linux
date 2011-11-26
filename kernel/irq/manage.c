@@ -15,10 +15,6 @@
 #include <linux/slab.h>
 #include <linux/sched.h>
 
-#ifdef CONFIG_PPC_PS3
-#include <asm/firmware.h>
-#endif
-
 #include "internals.h"
 
 #ifdef CONFIG_IRQ_FORCED_THREADING
@@ -1169,16 +1165,6 @@ static struct irqaction *__free_irq(unsigned int irq, void *dev_id)
 
 		if (action->dev_id == dev_id)
 			break;
-
-#ifdef CONFIG_PPC_PS3
-		if (firmware_has_feature(FW_FEATURE_PS3_LV1)) {
-			pr_debug("%s:%d: irq %u bad dev_id: request_irq(%p) != "
-				"free_irq(%p)\n" , __func__, __LINE__, irq,
-				action->dev_id, dev_id);
-			BUG();
-		}
-#endif
-
 		action_ptr = &action->next;
 	}
 

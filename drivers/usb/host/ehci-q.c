@@ -18,58 +18,6 @@
 
 /* this file is part of ehci-hcd.c */
 
-static unsigned int qh_mult(u32 cpu_info2)
-{
-	return (unsigned int)((cpu_info2 >> 30) & 3);
-}
-
-static unsigned int qh_to_mult(struct ehci_hcd *ehci,
-	const struct ehci_qh_hw *qh)
-{
-	u32 cpu_info2 = hc32_to_cpup(ehci, &qh->hw_info2);
-
-	return qh_mult(cpu_info2);
-}
-
-static unsigned int qh_mpl(u32 cpu_info1)
-{
-	return (unsigned int)((cpu_info1 >> 16) & 0x7ff);
-}
-
-static unsigned int qh_to_mpl(struct ehci_hcd *ehci,
-	const struct ehci_qh_hw *qh)
-{
-	u32 cpu_info1 = hc32_to_cpup(ehci, &qh->hw_info1);
-
-	return qh_mpl(cpu_info1);
-}
-
-static unsigned int qtd_offset(u32 cpu_buf_0)
-{
-	return (unsigned int)(cpu_buf_0 & 0xfff);
-}
-
-static unsigned int qtd_to_offset(struct ehci_hcd *ehci,
-	const struct ehci_qtd *qtd)
-{
-	u32 cpu_buf_0 = hc32_to_cpup(ehci, &qtd->hw_buf[0]);
-
-	return qtd_offset(cpu_buf_0);
-}
-
-static unsigned int qh_rl(u32 cpu_info1)
-{
-	return (unsigned int)((cpu_info1 >> 28) & 0xf);
-}
-
-static unsigned int qh_to_rl(struct ehci_hcd *ehci,
-	const struct ehci_qh_hw *qh)
-{
-	u32 cpu_info1 = hc32_to_cpup(ehci, &qh->hw_info1);
-
-	return qh_rl(cpu_info1);
-}
-
 /*-------------------------------------------------------------------------*/
 
 /*
@@ -103,30 +51,6 @@ qtd_fill(struct ehci_hcd *ehci, struct ehci_qtd *qtd, dma_addr_t buf,
 
 	/* one buffer entry per 4K ... first might be short or unaligned */
 	qtd->hw_buf[0] = cpu_to_hc32(ehci, (u32)addr);
-
-	if (qtd->urb->dev->speed == USB_SPEED_HIGH
-		&& qtd_to_offset(ehci, qtd)) {
-		if (qtd_to_offset(ehci, qtd) + len > 4096) {
-			ehci_warn(ehci,
-				"%s:%d: offset: %4.4xh (%d), len: %4.4xh (%d), end: %4.4xh (%d) **\n",
-				__func__, __LINE__,
-				qtd_to_offset(ehci, qtd), qtd_to_offset(ehci, qtd),
-				(unsigned int)len, (unsigned int)len,
-				qtd_to_offset(ehci, qtd) + (unsigned int)len,
-				qtd_to_offset(ehci, qtd) + (unsigned int)len);
-			//dump_stack();
-			BUG_ON("PS3 Errata 295");
-		} else if (0) {
-			ehci_warn(ehci,
-				"%s:%d: offset: %4.4xh (%d), len: %4.4xh (%d), end: %4.4xh (%d)\n",
-				__func__, __LINE__,
-				qtd_to_offset(ehci, qtd), qtd_to_offset(ehci, qtd),
-				(unsigned int)len, (unsigned int)len,
-				qtd_to_offset(ehci, qtd) + (unsigned int)len,
-				qtd_to_offset(ehci, qtd) + (unsigned int)len);
-		}
-	}
-
 	qtd->hw_buf_hi[0] = cpu_to_hc32(ehci, (u32)(addr >> 32));
 	count = 0x1000 - (buf & 0x0fff);	/* rest of that page */
 	if (likely (len < count))		/* ... iff needed */
@@ -989,13 +913,11 @@ qh_make (
 		info1 |= (2 << 12);	/* EPS "high" */
 		info1 |= (2 << 28);	/* RL = 2 */
 		if (type == PIPE_CONTROL) {
-			ehci_info(ehci, "%s:%d: PIPE_CONTROL\n", __func__, __LINE__);
 			info1 |= (EHCI_TUNE_RL_HS << 28);
 			info1 |= 64 << 16;	/* usb2 fixed maxpacket */
 			info1 |= 1 << 14;	/* toggle from qtd */
 			info2 |= (EHCI_TUNE_MULT_HS << 30);
 		} else if (type == PIPE_BULK) {
-			ehci_info(ehci, "%s:%d: PIPE_BULK\n", __func__, __LINE__);
 			info1 |= (EHCI_TUNE_RL_HS << 28);
 			/* The USB spec says that high speed bulk endpoints
 			 * always use 512 byte maxpacket.  But some device
@@ -1006,33 +928,8 @@ qh_make (
 			info1 |= max_packet(maxp) << 16;
 			info2 |= (EHCI_TUNE_MULT_HS << 30);
 		} else {		/* PIPE_INTERRUPT */
-			ehci_info(ehci, "%s:%d: PIPE_INTERRUPT\n", __func__, __LINE__);
 			info1 |= max_packet (maxp) << 16;
 			info2 |= hb_mult (maxp) << 30;
-		}
-		if (qh_mult(info2) > 2) {
-			ehci_info(ehci,
-				"%s:%d: qh_mult: %8.8xh -> %d *\n",
-				__func__, __LINE__, (unsigned int)info2,
-				qh_mult(info2));
-			BUG_ON("PS3 Errata 226");
-		}
-		if (!is_power_of_2(qh_mpl(info1)))
-			ehci_warn(ehci,
-				"%s:%d: max packet: %8.8xh -> %4.4xh (%d) *align\n",
-				__func__, __LINE__, (unsigned int)info1,
-				qh_mpl(info1), qh_mpl(info1));
-		if (qh_mpl(info1) > 0xc00)
-			ehci_info(ehci,
-				"%s:%d: max packet: %8.8xh -> %4.4xh (%d) *long\n",
-				__func__, __LINE__, (unsigned int)info1,
-				qh_mpl(info1), qh_mpl(info1));
-		if (qh_rl(info1) == 0) {
-			ehci_info(ehci,
-				"%s:%d: qh_rl: %8.8xh -> %d *\n",
-				__func__, __LINE__, (unsigned int)info1,
-				qh_rl(info1));
-			BUG_ON("PS3 Errata 236");
 		}
 		break;
 	default:
@@ -1185,32 +1082,6 @@ static struct ehci_qh *qh_append_tds (
 			dummy->hw_token = token;
 
 			urb->hcpriv = qh_get (qh);
-		}
-	}
-	if (urb->dev->speed == USB_SPEED_HIGH) {
-		if(qh_to_mult(ehci, qh->hw) > 2) {
-			ehci_info(ehci, "%s:%d: %8.8xh: %4.4xh (%d) **\n",
-				__func__, __LINE__,
-				(unsigned int)qh->hw->hw_info1,
-				qh_to_mult(ehci, qh->hw),
-				qh_to_mult(ehci, qh->hw));
-			BUG_ON("PS3 Errata 226");
-		}
-		if (!is_power_of_2(qh_to_mpl(ehci, qh->hw))) {
-			ehci_info(ehci, "%s:%d: %8.8xh: %4.4xh (%d) **\n",
-				__func__, __LINE__,
-				(unsigned int)qh->hw->hw_info1,
-				qh_to_mpl(ehci, qh->hw),
-				qh_to_mpl(ehci, qh->hw));
-			BUG_ON("PS3 Errata 295");
-		}
-		if (qh_to_rl(ehci, qh->hw) == 0) {
-			ehci_info(ehci,
-				"%s:%d: qh_rl: %8.8xh -> %d *\n",
-				__func__, __LINE__,
-				(unsigned int)qh->hw->hw_info1,
-				qh_to_rl(ehci, qh->hw));
-			BUG_ON("PS3 Errata 226");
 		}
 	}
 	return qh;

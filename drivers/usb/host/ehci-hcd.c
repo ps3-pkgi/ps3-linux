@@ -236,7 +236,7 @@ static int handshake_on_error_set_halt(struct ehci_hcd *ehci, void __iomem *ptr,
 	int error;
 
 	error = handshake(ehci, ptr, mask, done, usec);
-	if (WARN_ON(error)) {
+	if (error) {
 		ehci_halt(ehci);
 		ehci->rh_state = EHCI_RH_HALTED;
 		ehci_err(ehci, "force halt; handshake %p %08x %08x -> %d\n",
@@ -651,7 +651,6 @@ static int ehci_init(struct usb_hcd *hcd)
 			park = min(park, (unsigned) 3);
 			temp |= CMD_PARK;
 			temp |= park << 8;
-			BUG_ON("PS3 Errata 226: ehci park");
 		}
 		ehci_dbg(ehci, "park %d\n", park);
 	}
