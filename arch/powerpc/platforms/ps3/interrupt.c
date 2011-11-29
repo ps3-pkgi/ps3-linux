@@ -31,10 +31,10 @@
 
 #if defined(DEBUG)
 #define DBG udbg_printf
-#define WARN udbg_printf
+#define FAIL udbg_printf
 #else
 #define DBG pr_devel
-#define WARN pr_debug
+#define FAIL pr_debug
 #endif
 
 /**
@@ -193,7 +193,7 @@ static int ps3_virq_setup(enum ps3_cpu_binding cpu, unsigned long outlet,
 	*virq = irq_create_mapping(NULL, outlet);
 
 	if (*virq == NO_IRQ) {
-		WARN("%s:%d: irq_create_mapping failed: outlet %lu\n",
+		FAIL("%s:%d: irq_create_mapping failed: outlet %lu\n",
 			__func__, __LINE__, outlet);
 		result = -ENOMEM;
 		goto fail_create;
@@ -205,7 +205,7 @@ static int ps3_virq_setup(enum ps3_cpu_binding cpu, unsigned long outlet,
 	result = irq_set_chip_data(*virq, pd);
 
 	if (result) {
-		WARN("%s:%d: irq_set_chip_data failed\n",
+		FAIL("%s:%d: irq_set_chip_data failed\n",
 			__func__, __LINE__);
 		goto fail_set;
 	}
@@ -260,7 +260,7 @@ int ps3_irq_plug_setup(enum ps3_cpu_binding cpu, unsigned long outlet,
 	result = ps3_virq_setup(cpu, outlet, virq);
 
 	if (result) {
-		WARN("%s:%d: ps3_virq_setup failed\n", __func__, __LINE__);
+		FAIL("%s:%d: ps3_virq_setup failed\n", __func__, __LINE__);
 		goto fail_setup;
 	}
 
@@ -272,7 +272,7 @@ int ps3_irq_plug_setup(enum ps3_cpu_binding cpu, unsigned long outlet,
 		outlet, 0);
 
 	if (result) {
-		WARN("%s:%d: lv1_connect_irq_plug_ext failed: %s\n",
+		FAIL("%s:%d: lv1_connect_irq_plug_ext failed: %s\n",
 		__func__, __LINE__, ps3_result(result));
 		result = -EPERM;
 		goto fail_connect;
@@ -309,7 +309,7 @@ int ps3_irq_plug_destroy(unsigned int virq)
 	result = lv1_disconnect_irq_plug_ext(pd->ppe_id, pd->thread_id, virq);
 
 	if (result)
-		WARN("%s:%d: lv1_disconnect_irq_plug_ext failed: %s\n",
+		FAIL("%s:%d: lv1_disconnect_irq_plug_ext failed: %s\n",
 		__func__, __LINE__, ps3_result(result));
 
 	ps3_virq_destroy(virq);
@@ -337,7 +337,7 @@ int ps3_event_receive_port_setup(enum ps3_cpu_binding cpu, unsigned int *virq)
 	result = lv1_construct_event_receive_port(&outlet);
 
 	if (result) {
-		WARN("%s:%d: lv1_construct_event_receive_port failed: %s\n",
+		FAIL("%s:%d: lv1_construct_event_receive_port failed: %s\n",
 			__func__, __LINE__, ps3_result(result));
 		*virq = NO_IRQ;
 		return result;
@@ -370,7 +370,7 @@ int ps3_event_receive_port_destroy(unsigned int virq)
 	result = lv1_destruct_event_receive_port(virq_to_hw(virq));
 
 	if (result)
-		WARN("%s:%d: lv1_destruct_event_receive_port failed: %s\n",
+		FAIL("%s:%d: lv1_destruct_event_receive_port failed: %s\n",
 			__func__, __LINE__, ps3_result(result));
 
 	/*
@@ -414,7 +414,7 @@ int ps3_sb_event_receive_port_setup(struct ps3_system_bus_device *dev,
 		dev->dev_id, virq_to_hw(*virq), dev->interrupt_id);
 
 	if (result) {
-		WARN("%s:%d: lv1_connect_interrupt_event_receive_port"
+		FAIL("%s:%d: lv1_connect_interrupt_event_receive_port"
 			" failed: %s\n", __func__, __LINE__,
 			ps3_result(result));
 		ps3_event_receive_port_destroy(*virq);
@@ -443,7 +443,7 @@ int ps3_sb_event_receive_port_destroy(struct ps3_system_bus_device *dev,
 		dev->dev_id, virq_to_hw(virq), dev->interrupt_id);
 
 	if (result)
-		WARN("%s:%d: lv1_disconnect_interrupt_event_receive_port"
+		FAIL("%s:%d: lv1_disconnect_interrupt_event_receive_port"
 			" failed: %s\n", __func__, __LINE__,
 			ps3_result(result));
 
@@ -483,7 +483,7 @@ int ps3_io_irq_setup(enum ps3_cpu_binding cpu, unsigned int interrupt_id,
 	result = lv1_construct_io_irq_outlet(interrupt_id, &outlet);
 
 	if (result) {
-		WARN("%s:%d: lv1_construct_io_irq_outlet failed: %s\n",
+		FAIL("%s:%d: lv1_construct_io_irq_outlet failed: %s\n",
 			__func__, __LINE__, ps3_result(result));
 		return result;
 	}
@@ -513,7 +513,7 @@ int ps3_io_irq_destroy(unsigned int virq)
 	result = lv1_destruct_io_irq_outlet(outlet);
 
 	if (result)
-		WARN("%s:%d: lv1_destruct_io_irq_outlet failed: %s\n",
+		FAIL("%s:%d: lv1_destruct_io_irq_outlet failed: %s\n",
 			__func__, __LINE__, ps3_result(result));
 
 	return result;
@@ -545,7 +545,7 @@ int ps3_vuart_irq_setup(enum ps3_cpu_binding cpu, void* virt_addr_bmp,
 	result = lv1_configure_virtual_uart_irq(lpar_addr, &outlet);
 
 	if (result) {
-		WARN("%s:%d: lv1_configure_virtual_uart_irq failed: %s\n",
+		FAIL("%s:%d: lv1_configure_virtual_uart_irq failed: %s\n",
 			__func__, __LINE__, ps3_result(result));
 		return result;
 	}
@@ -565,7 +565,7 @@ int ps3_vuart_irq_destroy(unsigned int virq)
 	result = lv1_deconfigure_virtual_uart_irq();
 
 	if (result) {
-		WARN("%s:%d: lv1_configure_virtual_uart_irq failed: %s\n",
+		FAIL("%s:%d: lv1_configure_virtual_uart_irq failed: %s\n",
 			__func__, __LINE__, ps3_result(result));
 		return result;
 	}
@@ -598,7 +598,7 @@ int ps3_spe_irq_setup(enum ps3_cpu_binding cpu, unsigned long spe_id,
 	result = lv1_get_spe_irq_outlet(spe_id, class, &outlet);
 
 	if (result) {
-		WARN("%s:%d: lv1_get_spe_irq_outlet failed: %s\n",
+		FAIL("%s:%d: lv1_get_spe_irq_outlet failed: %s\n",
 			__func__, __LINE__, ps3_result(result));
 		return result;
 	}
@@ -773,7 +773,7 @@ void __init ps3_init_IRQ(void)
 			pd->thread_id, ps3_mm_phys_to_lpar(__pa(&pd->bmp)));
 
 		if (result)
-			WARN("%s:%d: lv1_configure_irq_state_bitmap failed:"
+			FAIL("%s:%d: lv1_configure_irq_state_bitmap failed:"
 				" %s\n", __func__, __LINE__,
 				ps3_result(result));
 	}
