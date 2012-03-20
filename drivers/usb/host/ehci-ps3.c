@@ -21,20 +21,16 @@
 #include <asm/firmware.h>
 #include <asm/ps3.h>
 
-/**
- * enum ps3_ehci_hc_insnreg - PS3 HC internal setup register offsets.
- *
- * Offsets in bytes from the EHCI operational regs (ehci->regs).
- **/
-
-enum ps3_ehci_hc_insnreg {
-	ps3_ehci_hc_insnreg01 = 0x084,
-	ps3_ehci_hc_insnreg02 = 0x088,
-	ps3_ehci_hc_insnreg03 = 0x08c,
-};
-
-static void ps3_ehci_post_reset(struct ehci_hcd *ehci)
+static void ps3_ehci_setup_insnreg(struct ehci_hcd *ehci)
 {
+	/* PS3 HC internal setup register offsets. */
+
+	enum ps3_ehci_hc_insnreg {
+		ps3_ehci_hc_insnreg01 = 0x084,
+		ps3_ehci_hc_insnreg02 = 0x088,
+		ps3_ehci_hc_insnreg03 = 0x08c,
+	};
+
 	/* PS3 EHCI HC errata fix 316 - The PS3 EHCI HC will reset its
 	 * internal INSNREGXX setup regs back to the chip default values
 	 * on Host Controller Reset (CMD_RESET) or Light Host Controller
@@ -64,8 +60,6 @@ static int ps3_ehci_hc_reset(struct usb_hcd *hcd)
 	ehci->regs = hcd->regs + HC_LENGTH(ehci, ehci_readl(ehci,
 		&ehci->caps->hc_capbase));
 
-	ehci->post_reset = ps3_ehci_post_reset;
-
 	dbg_hcs_params(ehci, "reset");
 	dbg_hcc_params(ehci, "reset");
 
@@ -83,56 +77,7 @@ static int ps3_ehci_hc_reset(struct usb_hcd *hcd)
 
 	ehci_reset(ehci);
 
-	return result;
-}
-
-static int __maybe_unused ps3_ehci_bus_suspend(struct usb_hcd *hcd)
-{
-	int result = 0;
-	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
-
-	ehci_dbg(ehci, "%s:%d\n", __func__, __LINE__);
-
-	/*
-	 * The PS3 EHCI HC stops the root hub after both root hub ports are
-	 * suspended.  The EHCI root hub driver expects the root hub to still
-	 * be running when ehci_bus_suspend() is called.  Forcing the HC into
-	 * the HALT state here will allow a successful suspend.
-	 */
-
-	ehci_halt(ehci);
-	ehci_to_hcd(ehci)->state = HC_STATE_SUSPENDED;
-
-#if defined(CONFIG_PM)
-	result = ehci_bus_suspend(hcd);
-#endif
-	WARN_ON(result);
-
-	return result;
-}
-
-static int __maybe_unused ps3_ehci_bus_resume(struct usb_hcd *hcd)
-{
-	int result;
-	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
-
-	ehci_dbg(ehci, "%s:%d\n", __func__, __LINE__);
-
-	/*
-	 * Putting the HC into the RUN state here will get the root hub
-	 * running and allow a successful resume.
-	 */
-
-	ehci->command |= CMD_RUN;
-	ehci_writel(ehci, ehci->command, &ehci->regs->command);
-
-	result = handshake(ehci, &ehci->regs->status, STS_HALT, 0, 250 * 1000);
-	WARN_ON(result);
-
-#if defined(CONFIG_PM)
-	result = ehci_bus_resume(hcd);
-#endif
-	WARN_ON(result);
+	ps3_ehci_setup_insnreg(ehci);
 
 	return result;
 }
@@ -155,8 +100,8 @@ static const struct hc_driver ps3_ehci_hc_driver = {
 	.hub_status_data	= ehci_hub_status_data,
 	.hub_control		= ehci_hub_control,
 #if defined(CONFIG_PM)
-	.bus_suspend		= ps3_ehci_bus_suspend,
-	.bus_resume		= ps3_ehci_bus_resume,
+	.bus_suspend		= ehci_bus_suspend,
+	.bus_resume		= ehci_bus_resume,
 #endif
 	.relinquish_port	= ehci_relinquish_port,
 	.port_handed_over	= ehci_port_handed_over,
@@ -292,14 +237,6 @@ static int ps3_ehci_remove(struct ps3_system_bus_device *dev)
 
 	tmp = hcd->irq;
 
-	/*
-	 * Putting the HC into the RUN state here will get the root hub
-	 * running and allow a successful usb_remove_hcd().
-	 */
-
-#if defined(CONFIG_PM)
-	ps3_ehci_bus_resume(hcd);
-#endif
 	ehci_shutdown(hcd);
 	usb_remove_hcd(hcd);
 

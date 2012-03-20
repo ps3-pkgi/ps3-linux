@@ -148,9 +148,6 @@ struct ehci_hcd {			/* one per controller */
 	unsigned		has_synopsys_hc_bug:1; /* Synopsys HC */
 	unsigned		frame_index_bug:1; /* MosChip (AKA NetMos) */
 
-	/* perform post CMD_RESET and CMD_LRESET work-arounds */
-	void	(*post_reset) (struct ehci_hcd *ehci);
-
 	/* required for usb32 quirk */
 	#define OHCI_CTRL_HCFS          (3 << 6)
 	#define OHCI_USB_OPER           (2 << 6)
