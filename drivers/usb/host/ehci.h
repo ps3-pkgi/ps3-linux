@@ -68,7 +68,24 @@ enum ehci_rh_state {
 	EHCI_RH_RUNNING
 };
 
+/*
+ * Timer events ordered by delay length.
+ * Always update ehci_event_delays_ns[] in parallel with this list.
+ */
+enum ehci_hrtimer_event {
+	EHCI_HRTIMER_POLL_PSS,		/* Poll for periodic schedule off */
+	EHCI_HRTIMER_DISABLE_PERIODIC,	/* Wait to disable periodic sched */
+	EHCI_HRTIMER_NO_EVENT		/* Must come last */
+};
+
 struct ehci_hcd {			/* one per controller */
+	enum ehci_hrtimer_event	next_hrtimer_event;
+	unsigned		enabled_hrtimer_events;
+	struct hrtimer		hrtimer;
+
+	ktime_t			periodic_event_time;
+	ktime_t			PSS_giveup_time;
+
 	/* glue to PCI and HCD framework */
 	struct ehci_caps __iomem *caps;
 	struct ehci_regs __iomem *regs;
@@ -143,7 +160,6 @@ struct ehci_hcd {			/* one per controller */
 	unsigned		big_endian_capbase:1;
 	unsigned		has_amcc_usb23:1;
 	unsigned		need_io_watchdog:1;
-	unsigned		broken_periodic:1;
 	unsigned		amd_pll_fix:1;
 	unsigned		fs_i_thresh:1;	/* Intel iso scheduling */
 	unsigned		use_dummy_qh:1;	/* AMD Frame List table quirk*/
