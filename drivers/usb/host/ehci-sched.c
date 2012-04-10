@@ -481,67 +481,38 @@ static int tt_no_collision (
 
 static int enable_periodic (struct ehci_hcd *ehci)
 {
-	u32	cmd;
-	int	status;
-
 	if (ehci->periodic_sched++)
 		return 0;
 
-	/* did clearing PSE did take effect yet?
-	 * takes effect only at frame boundaries...
-	 */
-	status = handshake_on_error_set_halt(ehci, &ehci->regs->status,
-					     STS_PSS, 0, 9 * 125);
-	if (status) {
-		usb_hc_died(ehci_to_hcd(ehci));
-		return status;
-	}
+	/* If we're waiting to turn off the periodic schedule, stop waiting */
+	if (ehci->enabled_hrtimer_events & BIT(EHCI_HRTIMER_DISABLE_PERIODIC))
+		ehci->enabled_hrtimer_events &=
+				~BIT(EHCI_HRTIMER_DISABLE_PERIODIC);
 
-	cmd = ehci_readl(ehci, &ehci->regs->command) | CMD_PSE;
-	ehci_writel(ehci, cmd, &ehci->regs->command);
-	/* posted write ... PSS happens later */
+	/* Otherwise, don't start the schedule until PSS is known to be 0 */
+	else
+		ehci_poll_PSS(ehci, NULL);
 
 	/* make sure ehci_work scans these */
 	ehci->next_uframe = ehci_read_frame_index(ehci)
 		% (ehci->periodic_size << 3);
-	if (unlikely(ehci->broken_periodic))
-		ehci->last_periodic_enable = ktime_get_real();
 	return 0;
 }
 
 static int disable_periodic (struct ehci_hcd *ehci)
 {
-	u32	cmd;
-	int	status;
-
 	if (--ehci->periodic_sched)
 		return 0;
 
-	if (unlikely(ehci->broken_periodic)) {
-		/* delay experimentally determined */
-		ktime_t safe = ktime_add_us(ehci->last_periodic_enable, 1000);
-		ktime_t now = ktime_get_real();
-		s64 delay = ktime_us_delta(safe, now);
+	/* If we're waiting to start the periodic schedule, stop waiting */
+	if (ehci->enabled_hrtimer_events & BIT(EHCI_HRTIMER_POLL_PSS))
+		ehci->enabled_hrtimer_events &=
+				~BIT(EHCI_HRTIMER_POLL_PSS);
 
-		if (unlikely(delay > 0))
-			udelay(delay);
-	}
-
-	/* did setting PSE not take effect yet?
-	 * takes effect only at frame boundaries...
-	 */
-	status = handshake_on_error_set_halt(ehci, &ehci->regs->status,
-					     STS_PSS, STS_PSS, 9 * 125);
-	if (status) {
-		usb_hc_died(ehci_to_hcd(ehci));
-		return status;
-	}
-
-	cmd = ehci_readl(ehci, &ehci->regs->command) & ~CMD_PSE;
-	ehci_writel(ehci, cmd, &ehci->regs->command);
-	/* posted write ... */
-
-	free_cached_lists(ehci);
+	/* Otherwise wait for a while before turning the schedule off */
+	else
+		ehci_enable_event(ehci, EHCI_HRTIMER_DISABLE_PERIODIC,
+				&ehci->periodic_event_time, true);
 
 	ehci->next_uframe = -1;
 	return 0;
