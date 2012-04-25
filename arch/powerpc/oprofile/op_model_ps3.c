@@ -41,7 +41,6 @@
 #include <asm/processor.h>
 #include <asm/prom.h>
 #include <asm/reg.h>
-#include <asm/system.h>
 #include <asm/cell-regs.h>
 #include <asm/pmc.h>
 #include <asm/irq_regs.h>
