@@ -30,7 +30,8 @@
 #include <linux/vmalloc.h>
 #include <linux/errno.h>
 #include <linux/init.h>
-#include <linux/hrtimer.h>
+#include <linux/timer.h>
+#include <linux/ktime.h>
 #include <linux/list.h>
 #include <linux/interrupt.h>
 #include <linux/usb.h>
@@ -126,7 +127,6 @@ MODULE_PARM_DESC(hird, "host initiated resume duration, +1 for each 75us");
 #include "ehci.h"
 #include "ehci-dbg.c"
 #include "pci-quirks.h"
-#include "ehci-timer.c"
 
 /*-------------------------------------------------------------------------*/
 
@@ -238,6 +238,68 @@ static int ehci_halt (struct ehci_hcd *ehci)
 			  STS_HALT, STS_HALT, 16 * 125);
 }
 
+#if defined(CONFIG_USB_SUSPEND) && defined(CONFIG_PPC_PS3)
+
+/*
+ * The EHCI controller of the Cell Super Companion Chip used in the
+ * PS3 will stop the root hub after all root hub ports are suspended.
+ * When in this condition handshake will return -ETIMEDOUT.  The
+ * STS_HLT bit will not be set, so inspection of the frame index is
+ * used here to test for the condition.  If the condition is found
+ * return success to allow the USB suspend to complete.
+ */
+
+static int handshake_for_broken_root_hub(struct ehci_hcd *ehci,
+					 void __iomem *ptr, u32 mask, u32 done,
+					 int usec)
+{
+	unsigned int old_index;
+	int error;
+
+	if (!firmware_has_feature(FW_FEATURE_PS3_LV1))
+		return -ETIMEDOUT;
+
+	old_index = ehci_read_frame_index(ehci);
+
+	error = handshake(ehci, ptr, mask, done, usec);
+
+	if (error == -ETIMEDOUT && ehci_read_frame_index(ehci) == old_index)
+		return 0;
+
+	return error;
+}
+
+#else
+
+static int handshake_for_broken_root_hub(struct ehci_hcd *ehci,
+					 void __iomem *ptr, u32 mask, u32 done,
+					 int usec)
+{
+	return -ETIMEDOUT;
+}
+
+#endif
+
+static int handshake_on_error_set_halt(struct ehci_hcd *ehci, void __iomem *ptr,
+				       u32 mask, u32 done, int usec)
+{
+	int error;
+
+	error = handshake(ehci, ptr, mask, done, usec);
+	if (error == -ETIMEDOUT)
+		error = handshake_for_broken_root_hub(ehci, ptr, mask, done,
+						      usec);
+
+	if (error) {
+		ehci_halt(ehci);
+		ehci->rh_state = EHCI_RH_HALTED;
+		ehci_err(ehci, "force halt; handshake %p %08x %08x -> %d\n",
+			ptr, mask, done, error);
+	}
+
+	return error;
+}
+
 /* put TDI/ARC silicon into EHCI mode */
 static void tdi_reset (struct ehci_hcd *ehci)
 {
@@ -292,8 +354,6 @@ static int ehci_reset (struct ehci_hcd *ehci)
 
 	ehci->port_c_suspend = ehci->suspended_ports =
 			ehci->resuming_ports = 0;
-
-	ehci->command = ehci_readl(ehci, &ehci->regs->command);
 	return retval;
 }
 
@@ -309,16 +369,17 @@ static void ehci_quiesce (struct ehci_hcd *ehci)
 
 	/* wait for any schedule enables/disables to take effect */
 	temp = (ehci->command << 10) & (STS_ASS | STS_PSS);
-	handshake(ehci, &ehci->regs->status,
-			STS_ASS | STS_PSS, temp, 16 * 125);
+	if (handshake_on_error_set_halt(ehci, &ehci->regs->status,
+					STS_ASS | STS_PSS, temp, 16 * 125))
+		return;
 
 	/* then disable anything that's still active */
 	ehci->command &= ~(CMD_ASE | CMD_PSE);
 	ehci_writel(ehci, ehci->command, &ehci->regs->command);
 
 	/* hardware can take 16 microframes to turn off ... */
-	handshake(ehci, &ehci->regs->status,
-			STS_ASS | STS_PSS, 0, 16 * 125);
+	handshake_on_error_set_halt(ehci, &ehci->regs->status,
+				    STS_ASS | STS_PSS, 0, 16 * 125);
 }
 
 /*-------------------------------------------------------------------------*/
@@ -439,10 +500,7 @@ static void ehci_shutdown(struct usb_hcd *hcd)
 
 	spin_lock_irq(&ehci->lock);
 	ehci_silence_controller(ehci);
-	ehci->enabled_hrtimer_events = 0;
 	spin_unlock_irq(&ehci->lock);
-
-	hrtimer_cancel(&ehci->hrtimer);
 }
 
 static void ehci_port_power (struct ehci_hcd *ehci, int is_on)
@@ -509,7 +567,6 @@ static void ehci_stop (struct usb_hcd *hcd)
 	del_timer_sync(&ehci->iaa_watchdog);
 
 	spin_lock_irq(&ehci->lock);
-	ehci->enabled_hrtimer_events = 0;
 	if (ehci->rh_state == EHCI_RH_RUNNING)
 		ehci_quiesce (ehci);
 
@@ -517,7 +574,6 @@ static void ehci_stop (struct usb_hcd *hcd)
 	ehci_reset (ehci);
 	spin_unlock_irq(&ehci->lock);
 
-	hrtimer_cancel(&ehci->hrtimer);
 	remove_sysfs_files(ehci);
 	remove_debug_files (ehci);
 
@@ -565,10 +621,6 @@ static int ehci_init(struct usb_hcd *hcd)
 	init_timer(&ehci->iaa_watchdog);
 	ehci->iaa_watchdog.function = ehci_iaa_watchdog;
 	ehci->iaa_watchdog.data = (unsigned long) ehci;
-
-	hrtimer_init(&ehci->hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_ABS);
-	ehci->hrtimer.function = ehci_hrtimer_func;
-	ehci->enabled_hrtimer_events = EHCI_HRTIMER_NO_EVENT;
 
 	hcc_params = ehci_readl(ehci, &ehci->caps->hcc_params);
 
@@ -842,11 +894,8 @@ static irqreturn_t ehci_irq (struct usb_hcd *hcd)
 	/* complete the unlinking of some qh [4.15.2.3] */
 	if (status & STS_IAA) {
 		/* guard against (alleged) silicon errata */
-		if (cmd & CMD_IAAD) {
-			ehci_writel(ehci, cmd & ~CMD_IAAD,
-					&ehci->regs->command);
+		if (cmd & CMD_IAAD)
 			ehci_dbg(ehci, "IAA with IAAD still set?\n");
-		}
 		if (ehci->reclaim) {
 			COUNT(ehci->stats.reclaim);
 			end_unlink_async(ehci);
@@ -907,8 +956,6 @@ static irqreturn_t ehci_irq (struct usb_hcd *hcd)
 		dbg_status(ehci, "fatal", status);
 		ehci_halt(ehci);
 dead:
-		ehci->enabled_hrtimer_events = 0;
-		hrtimer_try_to_cancel(&ehci->hrtimer);
 		ehci_reset(ehci);
 		ehci_writel(ehci, 0, &ehci->regs->configured_flag);
 		usb_hc_died(hcd);
@@ -1198,6 +1245,13 @@ static int ehci_get_frame (struct usb_hcd *hcd)
 }
 
 /*-------------------------------------------------------------------------*/
+/*
+ * The EHCI in ChipIdea HDRC cannot be a separate module or device,
+ * because its registers (and irq) are shared between host/gadget/otg
+ * functions  and in order to facilitate role switching we cannot
+ * give the ehci driver exclusive access to those.
+ */
+#ifndef CHIPIDEA_EHCI
 
 MODULE_DESCRIPTION(DRIVER_DESC);
 MODULE_AUTHOR (DRIVER_AUTHOR);
@@ -1328,6 +1382,11 @@ MODULE_LICENSE ("GPL");
 #define PLATFORM_DRIVER		ehci_ls1x_driver
 #endif
 
+#ifdef CONFIG_MIPS_SEAD3
+#include "ehci-sead3.c"
+#define	PLATFORM_DRIVER		ehci_hcd_sead3_driver
+#endif
+
 #ifdef CONFIG_USB_EHCI_HCD_PLATFORM
 #include "ehci-platform.c"
 #define PLATFORM_DRIVER		ehci_platform_driver
@@ -1451,3 +1510,4 @@ static void __exit ehci_hcd_cleanup(void)
 }
 module_exit(ehci_hcd_cleanup);
 
+#endif /* CHIPIDEA_EHCI */

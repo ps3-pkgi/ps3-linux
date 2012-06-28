@@ -318,14 +318,12 @@ static int ehci_bus_suspend (struct usb_hcd *hcd)
 	ehci_readl(ehci, &ehci->regs->intr_enable);
 
 	ehci->next_statechange = jiffies + msecs_to_jiffies(10);
-	ehci->enabled_hrtimer_events = 0;
 	spin_unlock_irq (&ehci->lock);
 
 	/* ehci_work() may have re-enabled the watchdog timer, which we do not
 	 * want, and so we must delete any pending watchdog timer events.
 	 */
 	del_timer_sync(&ehci->watchdog);
-	hrtimer_cancel(&ehci->hrtimer);
 	return 0;
 }
 
@@ -533,7 +531,8 @@ static int check_reset_complete (
 		if (ehci->has_amcc_usb23)
 			set_ohci_hcfs(ehci, 1);
 	} else {
-		ehci_dbg (ehci, "port %d high speed\n", index + 1);
+		ehci_dbg(ehci, "port %d reset complete, port enabled\n",
+			index + 1);
 		/* ensure 440EPx ohci controller state is suspended */
 		if (ehci->has_amcc_usb23)
 			set_ohci_hcfs(ehci, 0);
@@ -701,6 +700,7 @@ static int ehci_hub_control (
 			goto error;
 		wIndex--;
 		temp = ehci_readl(ehci, status_reg);
+		temp &= ~PORT_RWC_BITS;
 
 		/*
 		 * Even if OWNER is set, so the port is owned by the
@@ -714,8 +714,7 @@ static int ehci_hub_control (
 			ehci_writel(ehci, temp & ~PORT_PE, status_reg);
 			break;
 		case USB_PORT_FEAT_C_ENABLE:
-			ehci_writel(ehci, (temp & ~PORT_RWC_BITS) | PORT_PEC,
-					status_reg);
+			ehci_writel(ehci, temp | PORT_PEC, status_reg);
 			break;
 		case USB_PORT_FEAT_SUSPEND:
 			if (temp & PORT_RESET)
@@ -744,7 +743,7 @@ static int ehci_hub_control (
 				spin_lock_irqsave(&ehci->lock, flags);
 			}
 			/* resume signaling for 20 msec */
-			temp &= ~(PORT_RWC_BITS | PORT_WAKE_BITS);
+			temp &= ~PORT_WAKE_BITS;
 			ehci_writel(ehci, temp | PORT_RESUME, status_reg);
 			ehci->reset_done[wIndex] = jiffies
 					+ msecs_to_jiffies(20);
@@ -754,9 +753,8 @@ static int ehci_hub_control (
 			break;
 		case USB_PORT_FEAT_POWER:
 			if (HCS_PPC (ehci->hcs_params))
-				ehci_writel(ehci,
-					  temp & ~(PORT_RWC_BITS | PORT_POWER),
-					  status_reg);
+				ehci_writel(ehci, temp & ~PORT_POWER,
+						status_reg);
 			break;
 		case USB_PORT_FEAT_C_CONNECTION:
 			if (ehci->has_lpm) {
@@ -764,12 +762,10 @@ static int ehci_hub_control (
 				temp &= ~PORT_LPM;
 				temp &= ~PORT_DEV_ADDR;
 			}
-			ehci_writel(ehci, (temp & ~PORT_RWC_BITS) | PORT_CSC,
-					status_reg);
+			ehci_writel(ehci, temp | PORT_CSC, status_reg);
 			break;
 		case USB_PORT_FEAT_C_OVER_CURRENT:
-			ehci_writel(ehci, (temp & ~PORT_RWC_BITS) | PORT_OCC,
-					status_reg);
+			ehci_writel(ehci, temp | PORT_OCC, status_reg);
 			break;
 		case USB_PORT_FEAT_C_RESET:
 			/* GetPortStatus clears reset */

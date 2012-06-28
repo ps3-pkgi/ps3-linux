@@ -481,38 +481,65 @@ static int tt_no_collision (
 
 static int enable_periodic (struct ehci_hcd *ehci)
 {
+	int	status;
+
 	if (ehci->periodic_sched++)
 		return 0;
 
-	/* If we're waiting to turn off the periodic schedule, stop waiting */
-	if (ehci->enabled_hrtimer_events & BIT(EHCI_HRTIMER_DISABLE_PERIODIC))
-		ehci->enabled_hrtimer_events &=
-				~BIT(EHCI_HRTIMER_DISABLE_PERIODIC);
+	/* did clearing PSE did take effect yet?
+	 * takes effect only at frame boundaries...
+	 */
+	status = handshake_on_error_set_halt(ehci, &ehci->regs->status,
+					     STS_PSS, 0, 9 * 125);
+	if (status) {
+		usb_hc_died(ehci_to_hcd(ehci));
+		return status;
+	}
 
-	/* Otherwise, don't start the schedule until PSS is known to be 0 */
-	else
-		ehci_poll_PSS(ehci, NULL);
+	ehci->command |= CMD_PSE;
+	ehci_writel(ehci, ehci->command, &ehci->regs->command);
+	/* posted write ... PSS happens later */
 
 	/* make sure ehci_work scans these */
 	ehci->next_uframe = ehci_read_frame_index(ehci)
 		% (ehci->periodic_size << 3);
+	if (unlikely(ehci->broken_periodic))
+		ehci->last_periodic_enable = ktime_get_real();
 	return 0;
 }
 
 static int disable_periodic (struct ehci_hcd *ehci)
 {
+	int	status;
+
 	if (--ehci->periodic_sched)
 		return 0;
 
-	/* If we're waiting to start the periodic schedule, stop waiting */
-	if (ehci->enabled_hrtimer_events & BIT(EHCI_HRTIMER_POLL_PSS))
-		ehci->enabled_hrtimer_events &=
-				~BIT(EHCI_HRTIMER_POLL_PSS);
+	if (unlikely(ehci->broken_periodic)) {
+		/* delay experimentally determined */
+		ktime_t safe = ktime_add_us(ehci->last_periodic_enable, 1000);
+		ktime_t now = ktime_get_real();
+		s64 delay = ktime_us_delta(safe, now);
 
-	/* Otherwise wait for a while before turning the schedule off */
-	else
-		ehci_enable_event(ehci, EHCI_HRTIMER_DISABLE_PERIODIC,
-				&ehci->periodic_event_time, true);
+		if (unlikely(delay > 0))
+			udelay(delay);
+	}
+
+	/* did setting PSE not take effect yet?
+	 * takes effect only at frame boundaries...
+	 */
+	status = handshake_on_error_set_halt(ehci, &ehci->regs->status,
+					     STS_PSS, STS_PSS, 9 * 125);
+	if (status) {
+		usb_hc_died(ehci_to_hcd(ehci));
+		return status;
+	}
+
+	ehci->command &= ~CMD_PSE;
+	ehci_writel(ehci, ehci->command, &ehci->regs->command);
+	/* posted write ... */
+
+	free_cached_lists(ehci);
 
 	ehci->next_uframe = -1;
 	return 0;
@@ -1304,33 +1331,35 @@ sitd_slot_ok (
 	if (mask & ~0xffff)
 		return 0;
 
+	/* check bandwidth */
+	uframe %= period_uframes;
+	frame = uframe >> 3;
+
+#ifdef CONFIG_USB_EHCI_TT_NEWSCHED
+	/* The tt's fullspeed bus bandwidth must be available.
+	 * tt_available scheduling guarantees 10+% for control/bulk.
+	 */
+	uf = uframe & 7;
+	if (!tt_available(ehci, period_uframes >> 3,
+			stream->udev, frame, uf, stream->tt_usecs))
+		return 0;
+#else
+	/* tt must be idle for start(s), any gap, and csplit.
+	 * assume scheduling slop leaves 10+% for control/bulk.
+	 */
+	if (!tt_no_collision(ehci, period_uframes >> 3,
+			stream->udev, frame, mask))
+		return 0;
+#endif
+
 	/* this multi-pass logic is simple, but performance may
 	 * suffer when the schedule data isn't cached.
 	 */
-
-	/* check bandwidth */
-	uframe %= period_uframes;
 	do {
 		u32		max_used;
 
 		frame = uframe >> 3;
 		uf = uframe & 7;
-
-#ifdef CONFIG_USB_EHCI_TT_NEWSCHED
-		/* The tt's fullspeed bus bandwidth must be available.
-		 * tt_available scheduling guarantees 10+% for control/bulk.
-		 */
-		if (!tt_available (ehci, period_uframes << 3,
-				stream->udev, frame, uf, stream->tt_usecs))
-			return 0;
-#else
-		/* tt must be idle for start(s), any gap, and csplit.
-		 * assume scheduling slop leaves 10+% for control/bulk.
-		 */
-		if (!tt_no_collision (ehci, period_uframes << 3,
-				stream->udev, frame, mask))
-			return 0;
-#endif
 
 		/* check starts (OUT uses more than one) */
 		max_used = ehci->uframe_periodic_max - stream->usecs;
@@ -2329,7 +2358,8 @@ restart:
 				 * in the previous frame for completions.
 				 */
 				if (q.fstn->hw_prev != EHCI_LIST_END(ehci)) {
-					dbg ("ignoring completions from FSTNs");
+					ehci_dbg(ehci,
+						"ignoring completions from FSTNs\n");
 				}
 				type = Q_NEXT_TYPE(ehci, q.fstn->hw_next);
 				q = q.fstn->fstn_next;
@@ -2412,7 +2442,7 @@ restart:
 				q = *q_p;
 				break;
 			default:
-				dbg ("corrupt type %d frame %d shadow %p",
+				ehci_dbg(ehci, "corrupt type %d frame %d shadow %p\n",
 					type, frame, q.ptr);
 				// BUG ();
 				q.ptr = NULL;

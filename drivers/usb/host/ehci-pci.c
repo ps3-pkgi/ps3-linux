@@ -131,6 +131,10 @@ static int ehci_pci_setup(struct usb_hcd *hcd)
 	case PCI_VENDOR_ID_INTEL:
 		ehci->need_io_watchdog = 0;
 		ehci->fs_i_thresh = 1;
+		if (pdev->device == 0x27cc) {
+			ehci->broken_periodic = 1;
+			ehci_info(ehci, "using broken periodic workaround\n");
+		}
 		if (pdev->device == 0x0806 || pdev->device == 0x0811
 				|| pdev->device == 0x0829) {
 			ehci_info(ehci, "disable lpm for langwell/penwell\n");
@@ -364,7 +368,9 @@ static bool usb_is_intel_switchable_ehci(struct pci_dev *pdev)
 {
 	return pdev->class == PCI_CLASS_SERIAL_USB_EHCI &&
 		pdev->vendor == PCI_VENDOR_ID_INTEL &&
-		pdev->device == 0x1E26;
+		(pdev->device == 0x1E26 ||
+		 pdev->device == 0x8C2D ||
+		 pdev->device == 0x8C26);
 }
 
 static void ehci_enable_xhci_companion(void)
