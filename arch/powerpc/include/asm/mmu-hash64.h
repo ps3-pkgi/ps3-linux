@@ -371,21 +371,33 @@ extern void slb_set_size(u16 size);
  * hash collisions.
  */
 
+#define CONTEXT_BITS		19
+#define USER_ESID_BITS		18
+#define USER_ESID_BITS_1T	6
+
+/*
+ * 256MB segment
+ * The proto-VSID space has 2^(CONTEX_BITS + USER_ESID_BITS) - 1 segments
+ * available for user + kernel mapping. The top 4 contexts are used for
+ * kernel mapping. Each segment contains 2^28 bytes. Each
+ * context maps 2^46 bytes (64TB) so we can support 2^19-1 contexts
+ * (19 == 37 + 28 - 46).
+ */
+#define MAX_CONTEXT	((ASM_CONST(1) << CONTEXT_BITS) - 1)
+
+
 /*
  * This should be computed such that protovosid * vsid_mulitplier
  * doesn't overflow 64 bits. It should also be co-prime to vsid_modulus
  */
 #define VSID_MULTIPLIER_256M	ASM_CONST(12538073)	/* 24-bit prime */
-#define VSID_BITS_256M		38
+#define VSID_BITS_256M		(CONTEXT_BITS + USER_ESID_BITS)
 #define VSID_MODULUS_256M	((1UL<<VSID_BITS_256M)-1)
 
 #define VSID_MULTIPLIER_1T	ASM_CONST(12538073)	/* 24-bit prime */
-#define VSID_BITS_1T		26
+#define VSID_BITS_1T		(CONTEXT_BITS + USER_ESID_BITS_1T)
 #define VSID_MODULUS_1T		((1UL<<VSID_BITS_1T)-1)
 
-#define CONTEXT_BITS		19
-#define USER_ESID_BITS		18
-#define USER_ESID_BITS_1T	6
 
 #define USER_VSID_RANGE	(1UL << (USER_ESID_BITS + SID_SHIFT))
 
@@ -503,34 +515,6 @@ typedef struct {
 	})
 #endif /* 1 */
 
-/*
- * This is only valid for addresses >= PAGE_OFFSET
- * The proto-VSID space is divided into two class
- * User:   0 to 2^(CONTEXT_BITS + USER_ESID_BITS) -1
- * kernel: 2^(CONTEXT_BITS + USER_ESID_BITS) to 2^(VSID_BITS) - 1
- *
- * With KERNEL_START at 0xc000000000000000, the proto vsid for
- * the kernel ends up with 0xc00000000 (36 bits). With 64TB
- * support we need to have kernel proto-VSID in the
- * [2^37 to 2^38 - 1] range due to the increased USER_ESID_BITS.
- */
-static inline unsigned long get_kernel_vsid(unsigned long ea, int ssize)
-{
-	unsigned long proto_vsid;
-	/*
-	 * We need to make sure proto_vsid for the kernel is
-	 * >= 2^(CONTEXT_BITS + USER_ESID_BITS[_1T])
-	 */
-	if (ssize == MMU_SEGSIZE_256M) {
-		proto_vsid = ea >> SID_SHIFT;
-		proto_vsid |= (1UL << (CONTEXT_BITS + USER_ESID_BITS));
-		return vsid_scramble(proto_vsid, 256M);
-	}
-	proto_vsid = ea >> SID_SHIFT_1T;
-	proto_vsid |= (1UL << (CONTEXT_BITS + USER_ESID_BITS_1T));
-	return vsid_scramble(proto_vsid, 1T);
-}
-
 /* Returns the segment size indicator for a user address */
 static inline int user_segment_size(unsigned long addr)
 {
@@ -551,6 +535,26 @@ static inline unsigned long get_vsid(unsigned long context, unsigned long ea,
 			     | (ea >> SID_SHIFT_1T), 1T);
 }
 
+/*
+ * This is only valid for addresses >= PAGE_OFFSET
+ * The proto-VSID space is divided into two class
+ * User:   0 to 2^(CONTEXT_BITS) - 4  + 2^(USER_ESID_BITS)
+ * kernel: 2^(CONTEXT_BITS) - 4 + 2^(USER_ESID_BITS) to 2^(VSID_BITS) - 1
+ *
+ * With KERNEL_START at 0xc000000000000000, the proto vsid for
+ * the kernel ends up with 0xc00000000 (36 bits). We use one context
+ * for 0xc, 0xd, 0xe and 0xf.
+ *
+ */
+static inline unsigned long get_kernel_vsid(unsigned long ea, int ssize)
+{
+	unsigned long context;
+	/*
+	 * kernel take the top 4 context from the available range
+	 */
+	context = (MAX_CONTEXT - 4) +  ((ea >> 60) - 0xc);
+	return get_vsid(context, ea, ssize);
+}
 #endif /* __ASSEMBLY__ */
 
 #endif /* _ASM_POWERPC_MMU_HASH64_H_ */
