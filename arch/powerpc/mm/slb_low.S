@@ -56,12 +56,19 @@ _GLOBAL(slb_allocate_realmode)
 	 */
 _GLOBAL(slb_miss_kernel_load_linear)
 	li	r11,0
-	li	r9,0x1
+	/*
+	 * context = (MAX_CONTEXT - 4) + ((ea >> 60) - 0xc)
+	 */
+	srdi	r9,r3,60
+	subi	r9,r9,(0xc + 4 + 1)
+	lis	r10, 8
+	add	r9,r9,r10
+	srdi	r10,r3,28 /* FIXME!! doing it twice */
 	/*
 	 * for 1T we shift 12 bits more.  slb_finish_load_1T will do
 	 * the necessary adjustment
 	 */
-	rldimi  r10,r9,(CONTEXT_BITS + USER_ESID_BITS),0
+	rldimi  r10,r9,USER_ESID_BITS,0
 BEGIN_FTR_SECTION
 	b	slb_finish_load
 END_MMU_FTR_SECTION_IFCLR(MMU_FTR_1T_SEGMENT)
@@ -91,12 +98,19 @@ _GLOBAL(slb_miss_kernel_load_vmemmap)
 	_GLOBAL(slb_miss_kernel_load_io)
 	li	r11,0
 6:
-	li	r9,0x1
+	/*
+	 * context = (MAX_CONTEXT - 4) + ((ea >> 60) - 0xc)
+	 */
+	srdi	r9,r3,60
+	subi	r9,r9,(0xc + 4 + 1)
+	lis	r10,8
+	add	r9,r9,r10
+	srdi	r10,r3,28 /* FIXME!! doing it twice */
 	/*
 	 * for 1T we shift 12 bits more.  slb_finish_load_1T will do
 	 * the necessary adjustment
 	 */
-	rldimi  r10,r9,(CONTEXT_BITS + USER_ESID_BITS),0
+	rldimi  r10,r9,USER_ESID_BITS,0
 BEGIN_FTR_SECTION
 	b	slb_finish_load
 END_MMU_FTR_SECTION_IFCLR(MMU_FTR_1T_SEGMENT)
