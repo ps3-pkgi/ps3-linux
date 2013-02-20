@@ -24,7 +24,7 @@
 #include <linux/init.h>
 #include <linux/types.h>
 #include <linux/device.h>
-#include "cell-pmu.h"
+#include <asm/cell-pmu.h>
 
 union ps3_firmware_version {
 	u64 raw;
@@ -508,6 +508,6 @@ u64 ps3_get_spe_id(void *arg);
 
 /* kernel debug routines */
 
-int ps3_debug_setup_dabr(u64 address, unsigned int dabr_flags);
-
+int ps3_debug_setup_dabr(u64 address, unsigned int dabr_flags,
+	unsigned int dabrx);
 #endif

@@ -184,19 +184,25 @@ early_param("ps3flash", early_parse_ps3flash);
 #define prealloc_ps3flash_bounce_buffer()	do { } while (0)
 #endif
 
-static int ps3_set_dabr(unsigned long dabr)
+static int ps3_set_dabr(unsigned long dabr, unsigned long dabrx)
 {
-	enum {DABR_USER = 1, DABR_KERNEL = 2,};
+	/* Have to set at least one bit in the DABRX */
+	if (dabrx == 0 && dabr == 0)
+		dabrx = DABRX_USER;
+	/* hypervisor only allows us to set BTI, Kernel and user */
+	dabrx &= DABRX_BTI | DABRX_KERNEL | DABRX_USER;
 
-	return lv1_set_dabr(dabr, DABR_KERNEL | DABR_USER) ? -1 : 0;
+	return lv1_set_dabr(dabr, dabrx) ? -1 : 0;
 }
 
 /**
  * ps3_debug_setup_dabr - Setup the DABR for kernel use.
  * @dabr_flags: DABR_DATA_WRITE, DABR_DATA_READ, DABR_TRANSLATION
+ * @dabrx: DABRX_BTI, DABRX_KERNEL, DABRX_USER
  */
 
-int ps3_debug_setup_dabr(u64 address, unsigned int dabr_flags)
+int ps3_debug_setup_dabr(u64 address, unsigned int dabr_flags,
+	unsigned int dabrx)
 {
 	int result;
 	u64 reg;
@@ -211,7 +217,7 @@ int ps3_debug_setup_dabr(u64 address, unsigned int dabr_flags)
 	printk("%s: address %016llxh, flags %xh = %016llxh\n", __func__,
 		address, dabr_flags, reg);
 
-	result = ps3_set_dabr(reg);
+	result = ps3_set_dabr(reg, dabrx);
 
 	if (result)
 		printk("%s: failed: %d %s\n", __func__, result,
