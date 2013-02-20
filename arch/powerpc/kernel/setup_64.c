@@ -186,6 +186,8 @@ static void fixup_boot_paca(void)
 
 void __init early_setup(unsigned long dt_ptr)
 {
+	static __initdata struct paca_struct boot_paca;
+
 	/* -------- printk is _NOT_ safe to use here ! ------- */
 
 	/* Identify CPU type */
@@ -606,6 +608,11 @@ void __init setup_arch(char **cmdline_p)
 	mmu_context_init();
 
 	kvm_linear_init();
+
+	/* Interrupt code needs to be 64K-aligned */
+	if ((unsigned long)_stext & 0xffff)
+		panic("Kernelbase not 64K-aligned (0x%lx)!\n",
+		      (unsigned long)_stext);
 
 	ppc64_boot_msg(0x15, "Setup Done");
 }
