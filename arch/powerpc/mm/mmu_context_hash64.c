@@ -47,7 +47,7 @@ again:
 	else if (err)
 		return err;
 
-	if (index > (MAX_CONTEXT - 4)) {
+	if (index > MAX_USER_CONTEXT) {
 		spin_lock(&mmu_context_lock);
 		ida_remove(&mmu_context_ida, index);
 		spin_unlock(&mmu_context_lock);
