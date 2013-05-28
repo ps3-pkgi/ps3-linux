@@ -143,12 +143,6 @@ static void _dump_areas(unsigned int spe_id, unsigned long priv2,
 	pr_debug("%s:%d: shadow:  %lxh\n", func, line, shadow);
 }
 
-inline u64 ps3_get_spe_id(void *arg)
-{
-	return spu_pdata(arg)->spe_id;
-}
-EXPORT_SYMBOL_GPL(ps3_get_spe_id);
-
 static unsigned long get_vas_id(void)
 {
 	u64 id;
