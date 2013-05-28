@@ -525,6 +525,5 @@ void ps3_disable_pm_interrupts(u32 cpu);
 u32 ps3_get_and_clear_pm_interrupts(u32 cpu);
 void ps3_sync_irq(int node);
 u32 ps3_get_hw_thread_id(int cpu);
-u64 ps3_get_spe_id(void *arg);
 
 #endif
