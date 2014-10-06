@@ -13,6 +13,7 @@
  *		Vineet Gupta
  */
 
+#include <linux/crc32.h>
 #include <linux/etherdevice.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
@@ -139,7 +140,7 @@ static const struct ethtool_ops arc_emac_ethtool_ops = {
 static void arc_emac_tx_clean(struct net_device *ndev)
 {
 	struct arc_emac_priv *priv = netdev_priv(ndev);
-	struct net_device_stats *stats = &priv->stats;
+	struct net_device_stats *stats = &ndev->stats;
 	unsigned int i;
 
 	for (i = 0; i < TX_BD_NUM; i++) {
@@ -201,7 +202,7 @@ static int arc_emac_rx(struct net_device *ndev, int budget)
 
 	for (work_done = 0; work_done < budget; work_done++) {
 		unsigned int *last_rx_bd = &priv->last_rx_bd;
-		struct net_device_stats *stats = &priv->stats;
+		struct net_device_stats *stats = &ndev->stats;
 		struct buffer_state *rx_buff = &priv->rx_buff[*last_rx_bd];
 		struct arc_emac_bd *rxbd = &priv->rxbd[*last_rx_bd];
 		unsigned int pktlen, info = le32_to_cpu(rxbd->info);
@@ -317,7 +318,7 @@ static irqreturn_t arc_emac_intr(int irq, void *dev_instance)
 {
 	struct net_device *ndev = dev_instance;
 	struct arc_emac_priv *priv = netdev_priv(ndev);
-	struct net_device_stats *stats = &priv->stats;
+	struct net_device_stats *stats = &ndev->stats;
 	unsigned int status;
 
 	status = arc_reg_get(priv, R_STATUS);
@@ -361,6 +362,15 @@ static irqreturn_t arc_emac_intr(int irq, void *dev_instance)
 
 	return IRQ_HANDLED;
 }
+
+#ifdef CONFIG_NET_POLL_CONTROLLER
+static void arc_emac_poll_controller(struct net_device *dev)
+{
+	disable_irq(dev->irq);
+	arc_emac_intr(dev->irq, dev);
+	enable_irq(dev->irq);
+}
+#endif
 
 /**
  * arc_emac_open - Open the network device.
@@ -451,6 +461,41 @@ static int arc_emac_open(struct net_device *ndev)
 }
 
 /**
+ * arc_emac_set_rx_mode - Change the receive filtering mode.
+ * @ndev:	Pointer to the network device.
+ *
+ * This function enables/disables promiscuous or all-multicast mode
+ * and updates the multicast filtering list of the network device.
+ */
+static void arc_emac_set_rx_mode(struct net_device *ndev)
+{
+	struct arc_emac_priv *priv = netdev_priv(ndev);
+
+	if (ndev->flags & IFF_PROMISC) {
+		arc_reg_or(priv, R_CTRL, PROM_MASK);
+	} else {
+		arc_reg_clr(priv, R_CTRL, PROM_MASK);
+
+		if (ndev->flags & IFF_ALLMULTI) {
+			arc_reg_set(priv, R_LAFL, ~0);
+			arc_reg_set(priv, R_LAFH, ~0);
+		} else {
+			struct netdev_hw_addr *ha;
+			unsigned int filter[2] = { 0, 0 };
+			int bit;
+
+			netdev_for_each_mc_addr(ha, ndev) {
+				bit = ether_crc_le(ETH_ALEN, ha->addr) >> 26;
+				filter[bit >> 5] |= 1 << (bit & 31);
+			}
+
+			arc_reg_set(priv, R_LAFL, filter[0]);
+			arc_reg_set(priv, R_LAFH, filter[1]);
+		}
+	}
+}
+
+/**
  * arc_emac_stop - Close the network device.
  * @ndev:	Pointer to the network device.
  *
@@ -484,7 +529,7 @@ static int arc_emac_stop(struct net_device *ndev)
 static struct net_device_stats *arc_emac_stats(struct net_device *ndev)
 {
 	struct arc_emac_priv *priv = netdev_priv(ndev);
-	struct net_device_stats *stats = &priv->stats;
+	struct net_device_stats *stats = &ndev->stats;
 	unsigned long miss, rxerr;
 	u8 rxcrc, rxfram, rxoflow;
 
@@ -520,7 +565,7 @@ static int arc_emac_tx(struct sk_buff *skb, struct net_device *ndev)
 {
 	struct arc_emac_priv *priv = netdev_priv(ndev);
 	unsigned int len, *txbd_curr = &priv->txbd_curr;
-	struct net_device_stats *stats = &priv->stats;
+	struct net_device_stats *stats = &ndev->stats;
 	__le32 *info = &priv->txbd[*txbd_curr].info;
 	dma_addr_t addr;
 
@@ -620,6 +665,10 @@ static const struct net_device_ops arc_emac_netdev_ops = {
 	.ndo_start_xmit		= arc_emac_tx,
 	.ndo_set_mac_address	= arc_emac_set_address,
 	.ndo_get_stats		= arc_emac_stats,
+	.ndo_set_rx_mode	= arc_emac_set_rx_mode,
+#ifdef CONFIG_NET_POLL_CONTROLLER
+	.ndo_poll_controller	= arc_emac_poll_controller,
+#endif
 };
 
 static int arc_emac_probe(struct platform_device *pdev)
@@ -671,7 +720,6 @@ static int arc_emac_probe(struct platform_device *pdev)
 
 	priv = netdev_priv(ndev);
 	priv->dev = &pdev->dev;
-	priv->ndev = ndev;
 
 	priv->regs = devm_ioremap_resource(&pdev->dev, &res_regs);
 	if (IS_ERR(priv->regs)) {

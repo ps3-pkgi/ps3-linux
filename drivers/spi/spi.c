@@ -29,6 +29,7 @@
 #include <linux/mutex.h>
 #include <linux/of_device.h>
 #include <linux/of_irq.h>
+#include <linux/clk/clk-conf.h>
 #include <linux/slab.h>
 #include <linux/mod_devicetable.h>
 #include <linux/spi/spi.h>
@@ -259,6 +260,10 @@ static int spi_drv_probe(struct device *dev)
 	const struct spi_driver		*sdrv = to_spi_driver(dev->driver);
 	int ret;
 
+	ret = of_clk_set_defaults(dev->of_node, false);
+	if (ret)
+		return ret;
+
 	acpi_dev_pm_attach(dev, true);
 	ret = sdrv->probe(to_spi_device(dev));
 	if (ret)
@@ -345,14 +350,12 @@ static DEFINE_MUTEX(board_lock);
 struct spi_device *spi_alloc_device(struct spi_master *master)
 {
 	struct spi_device	*spi;
-	struct device		*dev = master->dev.parent;
 
 	if (!spi_master_get(master))
 		return NULL;
 
 	spi = kzalloc(sizeof(*spi), GFP_KERNEL);
 	if (!spi) {
-		dev_err(dev, "cannot alloc spi_device\n");
 		spi_master_put(master);
 		return NULL;
 	}
@@ -619,6 +622,8 @@ static int spi_map_buf(struct spi_master *master, struct device *dev,
 	}
 
 	ret = dma_map_sg(dev, sgt->sgl, sgt->nents, dir);
+	if (!ret)
+		ret = -ENOMEM;
 	if (ret < 0) {
 		sg_free_table(sgt);
 		return ret;
@@ -647,8 +652,8 @@ static int __spi_map_msg(struct spi_master *master, struct spi_message *msg)
 	if (!master->can_dma)
 		return 0;
 
-	tx_dev = &master->dma_tx->dev->device;
-	rx_dev = &master->dma_rx->dev->device;
+	tx_dev = master->dma_tx->device->dev;
+	rx_dev = master->dma_rx->device->dev;
 
 	list_for_each_entry(xfer, &msg->transfers, transfer_list) {
 		if (!master->can_dma(master, msg->spi, xfer))
@@ -687,8 +692,8 @@ static int spi_unmap_msg(struct spi_master *master, struct spi_message *msg)
 	if (!master->cur_msg_mapped || !master->can_dma)
 		return 0;
 
-	tx_dev = &master->dma_tx->dev->device;
-	rx_dev = &master->dma_rx->dev->device;
+	tx_dev = master->dma_tx->device->dev;
+	rx_dev = master->dma_rx->device->dev;
 
 	list_for_each_entry(xfer, &msg->transfers, transfer_list) {
 		if (!master->can_dma(master, msg->spi, xfer))
@@ -796,7 +801,7 @@ static int spi_transfer_one_message(struct spi_master *master,
 		if (ret > 0) {
 			ret = 0;
 			ms = xfer->len * 8 * 1000 / xfer->speed_hz;
-			ms += 10; /* some tolerance */
+			ms += ms + 100; /* some tolerance */
 
 			ms = wait_for_completion_timeout(&master->xfer_completion,
 							 msecs_to_jiffies(ms));
@@ -843,6 +848,7 @@ out:
 
 /**
  * spi_finalize_current_transfer - report completion of a transfer
+ * @master: the master reporting completion
  *
  * Called by SPI drivers using the core transfer_one_message()
  * implementation to notify it that the current interrupt driven
@@ -1255,6 +1261,8 @@ static void of_register_spi_devices(struct spi_master *master)
 			spi->mode |= SPI_CS_HIGH;
 		if (of_find_property(nc, "spi-3wire", NULL))
 			spi->mode |= SPI_3WIRE;
+		if (of_find_property(nc, "spi-lsb-first", NULL))
+			spi->mode |= SPI_LSB_FIRST;
 
 		/* Device DUAL/QUAD mode */
 		if (!of_property_read_u32(nc, "spi-tx-bus-width", &value)) {
@@ -1268,11 +1276,10 @@ static void of_register_spi_devices(struct spi_master *master)
 				spi->mode |= SPI_TX_QUAD;
 				break;
 			default:
-				dev_err(&master->dev,
-					"spi-tx-bus-width %d not supported\n",
-					value);
-				spi_dev_put(spi);
-				continue;
+				dev_warn(&master->dev,
+					 "spi-tx-bus-width %d not supported\n",
+					 value);
+				break;
 			}
 		}
 
@@ -1287,11 +1294,10 @@ static void of_register_spi_devices(struct spi_master *master)
 				spi->mode |= SPI_RX_QUAD;
 				break;
 			default:
-				dev_err(&master->dev,
-					"spi-rx-bus-width %d not supported\n",
-					value);
-				spi_dev_put(spi);
-				continue;
+				dev_warn(&master->dev,
+					 "spi-rx-bus-width %d not supported\n",
+					 value);
+				break;
 			}
 		}
 
