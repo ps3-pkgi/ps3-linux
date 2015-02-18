@@ -32,7 +32,6 @@
 #include "cs4265.h"
 
 struct cs4265_private {
-	struct device *dev;
 	struct regmap *regmap;
 	struct gpio_desc *reset_gpio;
 	u8 format;
@@ -77,6 +76,7 @@ static bool cs4265_readable_register(struct device *dev, unsigned int reg)
 	case CS4265_INT_MASK:
 	case CS4265_STATUS_MODE_MSB:
 	case CS4265_STATUS_MODE_LSB:
+	case CS4265_CHIP_ID:
 		return true;
 	default:
 		return false;
@@ -458,12 +458,12 @@ static int cs4265_pcm_hw_params(struct snd_pcm_substream *substream,
 		if (params_width(params) == 16) {
 			snd_soc_update_bits(codec, CS4265_DAC_CTL,
 				CS4265_DAC_CTL_DIF, (1 << 5));
-			snd_soc_update_bits(codec, CS4265_ADC_CTL,
+			snd_soc_update_bits(codec, CS4265_SPDIF_CTL2,
 				CS4265_SPDIF_CTL2_DIF, (1 << 7));
 		} else {
 			snd_soc_update_bits(codec, CS4265_DAC_CTL,
 				CS4265_DAC_CTL_DIF, (3 << 5));
-			snd_soc_update_bits(codec, CS4265_ADC_CTL,
+			snd_soc_update_bits(codec, CS4265_SPDIF_CTL2,
 				CS4265_SPDIF_CTL2_DIF, (1 << 7));
 		}
 		break;
@@ -472,7 +472,7 @@ static int cs4265_pcm_hw_params(struct snd_pcm_substream *substream,
 			CS4265_DAC_CTL_DIF, 0);
 		snd_soc_update_bits(codec, CS4265_ADC_CTL,
 			CS4265_ADC_DIF, 0);
-		snd_soc_update_bits(codec, CS4265_ADC_CTL,
+		snd_soc_update_bits(codec, CS4265_SPDIF_CTL2,
 			CS4265_SPDIF_CTL2_DIF, (1 << 6));
 
 		break;
@@ -597,7 +597,6 @@ static int cs4265_i2c_probe(struct i2c_client *i2c_client,
 			       GFP_KERNEL);
 	if (cs4265 == NULL)
 		return -ENOMEM;
-	cs4265->dev = &i2c_client->dev;
 
 	cs4265->regmap = devm_regmap_init_i2c(i2c_client, &cs4265_regmap);
 	if (IS_ERR(cs4265->regmap)) {
