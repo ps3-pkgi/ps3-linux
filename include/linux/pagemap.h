@@ -425,6 +425,7 @@ static inline int fault_in_pages_readable(const char __user *uaddr, int size)
 	volatile char c;
 	int ret;
 
+	(void)c;
 	if (unlikely(size == 0))
 		return 0;
 

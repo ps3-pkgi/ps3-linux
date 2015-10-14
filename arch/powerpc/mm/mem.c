@@ -179,7 +179,6 @@ void __init do_init_bootmem(void)
 	unsigned long i;
 	unsigned long start, bootmap_pages;
 	unsigned long total_pages;
-	int boot_mapsize;
 
 	max_low_pfn = max_pfn = lmb_end_of_DRAM() >> PAGE_SHIFT;
 	total_pages = (lmb_end_of_DRAM() - memstart_addr) >> PAGE_SHIFT;
@@ -198,7 +197,7 @@ void __init do_init_bootmem(void)
 	start = lmb_alloc(bootmap_pages << PAGE_SHIFT, PAGE_SIZE);
 
 	min_low_pfn = MEMORY_START >> PAGE_SHIFT;
-	boot_mapsize = init_bootmem_node(NODE_DATA(0), start >> PAGE_SHIFT, min_low_pfn, max_low_pfn);
+	init_bootmem_node(NODE_DATA(0), start >> PAGE_SHIFT, min_low_pfn, max_low_pfn);
 
 	/* Add active regions with valid PFNs */
 	for (i = 0; i < lmb.memory.cnt; i++) {
