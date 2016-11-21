@@ -257,7 +257,8 @@ int do_page_fault(struct pt_regs *regs, unsigned long address,
 	 * The kernel should never take an execute fault nor should it
 	 * take a page fault to a kernel address.
 	 */
-	if (!user_mode(regs) && (is_exec || (address >= TASK_SIZE))) {
+	if (!user_mode(regs) && (is_exec || (address >= TASK_SIZE)) &&
+		!(error_code & DSISR_DABRMATCH)) {
 		rc = SIGSEGV;
 		goto bail;
 	}
