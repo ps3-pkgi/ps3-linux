@@ -195,27 +195,28 @@ static void spu_unmap(struct spu *spu)
 /**
  * setup_areas - Map the spu regions into the address space.
  *
- * The LV1 hypervisor requires the spu shadow regs to be mapped as user with the
- * PTE protection bits set as read-only (PP=3).  This implementation uses the
- * low level __ioremap() to bypass the page protection settings inforced by
- * ioremap_prot() to get the needed PTE bits set for the shadow regs.  With
- * flags of (_PAGE_USER & ~_PAGE_RW & ~_PAGE_DIRTY) the PTE entry should have
- * bits PP=3 set.  See htab_convert_pte_flags() for conversion of flags to bits.
+ * The current HV requires the spu shadow regs to be mapped with the
+ * PTE page protection bits set as read-only (PP=3).  This implementation
+ * uses the low level __ioremap() to bypass the page protection settings
+ * inforced by ioremap_prot() to get the needed PTE bits set for the
+ * shadow regs.
  */
 
 static int __init setup_areas(struct spu *spu)
 {
-	spu_pdata(spu)->shadow = __ioremap(spu_pdata(spu)->shadow_addr,
-		sizeof(struct spe_shadow),
-		_PAGE_PRESENT | _PAGE_NO_CACHE | _PAGE_USER);
+	struct table {char* name; unsigned long addr; unsigned long size;};
+	unsigned long shadow_flags = pgprot_val(pgprot_noncached_wc(PAGE_KERNEL_RO));
 
+	spu_pdata(spu)->shadow = __ioremap(spu_pdata(spu)->shadow_addr,
+					   sizeof(struct spe_shadow),
+					   shadow_flags);
 	if (!spu_pdata(spu)->shadow) {
 		pr_debug("%s:%d: ioremap shadow failed\n", __func__, __LINE__);
 		goto fail_ioremap;
 	}
 
 	spu->local_store = (__force void *)ioremap_prot(spu->local_store_phys,
-		LS_SIZE, _PAGE_NO_CACHE);
+		LS_SIZE, pgprot_val(pgprot_noncached_wc(__pgprot(0))));
 
 	if (!spu->local_store) {
 		pr_debug("%s:%d: ioremap local_store failed\n",
