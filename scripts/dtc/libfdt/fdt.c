@@ -84,8 +84,9 @@ const void *fdt_offset_ptr(const void *fdt, int offset, unsigned int len)
 		return NULL;
 
 	if (fdt_version(fdt) >= 0x11)
-		if (((offset + len) < offset)
-		    || ((offset + len) > fdt_size_dt_struct(fdt)))
+		if (((offset + len) < offset) ||
+		    (fdt_version(fdt) >= 0x10 &&
+		     (offset + len) > fdt_size_dt_struct(fdt)))
 			return NULL;
 
 	return _fdt_offset_ptr(fdt, offset);
@@ -123,6 +124,9 @@ uint32_t fdt_next_tag(const void *fdt, int startoffset, int *nextoffset)
 		/* skip-name offset, length and value */
 		offset += sizeof(struct fdt_property) - FDT_TAGSIZE
 			+ fdt32_to_cpu(*lenp);
+		if (fdt_version(fdt) < 0x10 && fdt32_to_cpu(*lenp) > 8 &&
+		    ((offset - fdt32_to_cpu(*lenp)) % 8) != 0)
+			offset += 4;
 		break;
 
 	case FDT_END:
