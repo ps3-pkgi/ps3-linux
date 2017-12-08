@@ -12,6 +12,14 @@
  *  2 of the License, or (at your option) any later version.
  */
 
+.macro lv1_panic
+	li	r3, 0
+	li	r4, 0
+	li	r11, 255
+	.long 0x44000022
+	extsw	r3, r3
+.endm
+
 /* Condition Register Bit Fields */
 
 #define	cr0	0
