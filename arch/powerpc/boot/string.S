@@ -60,6 +60,25 @@ strchr:
 	li	r3,0
 	blr
 
+	.globl	strrchr
+strrchr:
+	stwu r1,-16(r1)
+	mr r10,r3
+	li r3,0
+1:
+	lbz r9,0(r10)
+	cmpwi r7,r9,0
+	bne r7,2f
+	addi r1,r1,16
+	blr
+2:
+	cmpw r7,r9,r4
+	bne r7,3f
+	mr r3,r10
+3:
+	addi r10,r10,1
+	b 1b
+
 	.globl	strcmp
 strcmp:
 	addi	r5,r3,-1
