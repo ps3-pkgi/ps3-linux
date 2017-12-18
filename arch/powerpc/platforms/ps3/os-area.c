@@ -194,7 +194,7 @@ static const struct os_area_db_id os_area_db_id_rtc_diff = {
 	.key = OS_AREA_DB_KEY_RTC_DIFF
 };
 
-static const struct os_area_db_id os_area_db_id_video_mode = {
+static const __attribute__ ((unused)) struct os_area_db_id os_area_db_id_video_mode = {
 	.owner = OS_AREA_DB_OWNER_LINUX,
 	.key = OS_AREA_DB_KEY_VIDEO_MODE
 };
