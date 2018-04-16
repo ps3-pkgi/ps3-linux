@@ -462,7 +462,8 @@ static int __do_page_fault(struct pt_regs *regs, unsigned long address,
 	 * take a page fault to a kernel address or a page fault to a user
 	 * address outside of dedicated places
 	 */
-	if (unlikely(!is_user && bad_kernel_fault(regs, error_code, address, is_write)))
+	if (unlikely(!is_user && bad_kernel_fault(regs, error_code, address, is_write)
+		&& !(error_code & DSISR_DABRMATCH)))
 		return SIGSEGV;
 
 	/*
