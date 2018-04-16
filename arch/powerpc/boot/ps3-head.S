@@ -57,13 +57,13 @@ __system_reset_overlay:
 	bctr
 
 1:
-	/* Primary delays then goes to _zimage_start in wrapper. */
+	/* Primary delays then goes to _zimage_start_lib in wrapper. */
 
 	or	31, 31, 31 /* db16cyc */
 	or	31, 31, 31 /* db16cyc */
 
-	lis	r4, _zimage_start@ha
-	addi	r4, r4, _zimage_start@l
+	lis	r4, _zimage_start_lib@ha
+	addi	r4, r4, _zimage_start_lib@l
 	mtctr	r4
 	bctr
 
