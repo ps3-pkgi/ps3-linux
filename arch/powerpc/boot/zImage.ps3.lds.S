@@ -8,12 +8,12 @@ SECTIONS
   .kernel:vmlinux.bin : { *(.kernel:vmlinux.bin) }
   _vmlinux_end =  .;
 
-  . = ALIGN(4096);
+  . = ALIGN(8);
   _dtb_start = .;
   .kernel:dtb : { *(.kernel:dtb) }
   _dtb_end = .;
 
-  . = ALIGN(4096);
+  . = ALIGN(8);
   _initrd_start =  .;
   .kernel:initrd : { *(.kernel:initrd) }
   _initrd_end =  .;
