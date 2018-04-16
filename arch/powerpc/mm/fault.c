@@ -441,7 +441,8 @@ static int __do_page_fault(struct pt_regs *regs, unsigned long address,
 	 * The kernel should never take an execute fault nor should it
 	 * take a page fault to a kernel address.
 	 */
-	if (unlikely(!is_user && bad_kernel_fault(is_exec, error_code, address)))
+	if (unlikely(!is_user && bad_kernel_fault(is_exec, error_code, address)
+		&& !(error_code & DSISR_DABRMATCH)))
 		return SIGSEGV;
 
 	/*
