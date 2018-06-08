@@ -121,6 +121,7 @@ static int show_data(struct display_info *disp, const char *data, int len)
  */
 static int list_properties(const void *blob, int node)
 {
+	const struct fdt_property *data;
 	const char *name;
 	int prop;
 
@@ -129,7 +130,8 @@ static int list_properties(const void *blob, int node)
 		/* Stop silently when there are no more properties */
 		if (prop < 0)
 			return prop == -FDT_ERR_NOTFOUND ? 0 : prop;
-		fdt_getprop_by_offset(blob, prop, &name, NULL);
+		data = fdt_get_property_by_offset(blob, prop, NULL);
+		name = fdt_string(blob, fdt32_to_cpu(data->nameoff));
 		if (name)
 			puts(name);
 		prop = fdt_next_property_offset(blob, prop);
