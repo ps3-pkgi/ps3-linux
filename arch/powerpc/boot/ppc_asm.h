@@ -14,10 +14,8 @@
 
 .macro lv1_panic
 	li	r3, 0
-	li	r4, 0
 	li	r11, 255
 	.long 0x44000022
-	extsw	r3, r3
 .endm
 
 /* Condition Register Bit Fields */
