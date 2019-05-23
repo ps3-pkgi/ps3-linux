@@ -38,6 +38,13 @@
 #define DBG pr_devel
 #endif
 
+#define udbg_panic(_val, _msg) \
+if (_val) { \
+	udbg_printf("%s:%d: " _msg ": %d\n", \
+		__func__, __LINE__, (int)(_val)); \
+	lv1_panic(0); \
+}
+
 enum {
 #if defined(CONFIG_PS3_DYNAMIC_DMA)
 	USE_DYNAMIC_DMA = 1,
@@ -325,7 +332,7 @@ static void ps3_mm_region_destroy(struct mem_region *r)
 
 	if (r->base) {
 		result = lv1_release_memory(r->base);
-		BUG_ON(result);
+		udbg_panic(result, "lv1_release_memory failed");
 		r->size = r->base = r->offset = 0;
 		map.total = map.rm.size;
 	}
