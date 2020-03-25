@@ -774,7 +774,7 @@ static struct file_system_type spufs_type = {
 };
 MODULE_ALIAS_FS("spufs");
 
-static int __init spufs_init(void)
+static int  spufs_init(void)
 {
 	int ret;
 
@@ -814,7 +814,7 @@ out:
 }
 module_init(spufs_init);
 
-static void __exit spufs_exit(void)
+static void spufs_exit(void)
 {
 	spu_sched_exit();
 	spufs_exit_isolated_loader();
