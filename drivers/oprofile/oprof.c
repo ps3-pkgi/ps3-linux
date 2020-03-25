@@ -241,7 +241,7 @@ int oprofile_set_ulong(unsigned long *addr, unsigned long val)
 
 static int timer_mode;
 
-static int __init oprofile_init(void)
+static int oprofile_init(void)
 {
 	int err;
 
@@ -267,7 +267,7 @@ static int __init oprofile_init(void)
 }
 
 
-static void __exit oprofile_exit(void)
+static void oprofile_exit(void)
 {
 	oprofilefs_unregister();
 	if (!timer_mode)
