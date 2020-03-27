@@ -183,6 +183,38 @@ static int ps3_set_dabr(unsigned long dabr, unsigned long dabrx)
 	return lv1_set_dabr(dabr, dabrx) ? -1 : 0;
 }
 
+/**
+ * ps3_debug_setup_dabr - Setup the DABR for kernel use.
+ * @dabr_flags: DABR_DATA_WRITE, DABR_DATA_READ, DABR_TRANSLATION
+ * @dabrx: DABRX_BTI, DABRX_KERNEL, DABRX_USER
+ */
+
+int ps3_debug_setup_dabr(u64 address, unsigned int dabr_flags,
+	unsigned int dabrx)
+{
+	int result;
+	u64 reg;
+
+	BUG_ON(dabr_flags
+		& ~(DABR_DATA_WRITE | DABR_DATA_READ | DABR_TRANSLATION));
+
+	/* PS3 seems to need DABR_TRANSLATION set to work */
+
+	reg = (address & -8L) | dabr_flags | DABR_TRANSLATION;
+
+	printk("%s: address %016llxh, flags %xh = %016llxh\n", __func__,
+		address, dabr_flags, reg);
+
+	result = ps3_set_dabr(reg, dabrx);
+
+	if (result)
+		printk("%s: failed: %d %s\n", __func__, result,
+			ps3_result(result));
+
+	return result;
+}
+EXPORT_SYMBOL_GPL(ps3_debug_setup_dabr);
+
 static ssize_t ps3_fw_version_show(struct kobject *kobj,
 	struct kobj_attribute *attr, char *buf)
 {
