@@ -520,4 +520,13 @@ void udbg_shutdown_ps3gelic(void);
 static inline void udbg_shutdown_ps3gelic(void) {}
 #endif
 
+/* kernel debug routines */
+
+#define   DABR_TRANSLATION	(1UL << 2)
+#define   DABR_DATA_WRITE	(1UL << 1)
+#define   DABR_DATA_READ	(1UL << 0)
+
+int ps3_debug_setup_dabr(u64 address, unsigned int dabr_flags,
+	unsigned int dabrx);
+
 #endif
