@@ -13,7 +13,7 @@ SECTIONS
   .kernel:dtb : { *(.kernel:dtb) }
   _dtb_end = .;
 
-  . = ALIGN(8);
+  . = ALIGN(4096);
   _initrd_start =  .;
   .kernel:initrd : { *(.kernel:initrd) }
   _initrd_end =  .;

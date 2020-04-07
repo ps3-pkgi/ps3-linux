@@ -32,7 +32,7 @@
 # could cause the kernel to die in early boot.
 
 # Allow for verbose output
-if [ "$V" = 1 ]; then
+if [ "$V" = "1" ]; then
 	set -x
 fi
 

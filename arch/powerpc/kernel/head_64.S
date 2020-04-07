@@ -42,6 +42,13 @@
 #include <asm/export.h>
 #include <asm/feature-fixups.h>
 
+#define lv1call .long 0x44000022
+#define PS3_PANIC()   \
+	li r3, 0;     \
+	li r11, 255;  \
+	lv1call;      \
+	nop;
+
 /* The physical memory is laid out such that the secondary processor
  * spin code sits at 0x0000...0x00ff. On server, the vectors follow
  * using the layout described in exceptions-64s.S

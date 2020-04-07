@@ -1210,19 +1210,6 @@ void __init ps3_mm_init(void)
 	BUG_ON(map.rm.base);
 	BUG_ON(!map.rm.size);
 
-#if defined(CONFIG_PS3_DEBUG_BOOT_MEM_LIMIT) \
-	&& ((CONFIG_PS3_DEBUG_BOOT_MEM_LIMIT) >= 0)
-{
-	u64 orig_size = map.rm.size;
-
-	map.rm.size = min(map.rm.size,
-		(CONFIG_PS3_DEBUG_BOOT_MEM_LIMIT) * 1024 * 1024);
-	map.total -= orig_size - map.rm.size;
-	pr_info("Limiting boot RAM to 0x%llx (%llu MiB)\n", map.rm.size,
-		map.rm.size / (1024 * 1024));
-}
-#endif
-
 	/* Check if we got the highmem region from an earlier boot step */
 
 	if (ps3_mm_get_repository_highmem(&map.r1)) {
@@ -1234,14 +1221,6 @@ void __init ps3_mm_init(void)
 
 	/* correct map.total for the real total amount of memory we use */
 	map.total = map.rm.size + map.r1.size;
-
-#if defined(CONFIG_PS3_DEBUG_HOT_PLUG_MEM_LIMIT) \
-	&& ((CONFIG_PS3_DEBUG_HOT_PLUG_MEM_LIMIT) >= 0)
-	map.total = min(map.total, map.rm.size
-		+ (CONFIG_PS3_DEBUG_HOT_PLUG_MEM_LIMIT) * 1024 * 1024);
-	pr_info("Limiting total RAM to 0x%llx (%llu MiB)\n", map.total,
-		map.total / (1024 * 1024));
-#endif
 
 	if (!map.r1.size) {
 		DBG("%s:%d: No highmem region found\n", __func__, __LINE__);
