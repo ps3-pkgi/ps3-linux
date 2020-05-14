@@ -13,6 +13,7 @@
 #include <linux/console.h>
 #include <linux/export.h>
 #include <linux/memblock.h>
+#include <linux/proc_fs.h>
 
 #include <asm/machdep.h>
 #include <asm/firmware.h>
@@ -36,6 +37,7 @@ DEFINE_MUTEX(ps3_gpu_mutex);
 EXPORT_SYMBOL_GPL(ps3_gpu_mutex);
 
 static union ps3_firmware_version ps3_firmware_version;
+static char ps3_firmware_version_str[16];
 
 void ps3_get_firmware_version(union ps3_firmware_version *v)
 {
@@ -182,6 +184,58 @@ static int ps3_set_dabr(unsigned long dabr, unsigned long dabrx)
 	return lv1_set_dabr(dabr, dabrx) ? -1 : 0;
 }
 
+static ssize_t ps3_fw_ver_read(struct file *file, char __user *buf, size_t size,
+	loff_t *ppos)
+{
+	ssize_t bytes = simple_read_from_buffer(buf, size, ppos,
+		ps3_firmware_version_str, strlen(ps3_firmware_version_str));
+
+	pr_debug("%s:%d: %zd bytes '%s'\n", __func__, __LINE__, bytes,
+	       ps3_firmware_version_str);
+
+	if (bytes < 0) {
+		pr_err("%s:%d: failed: %zd\n", __func__, __LINE__, bytes);
+		return bytes;
+	}
+
+	buf += bytes;
+	size -= bytes;
+
+	return bytes;
+}
+
+static int __init ps3_setup_proc(void)
+{
+	static const struct proc_ops proc_ops = {
+		.proc_read = ps3_fw_ver_read,
+		.proc_lseek = default_llseek,
+	};
+	struct proc_dir_entry *entry;
+
+	entry = proc_mkdir("ps3", NULL);
+
+	if (!entry) {
+		pr_err("%s:%d: failed.\n", __func__, __LINE__);
+		return 1;
+	}
+
+	entry = proc_create_data("ps3/firmware-version", S_IFREG | 0444, NULL,
+		&proc_ops, NULL);
+
+	if (!entry) {
+		pr_err("%s:%d: failed.\n", __func__, __LINE__);
+		return 1;
+	}
+
+	proc_set_size(entry, strlen(ps3_firmware_version_str));
+
+	pr_debug("%s:%d: '%s' = %zd bytes\n", __func__, __LINE__,
+		ps3_firmware_version_str, strlen(ps3_firmware_version_str));
+
+	return 0;
+}
+core_initcall(ps3_setup_proc);
+
 static void __init ps3_setup_arch(void)
 {
 	u64 tmp;
@@ -190,9 +244,11 @@ static void __init ps3_setup_arch(void)
 
 	lv1_get_version_info(&ps3_firmware_version.raw, &tmp);
 
-	printk(KERN_INFO "PS3 firmware version %u.%u.%u\n",
-	       ps3_firmware_version.major, ps3_firmware_version.minor,
-	       ps3_firmware_version.rev);
+	snprintf(ps3_firmware_version_str, sizeof(ps3_firmware_version_str),
+		"%u.%u.%u", ps3_firmware_version.major,
+		ps3_firmware_version.minor, ps3_firmware_version.rev);
+
+	printk(KERN_INFO "PS3 firmware version %s\n", ps3_firmware_version_str);
 
 	ps3_spu_set_platform();
 
