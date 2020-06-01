@@ -8,12 +8,6 @@
  * Copyright (C) 1995-1999 Gary Thomas, Paul Mackerras, Cort Dougan.
  */
 
-.macro lv1_panic
-	li	r3, 0
-	li	r11, 255
-	.long 0x44000022
-.endm
-
 /* Condition Register Bit Fields */
 
 #define	cr0	0
