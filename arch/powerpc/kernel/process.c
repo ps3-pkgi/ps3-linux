@@ -41,6 +41,7 @@
 #include <linux/pkeys.h>
 #include <linux/seq_buf.h>
 
+#include <asm/interrupt.h>
 #include <asm/io.h>
 #include <asm/processor.h>
 #include <asm/mmu.h>
@@ -611,6 +612,9 @@ EXPORT_SYMBOL(flush_all_to_thread);
 void do_send_trap(struct pt_regs *regs, unsigned long address,
 		  unsigned long error_code, int breakpt)
 {
+	printk("%s:%d: address %016lxh, code %08lxh\n",
+		__func__, __LINE__, address, error_code);
+
 	current->thread.trap_nr = TRAP_HWBKPT;
 	if (notify_die(DIE_DABR_MATCH, "dabr_match", regs, error_code,
 			11, SIGSEGV) == NOTIFY_STOP)
@@ -619,6 +623,15 @@ void do_send_trap(struct pt_regs *regs, unsigned long address,
 	/* Deliver the signal to userspace */
 	force_sig_ptrace_errno_trap(breakpt, /* breakpoint or watchpoint id */
 				    (void __user *)address);
+	/* Clear the breakpoint */
+	hw_breakpoint_disable();
+
+	if (!user_mode(regs)) {
+		show_regs(regs);
+		printk("%s:%d: done: address %016lxh\n", __func__, __LINE__,
+		address);
+		return;
+	}
 }
 #else	/* !CONFIG_PPC_ADV_DEBUG_REGS */
 
@@ -659,14 +672,10 @@ static void do_break_handler(struct pt_regs *regs)
 	}
 }
 
-void do_break (struct pt_regs *regs, unsigned long address,
-		    unsigned long error_code)
+DEFINE_INTERRUPT_HANDLER(do_break)
 {
-	printk("%s:%d: address %016lxh, code %08lxh\n",
-		__func__, __LINE__, address, error_code);
-
 	current->thread.trap_nr = TRAP_HWBKPT;
-	if (notify_die(DIE_DABR_MATCH, "dabr_match", regs, error_code,
+	if (notify_die(DIE_DABR_MATCH, "dabr_match", regs, regs->dsisr,
 			11, SIGSEGV) == NOTIFY_STOP)
 		return;
 
@@ -684,17 +693,7 @@ void do_break (struct pt_regs *regs, unsigned long address,
 		do_break_handler(regs);
 
 	/* Deliver the signal to userspace */
-	force_sig_fault(SIGTRAP, TRAP_HWBKPT, (void __user *)address);
-
-	/* Clear the breakpoint */
-	hw_breakpoint_disable();
-
-	if (!user_mode(regs)) {
-		show_regs(regs);
-		printk("%s:%d: done: address %016lxh\n", __func__, __LINE__,
-		address);
-		return;
-	}
+	force_sig_fault(SIGTRAP, TRAP_HWBKPT, (void __user *)regs->dar);
 }
 #endif	/* CONFIG_PPC_ADV_DEBUG_REGS */
 
@@ -1683,7 +1682,7 @@ int copy_thread(unsigned long clone_flags, unsigned long usp,
 	/* Copy registers */
 	sp -= sizeof(struct pt_regs);
 	childregs = (struct pt_regs *) sp;
-	if (unlikely(p->flags & PF_KTHREAD)) {
+	if (unlikely(p->flags & (PF_KTHREAD | PF_IO_WORKER))) {
 		/* kernel thread */
 		memset(childregs, 0, sizeof(struct pt_regs));
 		childregs->gpr[1] = sp + sizeof(struct pt_regs);
@@ -2060,6 +2059,9 @@ static inline int valid_emergency_stack(unsigned long sp, struct task_struct *p,
 	unsigned long stack_page;
 	unsigned long cpu = task_cpu(p);
 
+	if (!paca_ptrs)
+		return 0;
+
 	stack_page = (unsigned long)paca_ptrs[cpu]->emergency_sp - THREAD_SIZE;
 	if (sp >= stack_page && sp <= stack_page + THREAD_SIZE - nbytes)
 		return 1;
@@ -2189,7 +2191,7 @@ void show_stack(struct task_struct *tsk, unsigned long *stack,
 		 * See if this is an exception frame.
 		 * We look for the "regshere" marker in the current frame.
 		 */
-		if (validate_sp(sp, tsk, STACK_INT_FRAME_SIZE)
+		if (validate_sp(sp, tsk, STACK_FRAME_WITH_PT_REGS)
 		    && stack[STACK_FRAME_MARKER] == STACK_FRAME_REGS_MARKER) {
 			struct pt_regs *regs = (struct pt_regs *)
 				(sp + STACK_FRAME_OVERHEAD);
