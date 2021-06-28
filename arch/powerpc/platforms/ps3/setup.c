@@ -13,7 +13,6 @@
 #include <linux/console.h>
 #include <linux/export.h>
 #include <linux/memblock.h>
-#include <linux/proc_fs.h>
 
 #include <asm/machdep.h>
 #include <asm/firmware.h>
@@ -216,57 +215,39 @@ int ps3_debug_setup_dabr(u64 address, unsigned int dabr_flags,
 }
 EXPORT_SYMBOL_GPL(ps3_debug_setup_dabr);
 
-static ssize_t ps3_fw_ver_read(struct file *file, char __user *buf, size_t size,
-	loff_t *ppos)
+static ssize_t ps3_fw_version_show(struct kobject *kobj,
+	struct kobj_attribute *attr, char *buf)
 {
-	ssize_t bytes = simple_read_from_buffer(buf, size, ppos,
-		ps3_firmware_version_str, strlen(ps3_firmware_version_str));
-
-	pr_debug("%s:%d: %zd bytes '%s'\n", __func__, __LINE__, bytes,
-	       ps3_firmware_version_str);
-
-	if (bytes < 0) {
-		pr_err("%s:%d: failed: %zd\n", __func__, __LINE__, bytes);
-		return bytes;
-	}
-
-	buf += bytes;
-	size -= bytes;
-
-	return bytes;
+	return sprintf(buf, "%s", ps3_firmware_version_str);
 }
 
-static int __init ps3_setup_proc(void)
+static int __init ps3_setup_sysfs(void)
 {
-	static const struct proc_ops proc_ops = {
-		.proc_read = ps3_fw_ver_read,
-		.proc_lseek = default_llseek,
-	};
-	struct proc_dir_entry *entry;
+	static struct kobj_attribute attr = __ATTR(fw-version, S_IRUGO,
+		ps3_fw_version_show, NULL);
+	static struct kobject *kobj;
+	int result;
 
-	entry = proc_mkdir("ps3", NULL);
+	kobj = kobject_create_and_add("ps3", firmware_kobj);
 
-	if (!entry) {
-		pr_err("%s:%d: failed.\n", __func__, __LINE__);
-		return 1;
+	if (!kobj) {
+		pr_warn("%s:%d: kobject_create_and_add failed.\n", __func__,
+			__LINE__);
+		return -ENOMEM;
 	}
 
-	entry = proc_create_data("ps3/firmware-version", S_IFREG | 0444, NULL,
-		&proc_ops, NULL);
+	result = sysfs_create_file(kobj, &attr.attr);
 
-	if (!entry) {
-		pr_err("%s:%d: failed.\n", __func__, __LINE__);
-		return 1;
+	if (result) {
+		pr_warn("%s:%d: sysfs_create_file failed.\n", __func__,
+			__LINE__);
+		kobject_put(kobj);
+		return -ENOMEM;
 	}
-
-	proc_set_size(entry, strlen(ps3_firmware_version_str));
-
-	pr_debug("%s:%d: '%s' = %zd bytes\n", __func__, __LINE__,
-		ps3_firmware_version_str, strlen(ps3_firmware_version_str));
 
 	return 0;
 }
-core_initcall(ps3_setup_proc);
+core_initcall(ps3_setup_sysfs);
 
 static void __init ps3_setup_arch(void)
 {
