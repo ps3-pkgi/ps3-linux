@@ -44,6 +44,13 @@ MODULE_AUTHOR("SCE Inc.");
 MODULE_DESCRIPTION("Gelic Network driver");
 MODULE_LICENSE("GPL");
 
+#define BUG_ON_DEBUG(_cond) do { \
+	if (__is_defined(DEBUG)) \
+		BUG_ON(_cond); \
+	else \
+		WARN_ON(_cond); \
+} while (0)
+
 int gelic_card_set_irq_mask(struct gelic_card *card, u64 mask)
 {
 	struct device *dev = ctodev(card);
@@ -505,7 +512,7 @@ static void gelic_descr_release_tx(struct gelic_card *card,
 	struct sk_buff *skb = descr->skb;
 	struct device *dev = ctodev(card);
 
-	BUG_ON(!(be32_to_cpu(descr->hw_regs.data_status) &
+	BUG_ON_DEBUG(!(be32_to_cpu(descr->hw_regs.data_status) &
 		GELIC_DESCR_TX_TAIL));
 
 	dma_unmap_single(dev, be32_to_cpu(descr->hw_regs.payload.dev_addr),
@@ -1667,7 +1674,7 @@ static void gelic_card_get_vlan_info(struct gelic_card *card)
 	}
 
 	if (card->vlan[GELIC_PORT_ETHERNET_0].tx) {
-		BUG_ON(!card->vlan[GELIC_PORT_WIRELESS].tx);
+		BUG_ON_DEBUG(!card->vlan[GELIC_PORT_WIRELESS].tx);
 		card->vlan_required = 1;
 	} else
 		card->vlan_required = 0;
@@ -1709,7 +1716,7 @@ static int ps3_gelic_driver_probe(struct ps3_system_bus_device *sb_dev)
 	if (result) {
 		dev_err(dev, "%s:%d: ps3_dma_region_create failed: %d\n",
 			__func__, __LINE__, result);
-		BUG_ON("check region type");
+		BUG_ON_DEBUG("check region type");
 		goto fail_dma_region;
 	}
 
