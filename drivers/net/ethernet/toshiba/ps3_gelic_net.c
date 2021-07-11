@@ -1420,6 +1420,11 @@ static const struct ethtool_ops gelic_ether_ethtool_ops = {
 	.set_link_ksettings = gelic_ether_set_link_ksettings,
 };
 
+static struct gelic_card *gelic_work_to_card(struct work_struct *work)
+{
+	return container_of(work, struct gelic_card, tx_timeout_task);
+}
+
 /**
  * gelic_net_tx_timeout_task - task scheduled by the watchdog timeout
  * function (to be called not under interrupt status)
@@ -1429,8 +1434,7 @@ static const struct ethtool_ops gelic_ether_ethtool_ops = {
  */
 static void gelic_net_tx_timeout_task(struct work_struct *work)
 {
-	struct gelic_card *card =
-		container_of(work, struct gelic_card, tx_timeout_task);
+	struct gelic_card *card = gelic_work_to_card(work);
 	struct net_device *netdev = card->netdev[GELIC_PORT_ETHERNET_0];
 	struct device *dev = ctodev(card);
 
