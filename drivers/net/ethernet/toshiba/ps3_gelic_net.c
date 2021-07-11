@@ -162,17 +162,16 @@ static void gelic_card_enable_rxdmac(struct gelic_card *card)
 	struct device *dev = ctodev(card);
 	int status;
 
-#ifdef DEBUG
-	if (gelic_descr_get_status(card->rx_chain.head) !=
-	    GELIC_DESCR_DMA_CARDOWNED) {
-		printk(KERN_ERR "%s: status=%x\n", __func__,
-		       be32_to_cpu(card->rx_chain.head->dmac_cmd_status));
-		printk(KERN_ERR "%s: nextphy=%x\n", __func__,
-		       be32_to_cpu(card->rx_chain.head->hw_regs.next_descr_addr));
-		printk(KERN_ERR "%s: head=%p\n", __func__,
-		       card->rx_chain.head);
+	if (__is_defined(DEBUG) && (gelic_descr_get_status(card->rx_chain.head)
+			!= GELIC_DESCR_DMA_CARDOWNED)) {
+		dev_err(dev, "%s:%d: status=%x\n", __func__, __LINE__,
+			be32_to_cpu(card->rx_chain.head->hw_regs.dmac_cmd_status));
+		dev_err(dev, "%s:%d: nextphy=%x\n", __func__, __LINE__,
+			be32_to_cpu(card->rx_chain.head->hw_regs.next_descr_addr));
+		dev_err(dev, "%s:%d: head=%px\n", __func__, __LINE__,
+			card->rx_chain.head);
 	}
-#endif
+
 	status = lv1_net_start_rx_dma(bus_id(card), dev_id(card),
 		card->rx_chain.head->link.cpu_addr, 0);
 
