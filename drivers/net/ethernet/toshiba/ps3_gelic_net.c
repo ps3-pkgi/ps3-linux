@@ -1614,13 +1614,14 @@ static struct gelic_card *gelic_alloc_card_net(struct net_device **netdev)
 static void gelic_card_get_vlan_info(struct gelic_card *card)
 {
 	struct device *dev = ctodev(card);
+	unsigned int i;
 	u64 v1, v2;
 	int status;
-	unsigned int i;
-	struct {
+	struct vlan_id {
 		int tx;
 		int rx;
-	} vlan_id_ix[2] = {
+	};
+	struct vlan_id vlan_id_ix[2] = {
 		[GELIC_PORT_ETHERNET_0] = {
 			.tx = GELIC_LV1_VLAN_TX_ETHERNET_0,
 			.rx = GELIC_LV1_VLAN_RX_ETHERNET_0
