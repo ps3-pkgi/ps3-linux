@@ -288,6 +288,21 @@ void gelic_card_down(struct gelic_card *card)
 	mutex_unlock(&card->updown_lock);
 }
 
+static void gelic_unmap_link(struct device *dev, struct gelic_descr *descr)
+{
+	BUG_ON_DEBUG(descr->hw_regs.payload.dev_addr);
+	BUG_ON_DEBUG(descr->hw_regs.payload.size);
+
+	BUG_ON_DEBUG(!descr->link.cpu_addr);
+	BUG_ON_DEBUG(!descr->link.size);
+
+	dma_unmap_single(dev, descr->link.cpu_addr, descr->link.size,
+		DMA_BIDIRECTIONAL);
+
+	descr->link.cpu_addr = 0;
+	descr->link.size = 0;
+}
+
 /**
  * gelic_card_free_chain - free descriptor chain
  * @card: card structure
@@ -301,9 +316,7 @@ static void gelic_card_free_chain(struct gelic_card *card,
 
 	for (descr = descr_in; descr && descr->link.cpu_addr;
 		descr = descr->next) {
-		dma_unmap_single(dev, descr->link.cpu_addr, descr->link.size,
-			DMA_BIDIRECTIONAL);
-		descr->link.cpu_addr = 0;
+		gelic_unmap_link(dev, descr);
 	}
 }
 
@@ -364,9 +377,7 @@ static int gelic_card_init_chain(struct gelic_card *card,
 iommu_error:
 	for (i--, descr--; 0 <= i; i--, descr--)
 		if (descr->link.cpu_addr)
-			dma_unmap_single(dev, descr->link.cpu_addr,
-					 descr->link.size,
-					 DMA_BIDIRECTIONAL);
+			gelic_unmap_link(dev, descr);
 	return -ENOMEM;
 }
 
