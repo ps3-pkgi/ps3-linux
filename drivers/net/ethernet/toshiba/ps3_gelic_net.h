@@ -231,14 +231,14 @@ struct gelic_hw_regs {
 	struct  {
 		__be32 dev_addr;
 		__be32 size;
-	} __attribute__ ((packed)) payload;
+	} __packed payload;
 	__be32 next_descr_addr;
 	__be32 dmac_cmd_status;
 	__be32 result_size;
 	__be32 valid_size;	/* all zeroes for tx */
 	__be32 data_status;
 	__be32 data_error;	/* all zeroes for tx */
-} __attribute__ ((packed));
+} __packed;
 
 struct gelic_chain_link {
 	dma_addr_t cpu_addr;
