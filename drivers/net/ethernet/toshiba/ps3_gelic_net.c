@@ -321,7 +321,7 @@ static void gelic_card_free_chain(struct gelic_card *card,
  * @card: card structure
  * @chain: address of chain
  * @start_descr: address of descriptor array
- * @no: number of descriptors
+ * @descr_count: number of descriptors
  *
  * we manage a circular list that mirrors the hardware structure,
  * except that the hardware uses bus addresses.
@@ -330,17 +330,18 @@ static void gelic_card_free_chain(struct gelic_card *card,
  */
 static int gelic_card_init_chain(struct gelic_card *card,
 				 struct gelic_descr_chain *chain,
-				 struct gelic_descr *start_descr, int no)
+				 struct gelic_descr *start_descr,
+				 int descr_count)
 {
 	int i;
 	struct gelic_descr *descr;
 	struct device *dev = ctodev(card);
 
 	descr = start_descr;
-	memset(descr, 0, sizeof(*descr) * no);
+	memset(descr, 0, sizeof(*descr) * descr_count);
 
 	/* set up the hardware pointers in each descriptor */
-	for (i = 0; i < no; i++, descr++) {
+	for (i = 0; i < descr_count; i++, descr++) {
 		descr->link.size = sizeof(struct gelic_hw_regs);
 		gelic_descr_set_status(descr, GELIC_DESCR_DMA_NOT_IN_USE);
 		descr->link.cpu_addr =
@@ -358,9 +359,9 @@ static int gelic_card_init_chain(struct gelic_card *card,
 	start_descr->prev = (descr - 1);
 
 	/* chain bus addr of hw descriptor */
-	descr = start_descr;
-	for (i = 0; i < no; i++, descr++) {
-		descr->hw_regs.next_descr_addr = cpu_to_be32(descr->next->link.cpu_addr);
+	for (i = 0, descr = start_descr; i < descr_count; i++, descr++) {
+		descr->hw_regs.next_descr_addr =
+			cpu_to_be32(descr->next->link.cpu_addr);
 	}
 
 	chain->head = start_descr;
