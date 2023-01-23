@@ -366,50 +366,67 @@ iommu_error:
  * allocates a new rx skb, iommu-maps it and attaches it to the descriptor.
  * Activate the descriptor state-wise
  */
+
 static int gelic_descr_prepare_rx(struct gelic_card *card,
 				  struct gelic_descr *descr)
 {
-	int offset;
-	unsigned int bufsize;
+	struct device *dev = ctodev(card);
+	struct aligned_buff {
+		unsigned int total_bytes;
+		unsigned int offset;
+	};
+	struct aligned_buff a_buf;
+	dma_addr_t cpu_addr;
 
-	if (gelic_descr_get_status(descr) !=  GELIC_DESCR_DMA_NOT_IN_USE)
-		dev_info(ctodev(card), "%s: ERROR status\n", __func__);
-	/* we need to round up the buffer size to a multiple of 128 */
-	bufsize = ALIGN(GELIC_NET_MAX_MTU, GELIC_NET_RXBUF_ALIGN);
+	if (gelic_descr_get_status(descr) !=  GELIC_DESCR_DMA_NOT_IN_USE) {
+		dev_err(dev, "%s:%d: ERROR status\n", __func__, __LINE__);
+	}
 
-	/* and we need to have it 128 byte aligned, therefore we allocate a
-	 * bit more */
-	descr->skb = dev_alloc_skb(bufsize + GELIC_NET_RXBUF_ALIGN - 1);
+	a_buf.total_bytes = ALIGN(GELIC_NET_MAX_MTU, GELIC_NET_RXBUF_ALIGN)
+		+ GELIC_NET_RXBUF_ALIGN;
+
+	descr->skb = dev_alloc_skb(a_buf.total_bytes);
+
 	if (!descr->skb) {
-		descr->buf_addr = 0; /* tell DMAC don't touch memory */
+		descr->buf_addr = 0;
 		return -ENOMEM;
 	}
-	descr->buf_size = cpu_to_be32(bufsize);
+
+	a_buf.offset = PTR_ALIGN(descr->skb->data, GELIC_NET_RXBUF_ALIGN)
+		- descr->skb->data;
+
+	if (a_buf.offset) {
+		dev_dbg(dev, "%s:%d: offset=%u\n", __func__, __LINE__,
+			a_buf.offset);
+		skb_reserve(descr->skb, a_buf.offset);
+	}
+
+	descr->buf_size = a_buf.total_bytes - a_buf.offset;
 	descr->dmac_cmd_status = 0;
 	descr->result_size = 0;
 	descr->valid_size = 0;
 	descr->data_error = 0;
 
-	offset = ((unsigned long)descr->skb->data) &
-		(GELIC_NET_RXBUF_ALIGN - 1);
-	if (offset)
-		skb_reserve(descr->skb, GELIC_NET_RXBUF_ALIGN - offset);
-	/* io-mmu-map the skb */
-	descr->buf_addr = cpu_to_be32(dma_map_single(ctodev(card),
-						     descr->skb->data,
-						     GELIC_NET_MAX_MTU,
-						     DMA_FROM_DEVICE));
-	if (!descr->buf_addr) {
+	cpu_addr = dma_map_single(dev, descr->skb->data,
+		descr->buf_size, DMA_FROM_DEVICE);
+	descr->buf_addr = cpu_to_be32(cpu_addr);
+
+	if (unlikely(dma_mapping_error(dev, cpu_addr))) {
+		dev_err(dev, "%s:%d: dma_mapping_error\n", __func__, __LINE__);
+
+		descr->buf_addr = 0;
+		descr->buf_size = 0;
+
 		dev_kfree_skb_any(descr->skb);
 		descr->skb = NULL;
-		dev_info(ctodev(card),
-			 "%s:Could not iommu-map rx buffer\n", __func__);
+
 		gelic_descr_set_status(descr, GELIC_DESCR_DMA_NOT_IN_USE);
+
 		return -ENOMEM;
-	} else {
-		gelic_descr_set_status(descr, GELIC_DESCR_DMA_CARDOWNED);
-		return 0;
 	}
+
+	gelic_descr_set_status(descr, GELIC_DESCR_DMA_CARDOWNED);
+	return 0;
 }
 
 /**
