@@ -365,51 +365,70 @@ iommu_error:
  *
  * allocates a new rx skb, iommu-maps it and attaches it to the descriptor.
  * Activate the descriptor state-wise
+ *
+ * Gelic RX sk_buffs must be aligned to GELIC_NET_RXBUF_ALIGN and the length
+ * must be a multiple of GELIC_NET_RXBUF_ALIGN.
  */
 static int gelic_descr_prepare_rx(struct gelic_card *card,
 				  struct gelic_descr *descr)
 {
-	int offset;
-	unsigned int bufsize;
+	struct device *dev = ctodev(card);
+	struct {
+		unsigned int total_bytes;
+		unsigned int offset;
+	} aligned_buf;
+	dma_addr_t cpu_addr;
 
-	if (gelic_descr_get_status(descr) !=  GELIC_DESCR_DMA_NOT_IN_USE)
-		dev_info(ctodev(card), "%s: ERROR status\n", __func__);
-	/* we need to round up the buffer size to a multiple of 128 */
-	bufsize = ALIGN(GELIC_NET_MAX_MTU, GELIC_NET_RXBUF_ALIGN);
+	if (gelic_descr_get_status(descr) !=  GELIC_DESCR_DMA_NOT_IN_USE) {
+		dev_err(dev, "%s:%d: ERROR status\n", __func__, __LINE__);
+	}
 
-	/* and we need to have it 128 byte aligned, therefore we allocate a
-	 * bit more */
-	descr->skb = dev_alloc_skb(bufsize + GELIC_NET_RXBUF_ALIGN - 1);
+	aligned_buf.total_bytes = (GELIC_NET_RXBUF_ALIGN - 1) +
+		GELIC_NET_MAX_MTU +  (GELIC_NET_RXBUF_ALIGN - 1);
+
+	descr->skb = dev_alloc_skb(aligned_buf.total_bytes);
+
 	if (!descr->skb) {
-		descr->buf_addr = 0; /* tell DMAC don't touch memory */
+		descr->buf_addr = 0;
 		return -ENOMEM;
 	}
-	descr->buf_size = cpu_to_be32(bufsize);
+
+	aligned_buf.offset =
+		PTR_ALIGN(descr->skb->data, GELIC_NET_RXBUF_ALIGN) -
+		descr->skb->data;
+	descr->buf_size = aligned_buf.total_bytes - aligned_buf.offset;
+
+	dev_dbg(dev, "%s:%d: total_bytes = %u\n", __func__, __LINE__,
+		aligned_buf.total_bytes);
+	dev_dbg(dev, "%s:%d: offset      = %u\n", __func__, __LINE__,
+		aligned_buf.offset);
+	dev_dbg(dev, "%s:%d: buf_size    = %u\n", __func__, __LINE__,
+		descr->buf_size);
+
 	descr->dmac_cmd_status = 0;
 	descr->result_size = 0;
 	descr->valid_size = 0;
 	descr->data_error = 0;
 
-	offset = ((unsigned long)descr->skb->data) &
-		(GELIC_NET_RXBUF_ALIGN - 1);
-	if (offset)
-		skb_reserve(descr->skb, GELIC_NET_RXBUF_ALIGN - offset);
-	/* io-mmu-map the skb */
-	descr->buf_addr = cpu_to_be32(dma_map_single(ctodev(card),
-						     descr->skb->data,
-						     GELIC_NET_MAX_MTU,
-						     DMA_FROM_DEVICE));
+	skb_reserve(descr->skb, aligned_buf.offset);
+
+	cpu_addr = dma_map_single(dev, descr->skb->data, descr->buf_size,
+		DMA_FROM_DEVICE);
+
+	descr->buf_addr = cpu_to_be32(cpu_addr);
+
 	if (!descr->buf_addr) {
 		dev_kfree_skb_any(descr->skb);
+		descr->buf_addr = 0;
+		descr->buf_size = 0;
 		descr->skb = NULL;
-		dev_info(ctodev(card),
-			 "%s:Could not iommu-map rx buffer\n", __func__);
+		dev_err(dev, "%s:Could not iommu-map rx buffer\n", __func__);
 		gelic_descr_set_status(descr, GELIC_DESCR_DMA_NOT_IN_USE);
 		return -ENOMEM;
-	} else {
-		gelic_descr_set_status(descr, GELIC_DESCR_DMA_CARDOWNED);
-		return 0;
 	}
+
+	gelic_descr_set_status(descr, GELIC_DESCR_DMA_CARDOWNED);
+	return 0;
 }
 
 /**
