@@ -298,7 +298,7 @@ static void gelic_card_free_chain(struct gelic_card *card,
  * @card: card structure
  * @chain: address of chain
  * @start_descr: address of descriptor array
- * @no: number of descriptors
+ * @descr_count: number of descriptors
  *
  * we manage a circular list that mirrors the hardware structure,
  * except that the hardware uses bus addresses.
@@ -307,24 +307,36 @@ static void gelic_card_free_chain(struct gelic_card *card,
  */
 static int gelic_card_init_chain(struct gelic_card *card,
 				 struct gelic_descr_chain *chain,
-				 struct gelic_descr *start_descr, int no)
+				 struct gelic_descr *start_descr, int descr_count)
 {
-	int i;
+	struct device *dev = ctodev(card);
 	struct gelic_descr *descr;
+	int index;
 
-	descr = start_descr;
-	memset(descr, 0, sizeof(*descr) * no);
+	memset(start_descr, 0, descr_count * sizeof(*start_descr));
 
 	/* set up the hardware pointers in each descriptor */
-	for (i = 0; i < no; i++, descr++) {
+	for (index = 0; index < descr_count; index++, descr++) {
 		gelic_descr_set_status(descr, GELIC_DESCR_DMA_NOT_IN_USE);
 		descr->bus_addr =
 			dma_map_single(ctodev(card), descr,
 				       GELIC_DESCR_SIZE,
 				       DMA_BIDIRECTIONAL);
 
-		if (!descr->bus_addr)
-			goto iommu_error;
+		if (unlikely(dma_mapping_error(dev, descr->bus_addr))) {
+			dev_err(dev, "%s:%d: dma_mapping_error\n", __func__,
+				__LINE__);
+
+			for (index--, descr--; index > 0; index--, descr--) {
+				if (descr->bus_addr) {
+					dma_unmap_single(ctodev(card),
+						descr->bus_addr,
+						GELIC_DESCR_SIZE,
+						DMA_BIDIRECTIONAL);
+				}
+			}
+			return -ENOMEM;
+		}
 
 		descr->next = descr + 1;
 		descr->prev = descr - 1;
@@ -335,7 +347,7 @@ static int gelic_card_init_chain(struct gelic_card *card,
 
 	/* chain bus addr of hw descriptor */
 	descr = start_descr;
-	for (i = 0; i < no; i++, descr++) {
+	for (index = 0; index < descr_count; index++, descr++) {
 		descr->next_descr_addr = cpu_to_be32(descr->next->bus_addr);
 	}
 
@@ -346,14 +358,6 @@ static int gelic_card_init_chain(struct gelic_card *card,
 	(descr - 1)->next_descr_addr = 0;
 
 	return 0;
-
-iommu_error:
-	for (i--, descr--; 0 <= i; i--, descr--)
-		if (descr->bus_addr)
-			dma_unmap_single(ctodev(card), descr->bus_addr,
-					 GELIC_DESCR_SIZE,
-					 DMA_BIDIRECTIONAL);
-	return -ENOMEM;
 }
 
 /**
@@ -415,17 +419,17 @@ static int gelic_descr_prepare_rx(struct gelic_card *card,
 	cpu_addr = dma_map_single(dev, descr->skb->data, descr->buf_size,
 		DMA_FROM_DEVICE);
 
-	descr->buf_addr = cpu_to_be32(cpu_addr);
-
-	if (!descr->buf_addr) {
+	if (unlikely(dma_mapping_error(dev, cpu_addr))) {
+		dev_err(dev, "%s:%d: dma_mapping_error\n", __func__, __LINE__);
 		dev_kfree_skb_any(descr->skb);
 		descr->buf_addr = 0;
 		descr->buf_size = 0;
 		descr->skb = NULL;
-		dev_err(dev, "%s:Could not iommu-map rx buffer\n", __func__);
 		gelic_descr_set_status(descr, GELIC_DESCR_DMA_NOT_IN_USE);
 		return -ENOMEM;
 	}
+
+	descr->buf_addr = cpu_to_be32(cpu_addr);
 
 	gelic_descr_set_status(descr, GELIC_DESCR_DMA_CARDOWNED);
 	return 0;
