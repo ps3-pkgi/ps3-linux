@@ -311,12 +311,13 @@ static int gelic_card_init_chain(struct gelic_card *card,
 {
 	struct device *dev = ctodev(card);
 	struct gelic_descr *descr;
-	int i;
+	unsigned int index;
 
 	memset(start_descr, 0, descr_count * sizeof(*start_descr));
 
 	/* set up the hardware pointers in each descriptor */
-	for (i = 0, descr = start_descr; i < descr_count; i++, descr++) {
+	for (index = 0, descr = start_descr; index < descr_count; index++,
+		descr++) {
 		gelic_descr_set_status(descr, GELIC_DESCR_DMA_NOT_IN_USE);
 		descr->bus_addr =
 			dma_map_single(dev, descr,
@@ -327,7 +328,7 @@ static int gelic_card_init_chain(struct gelic_card *card,
 			dev_err_once(dev, "%s:%d: dma_mapping_error\n",
 				__func__, __LINE__);
 
-			for (i--, descr--; i >= 0; i--, descr--) {
+			for (index--, descr--; index >= 0; index--, descr--) {
 				dma_unmap_single(ctodev(card), descr->bus_addr,
 					GELIC_DESCR_SIZE, DMA_BIDIRECTIONAL);
 			}
@@ -342,7 +343,8 @@ static int gelic_card_init_chain(struct gelic_card *card,
 	start_descr->prev = (descr - 1);
 
 	/* chain bus addr of hw descriptor */
-	for (i = 0, descr = start_descr; i < descr_count; i++, descr++) {
+	for (index = 0, descr = start_descr; index < descr_count; index++,
+		descr++) {
 		descr->next_descr_addr = cpu_to_be32(descr->next->bus_addr);
 	}
 
