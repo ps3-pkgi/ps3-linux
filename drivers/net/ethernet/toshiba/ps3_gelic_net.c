@@ -309,8 +309,9 @@ static int gelic_card_init_chain(struct gelic_card *card,
 				 struct gelic_descr_chain *chain,
 				 struct gelic_descr *start_descr, int no)
 {
-	int i;
+	struct device *dev = ctodev(card);
 	struct gelic_descr *descr;
+	int i;
 
 	descr = start_descr;
 	memset(descr, 0, sizeof(*descr) * no);
@@ -319,11 +320,11 @@ static int gelic_card_init_chain(struct gelic_card *card,
 	for (i = 0; i < no; i++, descr++) {
 		gelic_descr_set_status(descr, GELIC_DESCR_DMA_NOT_IN_USE);
 		descr->bus_addr =
-			dma_map_single(ctodev(card), descr,
+			dma_map_single(dev, descr,
 				       GELIC_DESCR_SIZE,
 				       DMA_BIDIRECTIONAL);
 
-		if (dma_mapping_error(ctodev(card), descr->bus_addr))
+		if (dma_mapping_error(dev, descr->bus_addr))
 			goto iommu_error;
 
 		descr->next = descr + 1;
@@ -350,7 +351,7 @@ static int gelic_card_init_chain(struct gelic_card *card,
 iommu_error:
 	for (i--, descr--; 0 <= i; i--, descr--)
 		if (descr->bus_addr)
-			dma_unmap_single(ctodev(card), descr->bus_addr,
+			dma_unmap_single(dev, descr->bus_addr,
 					 GELIC_DESCR_SIZE,
 					 DMA_BIDIRECTIONAL);
 	return -ENOMEM;
@@ -365,51 +366,61 @@ iommu_error:
  *
  * allocates a new rx skb, iommu-maps it and attaches it to the descriptor.
  * Activate the descriptor state-wise
+ *
+ * Gelic RX sk_buffs must be aligned to GELIC_NET_RXBUF_ALIGN and the length
+ * must be a multiple of GELIC_NET_RXBUF_ALIGN.
  */
 static int gelic_descr_prepare_rx(struct gelic_card *card,
 				  struct gelic_descr *descr)
 {
-	int offset;
-	unsigned int bufsize;
+	struct device *dev = ctodev(card);
+	void *napi_buff;
 
 	if (gelic_descr_get_status(descr) !=  GELIC_DESCR_DMA_NOT_IN_USE)
 		dev_info(ctodev(card), "%s: ERROR status\n", __func__);
-	/* we need to round up the buffer size to a multiple of 128 */
-	bufsize = ALIGN(GELIC_NET_MAX_MTU, GELIC_NET_RXBUF_ALIGN);
 
-	/* and we need to have it 128 byte aligned, therefore we allocate a
-	 * bit more */
-	descr->skb = dev_alloc_skb(bufsize + GELIC_NET_RXBUF_ALIGN - 1);
-	if (!descr->skb) {
-		descr->buf_addr = 0; /* tell DMAC don't touch memory */
-		return -ENOMEM;
-	}
-	descr->buf_size = cpu_to_be32(bufsize);
 	descr->dmac_cmd_status = 0;
 	descr->result_size = 0;
 	descr->valid_size = 0;
 	descr->data_error = 0;
+	descr->buf_size = cpu_to_be32(GELIC_NET_MAX_MTU);
 
-	offset = ((unsigned long)descr->skb->data) &
-		(GELIC_NET_RXBUF_ALIGN - 1);
-	if (offset)
-		skb_reserve(descr->skb, GELIC_NET_RXBUF_ALIGN - offset);
-	/* io-mmu-map the skb */
-	descr->buf_addr = cpu_to_be32(dma_map_single(ctodev(card),
-						     descr->skb->data,
-						     GELIC_NET_MAX_MTU,
-						     DMA_FROM_DEVICE));
-	if (dma_mapping_error(ctodev(card), descr->buf_addr)) {
-		dev_kfree_skb_any(descr->skb);
+	napi_buff = napi_alloc_frag_align(GELIC_NET_MAX_MTU,
+		GELIC_NET_RXBUF_ALIGN);
+
+	if (unlikely(!napi_buff)) {
 		descr->skb = NULL;
-		dev_info(ctodev(card),
-			 "%s:Could not iommu-map rx buffer\n", __func__);
+		descr->buf_addr = 0;
+		descr->buf_size = 0;
+		return -ENOMEM;
+	}
+
+	descr->skb = napi_build_skb(napi_buff, GELIC_NET_MAX_MTU);
+
+	if (unlikely(!descr->skb)) {
+		skb_free_frag(napi_buff);
+		descr->skb = NULL;
+		descr->buf_addr = 0;
+		descr->buf_size = 0;
+		return -ENOMEM;
+	}
+
+	descr->buf_addr = cpu_to_be32(dma_map_single(dev, napi_buff,
+		GELIC_NET_MAX_MTU, DMA_FROM_DEVICE));
+
+	if (dma_mapping_error(dev, descr->buf_addr)) {
+		skb_free_frag(napi_buff);
+		descr->skb = NULL;
+		descr->buf_addr = 0;
+		descr->buf_size = 0;
+		dev_err_once(dev, "%s:Could not iommu-map rx buffer\n",
+			__func__);
 		gelic_descr_set_status(descr, GELIC_DESCR_DMA_NOT_IN_USE);
 		return -ENOMEM;
-	} else {
-		gelic_descr_set_status(descr, GELIC_DESCR_DMA_CARDOWNED);
-		return 0;
 	}
+
+	gelic_descr_set_status(descr, GELIC_DESCR_DMA_CARDOWNED);
+	return 0;
 }
 
 /**
@@ -763,6 +774,7 @@ static int gelic_descr_prepare_tx(struct gelic_card *card,
 				  struct gelic_descr *descr,
 				  struct sk_buff *skb)
 {
+	struct device *dev = ctodev(card);
 	dma_addr_t buf;
 
 	if (card->vlan_required) {
@@ -777,10 +789,10 @@ static int gelic_descr_prepare_tx(struct gelic_card *card,
 		skb = skb_tmp;
 	}
 
-	buf = dma_map_single(ctodev(card), skb->data, skb->len, DMA_TO_DEVICE);
+	buf = dma_map_single(dev, skb->data, skb->len, DMA_TO_DEVICE);
 
-	if (dma_mapping_error(ctodev(card), buf)) {
-		dev_err(ctodev(card),
+	if (dma_mapping_error(dev, buf)) {
+		dev_err(dev,
 			"dma map 2 failed (%p, %i). Dropping packet\n",
 			skb->data, skb->len);
 		return -ENOMEM;
