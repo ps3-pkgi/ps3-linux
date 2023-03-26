@@ -19,7 +19,6 @@
 #define GELIC_NET_RX_DESCRIPTORS        128 /* num of descriptors */
 #define GELIC_NET_TX_DESCRIPTORS        128 /* num of descriptors */
 
-#define GELIC_NET_MAX_FRAME             2312
 #define GELIC_NET_MAX_MTU               2294
 #define GELIC_NET_MIN_MTU               64
 #define GELIC_NET_RXBUF_ALIGN           128
