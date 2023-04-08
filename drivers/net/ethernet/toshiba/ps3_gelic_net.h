@@ -19,10 +19,10 @@
 #define GELIC_NET_RX_DESCRIPTORS        128 /* num of descriptors */
 #define GELIC_NET_TX_DESCRIPTORS        128 /* num of descriptors */
 
-#define GELIC_NET_MAX_FRAME             2312
+#define GELIC_NET_MAX_FRAME             2312U
 #define GELIC_NET_MAX_MTU               2294
 #define GELIC_NET_MIN_MTU               64
-#define GELIC_NET_RXBUF_ALIGN           128
+#define GELIC_NET_RXBUF_ALIGN           128U
 #define GELIC_CARD_RX_CSUM_DEFAULT      1 /* hw chksum */
 #define GELIC_NET_WATCHDOG_TIMEOUT      5*HZ
 #define GELIC_NET_BROADCAST_ADDR        0xffffffffffffL
