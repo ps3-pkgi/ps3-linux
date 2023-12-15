@@ -327,7 +327,7 @@ static int gelic_card_init_chain(struct gelic_card *card,
 		if (dma_mapping_error(ctodev(card), cpu_addr))
 			goto iommu_error;
 
-		descr->bus_addr = cpu_to_be32(cpu_addr);
+		descr->bus_addr = cpu_to_be32((__force u32)cpu_addr);
 		descr->next = descr + 1;
 		descr->prev = descr - 1;
 	}
