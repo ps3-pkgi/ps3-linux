@@ -384,11 +384,6 @@ static int gelic_descr_prepare_rx(struct gelic_card *card,
 	if (gelic_descr_get_status(descr) !=  GELIC_DESCR_DMA_NOT_IN_USE)
 		dev_info(ctodev(card), "%s: ERROR status\n", __func__);
 
-	descr->skb = netdev_alloc_skb(*card->netdev, rx_skb_size);
-	if (!descr->skb) {
-		descr->hw_regs.payload.dev_addr = 0; /* tell DMAC don't touch memory */
-		return -ENOMEM;
-	}
 	descr->hw_regs.dmac_cmd_status = 0;
 	descr->hw_regs.result_size = 0;
 	descr->hw_regs.valid_size = 0;
@@ -396,6 +391,12 @@ static int gelic_descr_prepare_rx(struct gelic_card *card,
 	descr->hw_regs.payload.dev_addr = 0;
 	descr->hw_regs.payload.size = 0;
 	descr->skb = NULL;
+
+	descr->skb = netdev_alloc_skb(*card->netdev, rx_skb_size);
+	if (!descr->skb) {
+		descr->hw_regs.payload.dev_addr = 0; /* tell DMAC don't touch memory */
+		return -ENOMEM;
+	}
 
 	offset = ((unsigned long)descr->skb->data) &
 		(GELIC_NET_RXBUF_ALIGN - 1);
